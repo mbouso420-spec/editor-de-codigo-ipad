@@ -103,11 +103,60 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     closeBrackets,
     closeBracketsKeymap,
     tags,
-    langs
+    langs,
+    StateEffect,
+    StateField,
+    Decoration
   } = cm;
 
   const wrapCompartment = new Compartment();
   const statesByFile = new Map();
+
+  // Marcadores de error de sintaxis / compilación (GCC / Clang / Linters)
+  const addErrorEffect = StateEffect?.define ? StateEffect.define() : null;
+  const clearErrorEffect = StateEffect?.define ? StateEffect.define() : null;
+
+  const errorLineDeco = (msg) =>
+    Decoration?.line
+      ? Decoration.line({
+          attributes: {
+            class: "cm-error-line",
+            title: msg || "Error de compilación"
+          }
+        })
+      : null;
+
+  const errorMarkerField =
+    StateField?.define && addErrorEffect && Decoration?.line
+      ? StateField.define({
+          create() {
+            return Decoration.none;
+          },
+          update(underlying, tr) {
+            let markers = underlying.map(tr.changes);
+            for (const effect of tr.effects) {
+              if (effect.is(addErrorEffect)) {
+                const { lineNum, errorMessage } = effect.value;
+                const totalLines = tr.state.doc.lines;
+                const targetLine = Math.min(Math.max(1, lineNum), totalLines);
+                const lineObj = tr.state.doc.line(targetLine);
+                const deco = errorLineDeco(errorMessage);
+                if (deco) {
+                  markers = markers.update({
+                    add: [deco.range(lineObj.from)]
+                  });
+                }
+              } else if (effect.is(clearErrorEffect)) {
+                markers = Decoration.none;
+              }
+            }
+            return markers;
+          },
+          provide: (f) => EditorView.decorations.from(f)
+        })
+      : null;
+
+  let activeErrorMarkers = [];
 
   // Tema sintáctico acoplado 100% a nuestros tokens CSS (:root)
   const highlightRules = [
@@ -213,6 +262,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         resolveLanguageExtension(file.lang),
         syntaxHighlighting(studioHighlightStyle),
         studioBaseTheme,
+        ...(errorMarkerField ? [errorMarkerField] : []),
         keymap.of([
           ...completionKeymap,
           ...closeBracketsKeymap,
@@ -390,6 +440,13 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
   }
 
   function replaceSelection(text) {
+    if (!view) return;
+    const range = view.state.selection.main;
+    // Si no hay texto seleccionado (cursor colapsado), la acción de reemplazo reemplaza todo el documento
+    if (range.from === range.to) {
+      replaceEntireDocument(text);
+      return;
+    }
     insertAtCursor(text, 0);
   }
 
@@ -397,11 +454,58 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     if (!view) {
       return;
     }
+    // Reemplaza todo el rango del documento (from: 0, to: length) en lugar de insertar en el cursor
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
-      selection: { anchor: 0 }
+      selection: { anchor: 0, head: 0 },
+      scrollIntoView: true
     });
+    view.focus();
     emitSelection(view.state);
+  }
+
+  function replaceCode(text, forceWholeDoc = false) {
+    if (!view) return;
+    const range = view.state.selection.main;
+    if (range.from < range.to && !forceWholeDoc) {
+      view.dispatch({
+        changes: { from: range.from, to: range.to, insert: text },
+        selection: { anchor: range.from + text.length, head: range.from + text.length },
+        scrollIntoView: true
+      });
+      view.focus();
+      emitSelection(view.state);
+    } else {
+      replaceEntireDocument(text);
+    }
+  }
+
+  function addErrorMarker(lineNum, errorMessage) {
+    const num = Math.max(1, parseInt(lineNum, 10) || 1);
+    const msg = String(errorMessage || "Error de compilación / sintaxis");
+    activeErrorMarkers.push({ lineNum: num, errorMessage: msg });
+
+    if (view && addErrorEffect) {
+      view.dispatch({
+        effects: addErrorEffect.of({ lineNum: num, errorMessage: msg })
+      });
+      if (activeErrorMarkers.length === 1) {
+        goToLine(num);
+      }
+    }
+  }
+
+  function clearErrorMarkers() {
+    activeErrorMarkers = [];
+    if (view && clearErrorEffect) {
+      view.dispatch({
+        effects: clearErrorEffect.of(null)
+      });
+    }
+  }
+
+  function getErrorMarkers() {
+    return [...activeErrorMarkers];
   }
 
   function triggerUndo() {
@@ -453,6 +557,10 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     insertAtCursor,
     replaceSelection,
     replaceEntireDocument,
+    replaceCode,
+    addErrorMarker,
+    clearErrorMarkers,
+    getErrorMarkers,
     goToLine,
     triggerUndo,
     triggerRedo,
@@ -502,7 +610,10 @@ async function loadCodeMirrorModules() {
   return {
     EditorState: stateMod.EditorState,
     Compartment: stateMod.Compartment,
+    StateEffect: stateMod.StateEffect,
+    StateField: stateMod.StateField,
     EditorView: viewMod.EditorView,
+    Decoration: viewMod.Decoration,
     keymap: viewMod.keymap,
     lineNumbers: viewMod.lineNumbers,
     highlightActiveLine: viewMod.highlightActiveLine,
@@ -620,6 +731,8 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     emitSel();
   }
 
+  const fallbackErrorMarkers = [];
+
   return {
     openFile(file) {
       activeFileId = file.id;
@@ -652,7 +765,17 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
       activeLang = inferFileMeta(activeFileId).lang;
     },
     insertAtCursor: insertInTextarea,
-    replaceSelection: (text) => insertInTextarea(text, 0),
+    replaceSelection(text) {
+      if (textarea.selectionStart === textarea.selectionEnd) {
+        // Sin selección: reemplazar todo el documento
+        textarea.value = text;
+        textarea.setSelectionRange(0, 0);
+        if (activeFileId) onDocChange(activeFileId, text);
+        emitSel();
+        return;
+      }
+      insertInTextarea(text, 0);
+    },
     replaceEntireDocument(text) {
       textarea.value = text;
       textarea.setSelectionRange(0, 0);
@@ -660,6 +783,38 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         onDocChange(activeFileId, text);
       }
       emitSel();
+    },
+    replaceCode(text, forceWholeDoc = false) {
+      if (textarea.selectionStart < textarea.selectionEnd && !forceWholeDoc) {
+        insertInTextarea(text, 0);
+      } else {
+        textarea.value = text;
+        textarea.setSelectionRange(0, 0);
+        if (activeFileId) onDocChange(activeFileId, text);
+        emitSel();
+      }
+    },
+    addErrorMarker(lineNum, errorMessage) {
+      const num = Math.max(1, parseInt(lineNum, 10) || 1);
+      const msg = String(errorMessage || "Error de compilación / sintaxis");
+      fallbackErrorMarkers.push({ lineNum: num, errorMessage: msg });
+      textarea.classList.add("has-error");
+      textarea.title = `Línea ${num}: ${msg}`;
+      const lines = textarea.value.split("\n");
+      const boundedLine = Math.min(num, lines.length);
+      let offset = 0;
+      for (let i = 0; i < boundedLine - 1; i++) {
+        offset += lines[i].length + 1;
+      }
+      textarea.setSelectionRange(offset, offset);
+    },
+    clearErrorMarkers() {
+      fallbackErrorMarkers.length = 0;
+      textarea.classList.remove("has-error");
+      textarea.title = "";
+    },
+    getErrorMarkers() {
+      return [...fallbackErrorMarkers];
     },
     goToLine(lineNo) {
       const target = Math.max(1, parseInt(lineNo, 10) || 1);

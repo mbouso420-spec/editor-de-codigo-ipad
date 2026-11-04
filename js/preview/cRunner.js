@@ -112,6 +112,231 @@ export async function compileAndRunWandbox(payload, fetchFn = (typeof window !==
   };
 }
 
+/**
+ * Parsea errores y advertencias de compilación devueltos por GCC / Clang en stderr o compiler_output.
+ * @param {string} output
+ * @returns {Array<{ line: number, column: number, severity: string, message: string, raw: string }>}
+ */
+export function parseGccErrors(output) {
+  if (!output || typeof output !== "string") return [];
+  const errors = [];
+  const regex = /(?:^|\n)(?:[^\s:]+):(\d+)(?::(\d+))?:\s*(fatal error|error|warning)?:\s*([^\r\n]+)/gi;
+  let match;
+  while ((match = regex.exec(output)) !== null) {
+    const line = parseInt(match[1], 10);
+    const column = match[2] ? parseInt(match[2], 10) : 1;
+    const severity = (match[3] || "error").toLowerCase();
+    const rawMessage = match[4].trim();
+    if (!isNaN(line)) {
+      errors.push({
+        line,
+        column,
+        severity,
+        message: rawMessage,
+        raw: match[0].trim()
+      });
+    }
+  }
+  return errors;
+}
+
+/**
+ * Monta la interfaz interactiva nativa del Runner C/C++ directamente en el DOM del modal
+ * evitando el uso de iframes sandboxeados para una conectividad sin trabas con Wandbox y CodeMirror.
+ * @param {HTMLElement} containerEl
+ * @param {{
+ *   activeFile: { path: string, shortName?: string, content: string },
+ *   companionFiles?: Array<{ path: string, shortName?: string, content: string }>,
+ *   onCompilerResult?: (res: { success: boolean, errors: Array<{ line: number, column: number, severity: string, message: string }> }) => void,
+ *   onGoToLine?: (lineNum: number) => void,
+ *   fetchFn?: typeof fetch
+ * }} options
+ * @returns {{ destroy: () => void, run: () => Promise<void> }}
+ */
+export function mountCRunnerView(containerEl, {
+  activeFile,
+  companionFiles = [],
+  onCompilerResult = () => {},
+  onGoToLine = () => {},
+  fetchFn = (typeof window !== "undefined" ? window.fetch : fetch)
+}) {
+  if (!containerEl) return { destroy: () => {}, run: async () => {} };
+  containerEl.innerHTML = "";
+
+  const ext = getFileExtension(activeFile.path);
+  const isC = C_EXTENSIONS.has(ext);
+  const langLabel = isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)";
+  const initialPayload = buildWandboxPayload({ activeFile, companionFiles, stdin: "" });
+  const companionCount = initialPayload.codes.length;
+  const companionLabel = companionCount > 0
+    ? `+ ${companionCount} archivo(s) vinculado(s): ${initialPayload.codes.map((c) => c.file).join(", ")}`
+    : "Archivo único";
+
+  const shell = document.createElement("div");
+  shell.className = "c-runner-shell";
+
+  // 1. Cabecera con metadatos y botón de compilación
+  const header = document.createElement("div");
+  header.className = "c-runner-header";
+
+  const meta = document.createElement("div");
+  meta.className = "c-runner-meta";
+  const title = document.createElement("span");
+  title.className = "c-runner-title";
+  title.textContent = activeFile.shortName || activeFile.path;
+  const badge = document.createElement("span");
+  badge.className = "c-runner-badge";
+  badge.textContent = langLabel;
+  const companionBadge = document.createElement("span");
+  companionBadge.className = "c-runner-companion-badge";
+  companionBadge.textContent = companionLabel;
+  meta.append(title, badge, companionBadge);
+
+  const btnCompile = document.createElement("button");
+  btnCompile.type = "button";
+  btnCompile.className = "btn btn-primary btn-sm btn-c-compile";
+  btnCompile.innerHTML = '<span data-icon="play"></span><span>Compilar y Ejecutar</span> <span class="c-key-hint" style="opacity:0.75;font-size:11px;">(Ctrl+Enter)</span>';
+
+  header.append(meta, btnCompile);
+
+  // 2. Tarjeta stdin
+  const stdinCard = document.createElement("div");
+  stdinCard.className = "c-stdin-card";
+  const stdinLabel = document.createElement("label");
+  stdinLabel.className = "c-section-label";
+  stdinLabel.textContent = "Entrada estándar (stdin para cin / scanf):";
+  const stdinTextarea = document.createElement("textarea");
+  stdinTextarea.className = "c-stdin-textarea code-font";
+  stdinTextarea.placeholder = "Escribí aquí los datos de entrada que tu programa solicitará en tiempo de ejecución...";
+  stdinCard.append(stdinLabel, stdinTextarea);
+
+  // 3. Tarjeta Terminal
+  const termCard = document.createElement("div");
+  termCard.className = "c-terminal-card";
+  const termHeader = document.createElement("div");
+  termHeader.className = "c-terminal-header";
+  const termTitle = document.createElement("span");
+  termTitle.className = "c-section-label";
+  termTitle.textContent = "Terminal de Ejecución";
+  const termStatus = document.createElement("span");
+  termStatus.className = "c-term-status is-idle";
+  termStatus.textContent = "Listo para compilar";
+  termHeader.append(termTitle, termStatus);
+
+  const termBody = document.createElement("div");
+  termBody.className = "c-terminal-body code-font";
+  termBody.textContent = "Iniciando compilador GCC en Wandbox...";
+
+  termCard.append(termHeader, termBody);
+  shell.append(header, stdinCard, termCard);
+  containerEl.appendChild(shell);
+
+  let isCompiling = false;
+
+  async function executeCompile() {
+    if (isCompiling) return;
+    isCompiling = true;
+    btnCompile.disabled = true;
+    termStatus.className = "c-term-status is-running";
+    termStatus.textContent = "Compilando en Wandbox...";
+    termBody.innerHTML = '<span class="c-term-hint">Conectando con GCC en Wandbox y compilando proyecto...</span>';
+
+    const payload = buildWandboxPayload({
+      activeFile,
+      companionFiles,
+      stdin: stdinTextarea.value || ""
+    });
+
+    const t0 = performance.now();
+    try {
+      const res = await compileAndRunWandbox(payload, fetchFn);
+      const ms = Math.round(performance.now() - t0);
+      termBody.innerHTML = "";
+
+      const compilerErrors = parseGccErrors(`${res.compilerErr}\n${res.compilerOut}\n${res.stderr}`);
+
+      if (res.success && compilerErrors.length === 0) {
+        termStatus.className = "c-term-status is-ok";
+        termStatus.textContent = `Código de salida: 0 (Éxito) — ${ms} ms`;
+        onCompilerResult({ success: true, errors: [] });
+      } else {
+        termStatus.className = "c-term-status is-err";
+        termStatus.textContent = `Falló compilación / ejecución (código ${res.status}) — ${ms} ms`;
+        onCompilerResult({ success: false, errors: compilerErrors });
+      }
+
+      // Si hubo advertencias o errores del compilador
+      if (res.compilerErr || res.compilerOut) {
+        const compBlock = document.createElement("div");
+        compBlock.className = res.compilerErr ? "c-term-comp-err" : "c-term-comp-warn";
+        compBlock.textContent = res.compilerErr || res.compilerOut;
+        if (compilerErrors.length > 0) {
+          compBlock.title = `Hacé clic para saltar a la línea ${compilerErrors[0].line} en el editor`;
+          compBlock.addEventListener("click", () => {
+            onGoToLine(compilerErrors[0].line);
+          });
+        }
+        termBody.appendChild(compBlock);
+      }
+
+      // Salida estándar stdout
+      if (res.stdout) {
+        const outDiv = document.createElement("div");
+        outDiv.className = "c-term-stdout";
+        outDiv.textContent = res.stdout;
+        termBody.appendChild(outDiv);
+      }
+
+      // Salida de error stderr
+      if (res.stderr) {
+        const errDiv = document.createElement("div");
+        errDiv.className = "c-term-stderr";
+        errDiv.textContent = res.stderr;
+        termBody.appendChild(errDiv);
+      }
+
+      if (!res.stdout && !res.stderr && !res.compilerErr && !res.compilerOut) {
+        const emptyDiv = document.createElement("div");
+        emptyDiv.className = "c-term-hint";
+        emptyDiv.textContent = "(El programa terminó sin producir salida en stdout ni stderr).";
+        termBody.appendChild(emptyDiv);
+      }
+    } catch (err) {
+      termStatus.className = "c-term-status is-err";
+      termStatus.textContent = "Error de red / API";
+      termBody.innerHTML = `<span class="c-term-stderr">Error al conectar con la API de compilación: ${escapeHtml(err.message)}</span>`;
+      onCompilerResult({ success: false, errors: [] });
+    } finally {
+      isCompiling = false;
+      btnCompile.disabled = false;
+    }
+  }
+
+  btnCompile.addEventListener("click", executeCompile);
+
+  function handleKeydown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      executeCompile();
+    }
+  }
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("keydown", handleKeydown);
+  }
+
+  // Ejecución inicial automática al montar
+  executeCompile();
+
+  return {
+    destroy() {
+      if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+        window.removeEventListener("keydown", handleKeydown);
+      }
+    },
+    run: executeCompile
+  };
+}
+
 function getFileExtension(path) {
   const base = String(path || "").split("/").pop() || "";
   if (!base.includes(".")) return "";

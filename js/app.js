@@ -457,7 +457,7 @@ async function initApp() {
     }
   });
 
-  const PREVIEWABLE_LANGS = new Set(["html", "js", "css", "python", "markdown"]);
+  const PREVIEWABLE_LANGS = new Set(["html", "js", "css", "python", "markdown", "c", "cpp", "sql"]);
 
   initLivePreviewModal({
     getWorkspaceSnapshot() {
@@ -465,6 +465,21 @@ async function initApp() {
         files: filesOnly,
         activeFileId
       };
+    },
+    onErrorMarker(lineNum, errorMessage) {
+      if (editor && typeof editor.addErrorMarker === "function") {
+        editor.addErrorMarker(lineNum, errorMessage);
+      }
+    },
+    onClearErrorMarkers() {
+      if (editor && typeof editor.clearErrorMarkers === "function") {
+        editor.clearErrorMarkers();
+      }
+    },
+    onGoToLine(lineNum) {
+      if (editor && typeof editor.goToLine === "function") {
+        editor.goToLine(lineNum);
+      }
     },
     async onBeforePreview() {
       await flushPendingSaves();
@@ -491,6 +506,12 @@ async function initApp() {
         if (folderPrefix && !f.path.startsWith(folderPrefix)) return false;
         if (activeFile.lang === "python") {
           return f.lang === "python";
+        }
+        if (activeFile.lang === "c" || activeFile.lang === "cpp") {
+          return f.lang === "c" || f.lang === "cpp" || f.path.endsWith(".h") || f.path.endsWith(".hpp");
+        }
+        if (activeFile.lang === "sql") {
+          return f.lang === "sql";
         }
         return (
           f.lang === "html" ||
@@ -585,10 +606,14 @@ async function initApp() {
       return true;
     },
     async onReplaceSelection(code) {
-      if (!activeSelection.lineCount || !activeFileId) {
+      if (!activeFileId) {
         return false;
       }
-      editor.replaceSelection(code);
+      if (!activeSelection.lineCount) {
+        editor.replaceEntireDocument(code);
+      } else {
+        editor.replaceSelection(code);
+      }
       layout.closeRightOnCompactAction();
       return true;
     },

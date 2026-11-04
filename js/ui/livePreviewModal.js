@@ -1,7 +1,7 @@
 import { normalizePath } from "../storage/workspaceDb.js";
 import { buildLoopGuardRuntime, instrumentLoops } from "../preview/loopGuard.js";
 import { buildSqlRunnerPreview } from "../preview/sqlRunner.js";
-import { buildCRunnerPreview } from "../preview/cRunner.js";
+import { buildCRunnerPreview, mountCRunnerView } from "../preview/cRunner.js";
 
 const ACORN_URL = "https://esm.sh/acorn@8.14.0";
 let acornModule = null;
@@ -51,7 +51,13 @@ const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "h", "hpp"]);
  * - Si la pestaña es .css  -> "Vista previa de CSS" (aplica sobre el HTML de su misma carpeta si existe).
  * - Cualquier otro archivo (.c, .cpp, .sql, etc.) -> informa claramente que la vista previa no está disponible.
  */
-export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) {
+export function initLivePreviewModal({
+  getWorkspaceSnapshot,
+  onBeforePreview,
+  onErrorMarker,
+  onClearErrorMarkers,
+  onGoToLine
+}) {
   const openBtn = document.getElementById("btn-live-preview");
   const dialog = document.getElementById("preview-dialog");
   const titleEl = document.getElementById("preview-dialog-title");
@@ -67,7 +73,9 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   const consolePanel = document.getElementById("preview-console-panel");
   const consoleTitleEl = document.getElementById("preview-console-title");
   const consoleList = document.getElementById("preview-console-list");
+  const iframeWrapper = document.getElementById("preview-iframe-wrapper");
   const iframe = document.getElementById("preview-iframe");
+  const cRunnerContainer = document.getElementById("preview-c-runner");
   const pageSelect = document.getElementById("preview-page-select");
   const backBtn = document.getElementById("btn-preview-back");
   const forwardBtn = document.getElementById("btn-preview-forward");
@@ -78,6 +86,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   let currentPreviewPath = null;
   /** @type {"auto" | "standalone" | "folder"} */
   let jsRunOverride = "auto";
+  let activeCRunnerDestroy = null;
 
   let historyStack = [];
   let historyIndex = -1;
@@ -265,6 +274,10 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (iframe) {
       iframe.srcdoc = "";
     }
+    if (activeCRunnerDestroy && typeof activeCRunnerDestroy === "function") {
+      activeCRunnerDestroy();
+      activeCRunnerDestroy = null;
+    }
   }
 
   function clearConsoleOutput() {
@@ -308,6 +321,8 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (reloadBtn) reloadBtn.hidden = true;
     if (toggleConsoleBtn) toggleConsoleBtn.hidden = true;
     if (iframe) iframe.hidden = true;
+    if (iframeWrapper) iframeWrapper.hidden = true;
+    if (cRunnerContainer) cRunnerContainer.hidden = true;
     if (consolePanel) consolePanel.hidden = true;
 
     if (unavailableTitleEl) unavailableTitleEl.textContent = messageTitle;
@@ -324,6 +339,8 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     hasConsole = true
   }) {
     clearConsoleOutput();
+    if (cRunnerContainer) cRunnerContainer.hidden = true;
+    if (iframeWrapper) iframeWrapper.hidden = false;
 
     if (titleEl) titleEl.textContent = headerTitle;
     if (consoleTitleEl) consoleTitleEl.textContent = consoleTitle;
@@ -357,6 +374,58 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       } else {
         jsModeBtn.hidden = true;
       }
+    }
+  }
+
+  function showCRunnerView(activeFile, companionFiles = []) {
+    stopIframe();
+    clearConsoleOutput();
+    hideWebNavigationControls();
+
+    const ext = getFileExtension(activeFile.path);
+    const isC = C_EXTENSIONS.has(ext);
+    if (titleEl) titleEl.textContent = isC ? "Compilador C (GCC)" : "Compilador C++ (G++)";
+    if (fileBadgeEl) {
+      fileBadgeEl.textContent = activeFile.path;
+      fileBadgeEl.hidden = false;
+    }
+
+    if (unavailableBox) unavailableBox.hidden = true;
+    if (iframe) iframe.hidden = true;
+    if (iframeWrapper) iframeWrapper.hidden = true;
+    if (consolePanel) consolePanel.hidden = true;
+    if (jsModeBtn) jsModeBtn.hidden = true;
+    if (reloadBtn) reloadBtn.hidden = true;
+    if (toggleConsoleBtn) toggleConsoleBtn.hidden = true;
+
+    if (cRunnerContainer) {
+      cRunnerContainer.hidden = false;
+      const runnerInstance = mountCRunnerView(cRunnerContainer, {
+        activeFile,
+        companionFiles,
+        onCompilerResult({ success, errors }) {
+          if (!success && errors && errors.length > 0) {
+            if (typeof onClearErrorMarkers === "function") {
+              onClearErrorMarkers();
+            }
+            for (const err of errors) {
+              if (typeof onErrorMarker === "function") {
+                onErrorMarker(err.line, err.message);
+              }
+            }
+          } else if (success) {
+            if (typeof onClearErrorMarkers === "function") {
+              onClearErrorMarkers();
+            }
+          }
+        },
+        onGoToLine(lineNum) {
+          if (typeof onGoToLine === "function") {
+            onGoToLine(lineNum);
+          }
+        }
+      });
+      activeCRunnerDestroy = runnerInstance?.destroy || null;
     }
   }
 
@@ -534,19 +603,9 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       return;
     }
 
-    // 7. Pestaña C / C++ (.c, .cpp, .cxx, .cc, .h, .hpp): compilador y ejecutor interactivo Wandbox
+    // 7. Pestaña C / C++ (.c, .cpp, .cxx, .cc, .h, .hpp): Runner C/C++ nativo sin iframe
     if (C_EXTENSIONS.has(ext) || CPP_EXTENSIONS.has(ext)) {
-      hideWebNavigationControls();
-      const isC = C_EXTENSIONS.has(ext);
-      const compiledCHtml = buildCRunnerPreview(activeFile, sameFolderFiles);
-      showRunnableIframe({
-        headerTitle: isC ? "Compilador C (GCC)" : "Compilador C++ (G++)",
-        badgeText: activeFile.path,
-        compiledHtml: compiledCHtml,
-        siblingHtml: null,
-        consoleTitle: isC ? "Consola C" : "Consola C++",
-        hasConsole: true
-      });
+      showCRunnerView(activeFile, sameFolderFiles);
       return;
     }
 
@@ -576,19 +635,46 @@ function getParentFolder(path) {
   return clean.includes("/") ? clean.slice(0, clean.lastIndexOf("/")) : "";
 }
 
+const MAX_PREVIEW_ASSET_BYTES = 512 * 1024; // 512 KB por recurso individual para evitar bloqueos
+const IGNORED_PREVIEW_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  "venv",
+  ".venv",
+  "target",
+  "bin",
+  "obj"
+]);
+
 /**
- * Filtra únicamente los archivos que pertenecen a la misma carpeta base (y subcarpetas relativas de ese conjunto).
+ * Filtra únicamente los archivos que pertenecen a la misma carpeta base (y subcarpetas relativas de ese conjunto),
+ * omitiendo carpetas masivas (node_modules, dist, etc.) y archivos sin contenido descargado (lazy).
  */
-function filterFolderScopeFiles(allFiles, baseFolder) {
-  if (!baseFolder) {
-    // Si el archivo está en la raíz del proyecto, solo toma archivos de la raíz (o rutas relativas directas)
-    // evitando mezclar carpetas paralelas independientes salvo que el HTML las enlace explícitamente.
-    return allFiles;
-  }
-  const prefix = `${baseFolder}/`;
+export function filterFolderScopeFiles(allFiles, baseFolder) {
+  if (!Array.isArray(allFiles)) return [];
+  const cleanBase = baseFolder ? normalizePath(baseFolder) : "";
+  const prefix = cleanBase ? `${cleanBase}/` : "";
+
   return allFiles.filter((f) => {
+    if (!f || !f.path) return false;
     const clean = normalizePath(f.path);
-    return clean.startsWith(prefix);
+
+    // Omitir carpetas pesadas de compilación o dependencias
+    const parts = clean.split("/");
+    for (const part of parts) {
+      if (IGNORED_PREVIEW_DIRS.has(part.toLowerCase())) return false;
+    }
+
+    // Omitir archivos no descargados todavía (lazy de GitHub)
+    if (f.content === null || f.content === undefined) return false;
+
+    if (prefix && !clean.startsWith(prefix)) return false;
+
+    return true;
   });
 }
 
@@ -605,8 +691,14 @@ function filterFolderScopeFiles(allFiles, baseFolder) {
  */
 export function findBestHtmlEntrypoint(allFiles, activeFile) {
   const htmlFiles = (allFiles || []).filter((f) => {
+    if (!f || !f.path) return false;
+    const clean = normalizePath(f.path);
+    const parts = clean.split("/");
+    for (const part of parts) {
+      if (IGNORED_PREVIEW_DIRS.has(part.toLowerCase())) return false;
+    }
     const ext = getFileExtension(f.path);
-    return HTML_EXTENSIONS.has(ext);
+    return HTML_EXTENSIONS.has(ext) && typeof f.content === "string";
   });
   if (htmlFiles.length === 0) return null;
 
@@ -752,7 +844,14 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
       return null;
     }
     const resolved = resolveRelativePath(dir, cleanRef);
-    return fileMap.get(resolved) || null;
+    const asset = fileMap.get(resolved) || null;
+    if (!asset || asset.content == null || typeof asset.content !== "string") {
+      return null;
+    }
+    if (asset.content.length > MAX_PREVIEW_ASSET_BYTES) {
+      return null;
+    }
+    return asset;
   };
 
   let inlinedActiveJs = false;

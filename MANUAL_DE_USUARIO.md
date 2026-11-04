@@ -118,12 +118,18 @@ En la barra superior del modal de vista previa podés alternar el tamaño de pan
 - **Consola interactiva de consultas:** podés escribir sentencias SQL adicionales en la caja inferior y ejecutarlas con el botón **Ejecutar Consulta** o el atajo `Ctrl + Enter`.
 - **Exportación de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`.
 
-### Compilador y Ejecutor de C y C++ (`.c`, `.cpp`, `.h`)
-- Soporte para programar en C (estándar C17) y C++ (estándar C++20) con compilación en la nube mediante la API de Wandbox y GCC.
+### Compilador y Ejecutor Nativo de C y C++ (`.c`, `.cpp`, `.h`)
+- **Aislamiento nativo sin iframes:** al abrir un archivo `.c`, `.cpp` o `.h` y tocar **Vista previa**, la interfaz monta un runner nativo de ejecución dentro del diálogo, evitando bloqueos o interferencias con iframes HTML.
+- **Soporte para C (GCC 14 / C17) y C++ (GCC 14 / C++20)** con compilación en la nube mediante la API de Wandbox.
+- **Detección y señalización de errores GCC (Línea roja y Tooltip):**
+  - Si el compilador detecta un fallo de sintaxis o error de compilación (ej. falta de punto y coma, tipado o headers no encontrados), el sistema parsea el número de línea.
+  - El editor CodeMirror 6 pinta el fondo de la línea en **rojo** y muestra un **tooltip explicativo flotante** con el detalle exacto del error.
+  - Además, podés hacer clic sobre el error en la terminal del modal para saltar inmediatamente a esa línea en el editor.
 - **Soporte multi-archivo automático:** si tu proyecto incluye archivos de cabecera (`.h`, `.hpp`) o archivos fuente complementarios (`.c`, `.cpp`) en la misma carpeta o proyecto, se empaquetan y compilan juntos automáticamente sin configuraciones engorrosas.
 - **Entrada estándar (`stdin`):** contás con un área de texto dedicada para ingresar los datos que tu programa solicitará mediante `scanf` o `cin`.
-- **Compilación en un toque (`Ctrl + Enter`):** botón **Compilar y Ejecutar** con atajo de teclado.
+- **Compilación en un toque (`Ctrl + Enter`):** botón **Compilar y Ejecutar** con atajo de teclado rápido.
 - **Terminal de ejecución:** muestra el estado de compilación, advertencias (`-Wall`), errores en rojo, salida estándar (`stdout`), salida de error (`stderr`) y código de salida con tiempo de ejecución en milisegundos.
+- **Optimización en repositorios gigantes:** filtrado automático de directorios pesados y descarte de archivos masivos (>512 KB) para garantizar una experiencia fluida sin cuelgues.
 
 ### Protección contra bucles infinitos (Loop Guard)
 - **JavaScript / HTML:** si un script contiene un `while(true)` o bucle bloqueante, el sistema de protección analiza el código y corta la ejecución a los 2,5 segundos avisando en la consola el número exacto de línea donde se originó el bucle, evitando que Safari se cuelgue.
@@ -157,7 +163,7 @@ En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu p
 * **Enlaces seguros:** todos los enlaces a documentación que recomiende la IA se abren en pestañas nuevas seguras (`target="_blank" rel="noopener noreferrer"`).
 * **Inyección de código con un toque:**
   - **En cursor:** inserta el código exactamente en la posición del cursor.
-  - **Reemplazar sel.:** sustituye únicamente el bloque que tengas seleccionado.
+  - **Reemplazar código:** sustituye el fragmento seleccionado si hay uno activo. Si no hay selección previa, **reemplaza el documento completo de forma segura**, evitando escribir encima de código existente o pegarlo en la posición del cursor.
   - **Aplicar archivo:** abre el **Visor de Diferencias (Diff)** para que veas en verde y rojo los cambios antes de aceptarlos.
 
 ---

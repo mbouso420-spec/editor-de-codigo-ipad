@@ -4,7 +4,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 264 tests unitarios pasando al 100% (47 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 273 tests unitarios pasando al 100% (52 suites, 0 fallos).
 
 ---
 
@@ -36,13 +36,15 @@
 - **Regeneración rápida de respuestas:** botón dedicado para reintentar la última consulta con un solo toque.
 - **Saneamiento automático del historial:** limpia notas de interrupción si se cancela una generación en curso.
 - **Enlaces Markdown seguros:** renderizado sanitizado con `target="_blank"` y `rel="noopener noreferrer"`, bloqueando esquemas no seguros (`javascript:`, `data:`).
-- **Acciones directas en bloques de código:** *En cursor*, *Reemplazar selección*, *Copiar* y *Aplicar archivo* con apertura previa del **Visor de Diferencias (Diff)** visual en verde y rojo.
+- **Acciones directas en bloques de código:** *En cursor*, *Reemplazar código* (reemplaza limpiamente el archivo completo si no hay selección o el fragmento seleccionado si lo hay, evitando sobrescrituras accidentales en el cursor), *Copiar* y *Aplicar archivo* con apertura previa del **Visor de Diferencias (Diff)** visual en verde y rojo.
 
 ### 3. Vista previa contextual en vivo, Consola, Multi-Página, SQLite y C/C++
 - **Resolución inteligente de punto de entrada:** al presionar *Vista previa* estando parado en un `.js` o `.css`, el motor busca en el workspace el `.html` que lo referencia directamente o el `index.html` principal, ensayando la aplicación web completa en lugar de correr scripts aislados.
 - **Navegación multi-página e Historial web:** Total Interceptor en el iframe que captura enlaces locales relativos (`<a href="contacto.html">`), envíos de `<form>` y llamadas de navegación programática (`location.assign`), ofreciendo botones de **Atrás / Adelante** y un selector desplegable de páginas HTML en la barra superior.
-- **Bases de datos SQLite en vivo (.sql):** ejecución directa de scripts DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
-- **Compilador y Ejecutor interactivo de C y C++ (.c, .cpp, .h):** compilación con GCC C17 y GCC C++20 vía Wandbox API con soporte multi-archivo automático (enlace de cabeceras `.h`/`.hpp` y fuentes adicionales), entrada interactiva `stdin` para `cin`/`scanf`, atajo `Ctrl + Enter` y terminal de ejecución con `stdout`, `stderr` y códigos de salida.
+- **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
+- **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal (sin capas iframe HTML intermedias) con terminal de salida en tiempo real, panel de estado, entrada interactiva `stdin` para `cin`/`scanf`, atajo `Ctrl + Enter` y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
+- **Detección y señalización de errores GCC (Línea roja y Tooltip):** parseo automático de las líneas de error del compilador (`file:line:col: error: ...`), marcación visual con fondo rojo en CodeMirror 6 (`addErrorMarker`) y tooltip flotante con el mensaje del compilador, más salto interactivo al hacer clic sobre el error en la terminal.
+- **Optimización para repositorios gigantes:** empaquetado perezoso con filtrado de directorios pesados (`node_modules`, `.git`, `dist`, `build`, etc.) y umbral máximo de tamaño por archivo (512 KB) para prevenir congelamientos en proyectos masivos.
 - **Selector de medidas responsivas (Device Switcher):** botones de alternancia en la cabecera del visor para probar el diseño en **Móvil (390px)**, **Tablet / iPad (820px)** y **Escritorio (100%)** con transiciones suaves.
 - **Protección contra bucles infinitos (Loop Guard):**
   - **JavaScript / HTML:** instrumentación de bucles vía AST (Acorn) que interrumpe bucles infinitos a los 2,5 s indicando el número de línea exacto para proteger la memoria del iPad.
@@ -140,8 +142,8 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **264 pruebas unitarias ejecutadas.**
-- **47 suites completadas.**
+- **273 pruebas unitarias ejecutadas.**
+- **52 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
 - Tiempo de ejecución: **~2.7 segundos.**
 

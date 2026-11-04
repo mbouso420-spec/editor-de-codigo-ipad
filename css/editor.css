@@ -322,3 +322,35 @@
     padding-inline: var(--space-2xs);
   }
 }
+
+/* Marcador de error de compilación en línea de CodeMirror 6 */
+.cm-error-line {
+  background-color: oklch(62% 0.18 25 / 0.28) !important;
+  border-left: 4px solid var(--color-error, #ef4444) !important;
+  position: relative;
+}
+
+.cm-error-line::after {
+  content: "⚠ " attr(title);
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--text-xs, 11px);
+  color: oklch(92% 0.08 25);
+  background: oklch(22% 0.05 25 / 0.95);
+  padding: 2px 8px;
+  border-radius: var(--radius-control, 4px);
+  border: 1px solid oklch(62% 0.18 25 / 0.45);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 50vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.92;
+  z-index: 10;
+}
+
+.editor-fallback-surface.has-error {
+  border-color: var(--color-error) !important;
+}

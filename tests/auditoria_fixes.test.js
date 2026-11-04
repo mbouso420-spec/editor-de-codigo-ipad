@@ -9,14 +9,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const { truncateCodeContent, cleanHistoryForAi, estimateTokens, formatInlineMarkdown } = await import("../js/ai/chatController.js");
 const { decodeImportedFile, MAX_IMPORT_FILE_BYTES } = await import("../js/storage/fileImport.js");
-const { wrapTextWithDelimiters } = await import("../js/editor/editorManager.js");
+const { wrapTextWithDelimiters, createEditorManager } = await import("../js/editor/editorManager.js");
 const { parseQuickOpenQuery } = await import("../js/ui/quickOpenModal.js");
 const { generateDuplicatePath } = await import("../js/ui/explorerController.js");
 const { buildZipArchive, computeCrc32, getDosDateTime } = await import("../js/storage/zipExporter.js");
 const { formatStorageBytes, getStorageQuotaEstimate } = await import("../js/storage/storageQuota.js");
-const { resolveRelativePath, findBestHtmlEntrypoint, findTargetHtmlFile } = await import("../js/ui/livePreviewModal.js");
+const { resolveRelativePath, findBestHtmlEntrypoint, findTargetHtmlFile, filterFolderScopeFiles, bundleHtmlWithFolderAssets } = await import("../js/ui/livePreviewModal.js");
 const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
-const { buildWandboxPayload, compileAndRunWandbox } = await import("../js/preview/cRunner.js");
+const { buildWandboxPayload, compileAndRunWandbox, parseGccErrors, mountCRunnerView } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
 describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
@@ -586,6 +586,149 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         assert.equal(res.status, 0);
         assert.equal(res.success, true);
         assert.equal(res.stdout, "Resultado: 42\n");
+      });
+    });
+  });
+
+  describe("Fase 6: Aislamiento C/C++, Detección de Errores GCC y Reemplazo de Código IA", () => {
+    describe("Parsea Errores GCC y Señalización de Línea (parseGccErrors)", () => {
+      test("parseGccErrors extrae correctamente línea, columna, severidad y mensaje de errores GCC", () => {
+        const stderr = "prog.c:12:5: error: expected ';' before '}' token\nmain.c:45:10: fatal error: stdio.h: No such file";
+        const errors = parseGccErrors(stderr);
+        assert.equal(errors.length, 2);
+        assert.equal(errors[0].line, 12);
+        assert.equal(errors[0].column, 5);
+        assert.equal(errors[0].severity, "error");
+        assert.equal(errors[0].message, "expected ';' before '}' token");
+
+        assert.equal(errors[1].line, 45);
+        assert.equal(errors[1].column, 10);
+        assert.equal(errors[1].severity, "fatal error");
+        assert.equal(errors[1].message, "stdio.h: No such file");
+      });
+
+      test("parseGccErrors tolera advertencias y líneas sin columna", () => {
+        const stderr = "math.cpp:8: warning: unused variable 'contador'\ntest.h:15: error: syntax error";
+        const errors = parseGccErrors(stderr);
+        assert.equal(errors.length, 2);
+        assert.equal(errors[0].line, 8);
+        assert.equal(errors[0].severity, "warning");
+        assert.equal(errors[0].message, "unused variable 'contador'");
+
+        assert.equal(errors[1].line, 15);
+        assert.equal(errors[1].severity, "error");
+        assert.equal(errors[1].message, "syntax error");
+      });
+
+      test("parseGccErrors devuelve array vacío si la salida no contiene errores o es nula", () => {
+        assert.deepEqual(parseGccErrors("Compilación exitosa sin mensajes"), []);
+        assert.deepEqual(parseGccErrors(""), []);
+        assert.deepEqual(parseGccErrors(null), []);
+      });
+    });
+
+    describe("Marcadores de Error en el Editor (addErrorMarker / clearErrorMarkers)", async () => {
+      test("addErrorMarker registra línea y mensaje; getErrorMarkers devuelve los marcadores activos", async () => {
+        const mount = document.createElement("div");
+        const editor = await createEditorManager({
+          mountEl: mount,
+          onDocChange: () => {},
+          onSelectionChange: () => {}
+        });
+
+        editor.openFile({ id: "main.c", path: "main.c", lang: "c", content: 'int main() {\n  int x = 1\n  return 0;\n}' });
+        assert.equal(editor.getErrorMarkers().length, 0);
+
+        editor.addErrorMarker(2, "expected ';' before 'return'");
+        const markers = editor.getErrorMarkers();
+        assert.equal(markers.length, 1);
+        assert.equal(markers[0].lineNum, 2);
+        assert.equal(markers[0].errorMessage, "expected ';' before 'return'");
+
+        editor.clearErrorMarkers();
+        assert.equal(editor.getErrorMarkers().length, 0);
+      });
+    });
+
+    describe("Inyector de Código de la IA: Reemplazo Completo sin Escribir en Cursor", async () => {
+      test("replaceEntireDocument reemplaza todo el rango del documento (0 a doc.length)", async () => {
+        const mount = document.createElement("div");
+        let lastContent = "";
+        const editor = await createEditorManager({
+          mountEl: mount,
+          onDocChange: (_, content) => { lastContent = content; },
+          onSelectionChange: () => {}
+        });
+
+        const initialCode = "function vieja() {\n  return 1;\n}";
+        editor.openFile({ id: "app.js", path: "app.js", lang: "js", content: initialCode });
+
+        const nuevoCodigo = "function nueva() {\n  return 42;\n}";
+        editor.replaceEntireDocument(nuevoCodigo);
+
+        assert.equal(lastContent, nuevoCodigo);
+        assert.ok(!lastContent.includes("vieja"), "No debe quedar código residual del archivo anterior");
+      });
+
+      test("replaceSelection sin selección activa reemplaza todo el documento de punta a punta", async () => {
+        const mount = document.createElement("div");
+        let lastContent = "";
+        const editor = await createEditorManager({
+          mountEl: mount,
+          onDocChange: (_, content) => { lastContent = content; },
+          onSelectionChange: () => {}
+        });
+
+        editor.openFile({ id: "main.py", path: "main.py", lang: "python", content: "print('viejo')" });
+
+        // Sin selección (cursor colapsado): la acción de reemplazo debe reemplazar todo el documento
+        editor.replaceSelection("print('nuevo completo')");
+        assert.equal(lastContent, "print('nuevo completo')");
+        assert.ok(!lastContent.includes("viejo"));
+      });
+    });
+
+    describe("Optimización en Repositorios Gigantes y Aislamiento C/C++", () => {
+      test("filterFolderScopeFiles excluye carpetas pesadas (node_modules, .git, dist) y archivos lazy", () => {
+        const allFiles = [
+          { path: "src/app.js", content: "console.log(1);" },
+          { path: "src/lazy.js", content: null },
+          { path: "src/node_modules/pkg/index.js", content: "module.exports = {};" },
+          { path: ".git/HEAD", content: "ref: refs/heads/main" },
+          { path: "dist/bundle.js", content: "var a=1;" }
+        ];
+
+        const scoped = filterFolderScopeFiles(allFiles, "");
+        assert.equal(scoped.length, 1);
+        assert.equal(scoped[0].path, "src/app.js");
+      });
+
+      test("bundleHtmlWithFolderAssets no incrusta archivos que superan MAX_PREVIEW_ASSET_BYTES (512 KB)", () => {
+        const hugeContent = "/* gigante */\n" + "x".repeat(600 * 1024);
+        const map = new Map([
+          ["styles.css", { path: "styles.css", content: hugeContent }]
+        ]);
+
+        const rawHtml = '<!DOCTYPE html><html><head><link rel="stylesheet" href="styles.css"></head><body>Hola</body></html>';
+        const bundled = bundleHtmlWithFolderAssets("index.html", rawHtml, map);
+
+        assert.ok(!bundled.includes(hugeContent), "No debe incrustar assets gigantes para evitar congelamientos");
+        assert.ok(bundled.includes('href="styles.css"'), "Conserva la etiqueta link sin congelar el hilo");
+      });
+
+      test("mountCRunnerView monta la interfaz interactiva con terminal y stdin sin usar iframes", () => {
+        const container = document.createElement("div");
+        const instance = mountCRunnerView(container, {
+          activeFile: { path: "main.c", shortName: "main.c", content: 'int main(){return 0;}' },
+          fetchFn: async () => new Response(JSON.stringify({ status: 0, program_output: "Hola C" }), { status: 200 })
+        });
+
+        assert.ok(container.querySelector(".c-runner-shell"), "Debe montar el shell nativo de C Runner");
+        assert.ok(container.querySelector(".c-stdin-textarea"), "Debe incluir el textarea de entrada estándar stdin");
+        assert.ok(container.querySelector(".c-terminal-card"), "Debe incluir la terminal de ejecución");
+        assert.equal(container.querySelectorAll("iframe").length, 0, "No debe contener ningún iframe HTML");
+
+        instance.destroy();
       });
     });
   });

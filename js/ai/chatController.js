@@ -849,24 +849,24 @@ export function initChatController({
     const hasSelNow = Boolean(getContextSnapshot().selection?.lineCount > 0);
     const btnReplace = createCodeActionButton(
       "replace",
-      "Reemplazar sel.",
+      "Reemplazar código",
       hasSelNow
         ? "Reemplazar las líneas seleccionadas"
-        : "Seleccioná líneas en el editor para habilitar el reemplazo",
+        : "Reemplazar todo el archivo (sin selección activa)",
       async () => {
         const applied = await onReplaceSelection(code);
         if (applied !== false) {
           btnReplace.innerHTML = `${icon("check")}<span>Reemplazado</span>`;
           window.setTimeout(() => {
-            btnReplace.innerHTML = `${icon("replace")}<span>Reemplazar sel.</span>`;
+            btnReplace.innerHTML = `${icon("replace")}<span>Reemplazar código</span>`;
           }, 1300);
         }
       }
     );
     btnReplace.dataset.action = "replace-selection";
-    btnReplace.disabled = !hasSelNow;
+    btnReplace.disabled = false;
 
-    const btnApplyFile = createCodeActionButton("fileCheck", "Aplicar archivo", "Reemplazar contenido completo del archivo (reversible con Deshacer)", () => {
+    const btnApplyFile = createCodeActionButton("fileCheck", "Aplicar cambios", "Reemplazar contenido completo del archivo (reversible con Deshacer)", () => {
       onApplyWholeFile(code, lang);
     });
 
@@ -956,10 +956,10 @@ export function initChatController({
     const buttons = streamContainer.querySelectorAll('button[data-action="replace-selection"]');
     for (const btn of buttons) {
       if (btn instanceof HTMLButtonElement) {
-        btn.disabled = !hasSel;
+        btn.disabled = false;
         btn.title = hasSel
           ? "Reemplazar las líneas seleccionadas"
-          : "Seleccioná líneas en el editor para habilitar el reemplazo";
+          : "Reemplazar todo el archivo (sin selección activa)";
       }
     }
   }
