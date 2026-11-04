@@ -3,12 +3,15 @@ import { normalizePath } from "../storage/workspaceDb.js";
 const HTML_EXTENSIONS = new Set(["html", "htm"]);
 const JS_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
 const CSS_EXTENSIONS = new Set(["css"]);
+const PYTHON_EXTENSIONS = new Set(["py", "pyw"]);
 
 /**
  * Vista previa contextual según la pestaña activa:
  * - Si la pestaña es .html -> "Vista previa de HTML" (ensambla CSS y JS de su misma carpeta/subcarpetas).
  * - Si la pestaña es .js   -> "Vista previa de JS" (ejecuta el JS mostrando su salida en pantalla y consola,
  *                             o junto al HTML de su misma carpeta si forman un proyecto web conjunto).
+ * - Si la pestaña es .py   -> "Vista previa de Python" (ejecuta Python 3 real en el navegador vía Pyodide WebAssembly,
+ *                             incluyendo módulos .py vecinos de su misma carpeta, print() e input()).
  * - Si la pestaña es .css  -> "Vista previa de CSS" (aplica sobre el HTML de su misma carpeta si existe).
  * - Cualquier otro archivo (.c, .cpp, .sql, etc.) -> informa claramente que la vista previa no está disponible.
  */
@@ -26,6 +29,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot }) {
   const unavailableTitleEl = document.getElementById("preview-unavailable-title");
   const unavailableDescEl = document.getElementById("preview-unavailable-desc");
   const consolePanel = document.getElementById("preview-console-panel");
+  const consoleTitleEl = document.getElementById("preview-console-title");
   const consoleList = document.getElementById("preview-console-list");
   const iframe = document.getElementById("preview-iframe");
 
@@ -132,10 +136,11 @@ export function initLivePreviewModal({ getWorkspaceSnapshot }) {
     if (unavailableBox) unavailableBox.hidden = false;
   }
 
-  function showRunnableIframe({ headerTitle, badgeText, compiledHtml, siblingHtml }) {
+  function showRunnableIframe({ headerTitle, badgeText, compiledHtml, siblingHtml, consoleTitle = "Consola JS" }) {
     clearConsoleOutput();
 
     if (titleEl) titleEl.textContent = headerTitle;
+    if (consoleTitleEl) consoleTitleEl.textContent = consoleTitle;
     if (fileBadgeEl) {
       fileBadgeEl.textContent = badgeText || "";
       fileBadgeEl.hidden = !badgeText;
@@ -263,12 +268,25 @@ export function initLivePreviewModal({ getWorkspaceSnapshot }) {
       return;
     }
 
-    // 4. Pestaña C, C++, SQL, Markdown, etc.: no disponible en vista previa web
+    // 4. Pestaña Python: ejecuta Python 3 real en el navegador (Pyodide WebAssembly) junto a módulos .py de su carpeta
+    if (PYTHON_EXTENSIONS.has(ext)) {
+      const compiledPyHtml = buildStandalonePythonPreview(activeFile, sameFolderFiles, folder);
+      showRunnableIframe({
+        headerTitle: "Vista previa de Python",
+        badgeText: activeFile.path,
+        compiledHtml: compiledPyHtml,
+        siblingHtml: null,
+        consoleTitle: "Consola Python"
+      });
+      return;
+    }
+
+    // 5. Pestaña C, C++, SQL, Markdown, etc.: no disponible en vista previa web
     showUnavailableState({
       headerTitle: "Vista previa",
       badgeText: activeFile.path,
       messageTitle: `La vista previa no está disponible para este archivo ${extLabel}`,
-      messageDesc: "La vista previa en vivo solo ejecuta archivos web de la pestaña activa (.html, .js y .css en conjunto con su carpeta)."
+      messageDesc: "La vista previa en vivo solo ejecuta archivos .html, .js, .css (en conjunto con su carpeta) y scripts .py de Python."
     });
   }
 
@@ -585,4 +603,231 @@ function escapeHtmlText(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
+  const prefix = baseFolder ? `${baseFolder}/` : "";
+  const modules = [];
+
+  for (const candidate of sameFolderFiles) {
+    const ext = getFileExtension(candidate.path);
+    if (!PYTHON_EXTENSIONS.has(ext)) continue;
+    const cleanPath = normalizePath(candidate.path);
+    if (cleanPath === normalizePath(pyFile.path)) continue;
+    const relPath = prefix && cleanPath.startsWith(prefix) ? cleanPath.slice(prefix.length) : cleanPath;
+    if (relPath && !relPath.startsWith("..")) {
+      modules.push({ path: relPath, content: candidate.content });
+    }
+  }
+
+  const pythonBootstrap = [
+    "import builtins, sys, traceback, js",
+    "if '.' not in sys.path:",
+    "    sys.path.insert(0, '.')",
+    "def __studio_input(prompt=''):",
+    "    texto = str(prompt) if prompt is not None else ''",
+    "    resp = js.prompt(texto or 'Entrada de datos (Python):')",
+    "    if resp is None:",
+    "        raise EOFError('Entrada cancelada por el usuario.')",
+    "    print(f'{texto}{resp}')",
+    "    return str(resp)",
+    "builtins.input = __studio_input",
+    "__had_err = False",
+    "__ns = {'__name__': '__main__', '__file__': __studio_entry_name}",
+    "try:",
+    "    exec(compile(__studio_entry_code, __studio_entry_name, 'exec'), __ns)",
+    "except SystemExit:",
+    "    pass",
+    "except Exception as __exc:",
+    "    __had_err = True",
+    "    __tb = traceback.extract_tb(__exc.__traceback__)",
+    "    __clean = [f for f in __tb if f.filename == __studio_entry_name or not f.filename.startswith('<')]",
+    "    __lines = ['Traceback (most recent call last):']",
+    "    for __f in __clean:",
+    "        __lines.append(f'  Archivo \"{__f.filename}\", línea {__f.lineno}, en {__f.name}')",
+    "    __lines.extend([l.rstrip('\\n') for l in traceback.format_exception_only(type(__exc), __exc)])",
+    "    print('\\n'.join(__lines), file=sys.stderr)",
+    "__had_err"
+  ].join("\n");
+
+  const payloadJson = JSON.stringify({
+    entryName: pyFile.shortName,
+    entryPath: pyFile.path,
+    code: pyFile.content,
+    modules,
+    bootstrap: pythonBootstrap
+  }).replace(/</g, "\\u003c");
+
+  const safePathLabel = escapeHtmlText(pyFile.path);
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --bg: oklch(15% 0.011 255);
+      --card: oklch(20.5% 0.014 255);
+      --border: oklch(33% 0.016 255 / 0.65);
+      --ink: oklch(94.5% 0.007 255);
+      --muted: oklch(67% 0.014 255);
+      --accent: oklch(74% 0.13 252);
+      --ok: oklch(66% 0.14 152);
+      --warn: oklch(74% 0.14 75);
+      --err: oklch(62% 0.18 25);
+      --font-ui: system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-ui);
+    }
+    .py-runner-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      overflow: hidden;
+    }
+    .py-runner-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .py-runner-file {
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .py-runner-status {
+      color: var(--warn);
+      font-size: 12px;
+    }
+    .py-runner-output {
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .py-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: oklch(16.5% 0.012 255);
+    }
+    .py-line-error { color: var(--err); }
+    .py-empty { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <section class="py-runner-card">
+    <div class="py-runner-head">
+      <span class="py-runner-file">${safePathLabel}</span>
+      <span id="__py_status" class="py-runner-status">Iniciando motor Python 3 (WebAssembly)…</span>
+    </div>
+    <div id="__py_screen_log" class="py-runner-output"></div>
+  </section>
+
+  <script id="__py_payload" type="application/json">${payloadJson}</script>
+  <script>
+    (function () {
+      var statusEl = document.getElementById("__py_status");
+      var screenBox = document.getElementById("__py_screen_log");
+      var payload = JSON.parse(document.getElementById("__py_payload").textContent);
+
+      function emit(level, text) {
+        var msg = String(text ?? "");
+        try {
+          parent.postMessage({ source: "studio-ide-preview", level: level, text: msg }, "*");
+        } catch (_) {}
+        if (screenBox) {
+          var row = document.createElement("div");
+          row.className = level === "error" ? "py-line py-line-error" : "py-line";
+          row.textContent = msg;
+          screenBox.appendChild(row);
+        }
+      }
+
+      function setStatus(label, colorVar) {
+        if (!statusEl) return;
+        statusEl.textContent = label;
+        statusEl.style.color = colorVar;
+      }
+
+      function ensureParentDirs(FS, filePath) {
+        var parts = filePath.split("/");
+        if (parts.length <= 1) return;
+        var current = "";
+        for (var i = 0; i < parts.length - 1; i += 1) {
+          current = current ? current + "/" + parts[i] : parts[i];
+          try { FS.mkdir(current); } catch (_) {}
+        }
+      }
+
+      async function bootAndRun() {
+        try {
+          var pyodide = await window.loadPyodide({
+            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/"
+          });
+
+          pyodide.setStdout({
+            batched: function (line) { emit("log", line); }
+          });
+          pyodide.setStderr({
+            batched: function (line) { emit("error", line); }
+          });
+
+          for (var i = 0; i < payload.modules.length; i += 1) {
+            var mod = payload.modules[i];
+            ensureParentDirs(pyodide.FS, mod.path);
+            pyodide.FS.writeFile(mod.path, mod.content, { encoding: "utf8" });
+          }
+
+          setStatus("Ejecutando script…", "var(--accent)");
+
+          pyodide.globals.set("__studio_entry_name", payload.entryName);
+          pyodide.globals.set("__studio_entry_code", payload.code);
+
+          var hadErr = await pyodide.runPythonAsync(payload.bootstrap);
+
+          if (hadErr) {
+            setStatus("Error en ejecución", "var(--err)");
+          } else {
+            setStatus("Ejecutado correctamente", "var(--ok)");
+            if (screenBox && screenBox.children.length === 0) {
+              var note = document.createElement("div");
+              note.className = "py-empty";
+              note.textContent = "El script Python finalizó sin errores. Usá print(...) para mostrar resultados acá.";
+              screenBox.appendChild(note);
+            }
+          }
+        } catch (err) {
+          setStatus("Error al iniciar Python", "var(--err)");
+          emit("error", err && err.message ? err.message : String(err));
+        }
+      }
+
+      var script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
+      script.onload = bootAndRun;
+      script.onerror = function () {
+        setStatus("Sin conexión al motor Python", "var(--err)");
+        emit("error", "No se pudo descargar el motor Python 3 (Pyodide). Conectate a internet al menos una vez para almacenarlo en caché.");
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+</body>
+</html>`;
 }

@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v8";
+const SHELL_CACHE = "studio-ide-shell-v9";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 
 const APP_SHELL_URLS = [
@@ -32,6 +32,7 @@ const APP_SHELL_URLS = [
 
 const CACHEABLE_CDN_HOSTS = new Set([
   "esm.sh",
+  "cdn.jsdelivr.net",
   "fonts.googleapis.com",
   "fonts.gstatic.com"
 ]);

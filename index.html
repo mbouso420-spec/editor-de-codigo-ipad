@@ -29,6 +29,7 @@
         "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.8?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.2.1?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python@6.1.6?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.6.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.0?deps=@lezer/common@1.2.1",
         "@octokit/core": "https://esm.sh/@octokit/core@6.1.2"
@@ -558,9 +559,9 @@
           title="Vista previa web en vivo"
         ></iframe>
 
-        <section id="preview-console-panel" class="preview-console-panel" aria-label="Consola JavaScript">
+        <section id="preview-console-panel" class="preview-console-panel" aria-label="Consola de ejecución">
           <div class="preview-console-header">
-            <span class="preview-console-title">Consola JS</span>
+            <span id="preview-console-title" class="preview-console-title">Consola JS</span>
             <button type="button" id="btn-preview-clear-console" class="btn btn-ghost btn-sm">Limpiar</button>
           </div>
           <div id="preview-console-list" class="preview-console-list code-font"></div>

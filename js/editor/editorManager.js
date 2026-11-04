@@ -9,12 +9,12 @@ const DEFAULT_FONT_SIZE = 14;
 
 /**
  * Devuelve la cantidad de espacios de indentación inteligente según el lenguaje:
- * 4 espacios para C, C++ y SQL; 2 espacios para HTML, CSS y JavaScript.
+ * 4 espacios para Python, C, C++ y SQL; 2 espacios para HTML, CSS y JavaScript.
  * @param {string} lang
  * @returns {number}
  */
 export function getIndentSize(lang) {
-  return lang === "cpp" || lang === "c" || lang === "sql" ? 4 : 2;
+  return lang === "python" || lang === "cpp" || lang === "c" || lang === "sql" ? 4 : 2;
 }
 
 /**
@@ -129,6 +129,8 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
 
   function resolveLanguageExtension(lang) {
     switch (lang) {
+      case "python":
+        return langs.python ? langs.python() : langs.javascript();
       case "cpp":
       case "c":
         return langs.cpp();
@@ -373,6 +375,7 @@ async function loadCodeMirrorModules() {
     htmlMod,
     cssMod,
     jsMod,
+    pyMod,
     sqlMod
   ] = await Promise.all([
     import("@codemirror/state"),
@@ -386,6 +389,7 @@ async function loadCodeMirrorModules() {
     import("@codemirror/lang-html"),
     import("@codemirror/lang-css"),
     import("@codemirror/lang-javascript"),
+    import("@codemirror/lang-python").catch(() => null),
     import("@codemirror/lang-sql")
   ]);
 
@@ -425,6 +429,7 @@ async function loadCodeMirrorModules() {
       html: htmlMod.html,
       css: cssMod.css,
       javascript: jsMod.javascript,
+      python: pyMod?.python ?? null,
       sql: sqlMod.sql
     }
   };

@@ -68,6 +68,25 @@ const LANGUAGE_SYMBOLS = {
       { label: "\" \"", insert: "\"\"", cursorBack: 1 }
     ]
   },
+  python: {
+    label: "Python",
+    keys: [
+      { label: "Tab", insert: "    ", cursorBack: 0 },
+      { label: ":", insert: ":", cursorBack: 0 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: "[ ]", insert: "[]", cursorBack: 1 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "def", insert: "def ", cursorBack: 0 },
+      { label: "return", insert: "return ", cursorBack: 0 },
+      { label: "print()", insert: "print()", cursorBack: 1 },
+      { label: "f\"\"", insert: "f\"\"", cursorBack: 1 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 },
+      { label: "=", insert: " = ", cursorBack: 0 },
+      { label: "==", insert: " == ", cursorBack: 0 },
+      { label: "#", insert: "# ", cursorBack: 0 },
+      { label: "_", insert: "_", cursorBack: 0 }
+    ]
+  },
   sql: {
     label: "SQL",
     keys: [

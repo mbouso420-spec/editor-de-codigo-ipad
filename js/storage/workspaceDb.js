@@ -25,6 +25,10 @@ const SEED_ENTRIES = [
     content: `const saludar = (nombre) => {\n  return \`Bienvenido al proyecto, \${nombre}\`;\n};\n\nconsole.log(saludar("Dev"));\n`
   },
   {
+    path: "scripts/ejemplo.py",
+    content: `def resumen_notas(notas):\n    promedio = sum(notas) / len(notas)\n    return round(promedio, 2)\n\nvalores = [8, 9, 10, 7, 9]\nprint("Notas:", valores)\nprint("Promedio final:", resumen_notas(valores))\n`
+  },
+  {
     path: "db/schema.sql",
     content: `CREATE TABLE proyectos (\n    id INTEGER PRIMARY KEY,\n    nombre TEXT NOT NULL,\n    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nSELECT id, nombre\nFROM proyectos\nWHERE id = 1;\n`
   }
@@ -68,6 +72,9 @@ export function inferFileMeta(path) {
       return { lang: "css", badge: "CSS", icon: "fileCode" };
     case "sql":
       return { lang: "sql", badge: "SQL", icon: "database" };
+    case "py":
+    case "pyw":
+      return { lang: "python", badge: "PY", icon: "fileCode" };
     case "js":
     case "mjs":
     case "cjs":

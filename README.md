@@ -11,8 +11,8 @@
 
 ### 1. Interfaz de 3 islas pensada para iPadOS y PC
 - **Isla izquierda (Explorador):** gestión de múltiples proyectos locales o vinculados a repositorios de GitHub, árbol jerárquico de carpetas y archivos con creación, renombrado y borrado inline (sin ventanas emergentes que bloqueen Safari), además de importación y descarga directa de archivos.
-- **Isla central (Editor CodeMirror 6):** soporte para múltiples pestañas, resaltado de sintaxis para **C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda y reemplazo, ajuste de línea (*word wrap*), control de tamaño de fuente e historial independiente de *Undo/Redo* por archivo.
-- **Barra táctil contextual de símbolos:** fila inferior con teclas rápidas (`{`, `}`, `(`, `)`, `;`, `->`, `=>`, `Tab`, etc.) que cambian automáticamente según el lenguaje del archivo activo para escribir código rápido con el teclado en pantalla del iPad.
+- **Isla central (Editor CodeMirror 6):** soporte para múltiples pestañas, resaltado de sintaxis para **Python, C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda y reemplazo, ajuste de línea (*word wrap*), control de tamaño de fuente e historial independiente de *Undo/Redo* por archivo.
+- **Barra táctil contextual de símbolos:** fila inferior con teclas rápidas (`{`, `}`, `(`, `)`, `:`, `def`, `print()`, `;`, `->`, `=>`, `Tab`, etc.) que cambian automáticamente según el lenguaje del archivo activo para escribir código rápido con el teclado en pantalla del iPad.
 - **Adaptación a Stage Manager y teclado virtual:** soporte dinámico de `visualViewport` para evitar desplazamientos al abrir el teclado táctil en Safari y paneles laterales que pasan automáticamente a *drawers* deslizables en ventanas medianas o verticales.
 
 ### 2. Asistente de IA integrado (100% sobre APIs gratuitas)
@@ -25,12 +25,13 @@
   - **Copiar:** copia limpia al portapapeles.
 - Conserva el historial de conversación por separado para cada proyecto en `IndexedDB`.
 
-### 3. Vista previa web contextual + Consola JS integrada
+### 3. Vista previa en vivo contextual (Web + Python 3) y Consola integrada
 - Funciona según la **pestaña activa**:
   - En archivos **`.html`**: ensambla en tiempo real las hojas `.css` y scripts `.js` de su misma carpeta dentro de un `<iframe sandbox>` seguro.
   - En archivos **`.js`**: ejecuta el script mostrando su salida directa en pantalla y en la **Consola JS** integrada (fundamental en iPadOS donde Safari no incluye consola de desarrollador nativa), con opción de alternar junto al `.html` de su misma carpeta.
+  - En archivos **`.py` (Python 3)**: ejecuta tus scripts de Python directamente en el navegador mediante **Pyodide (WebAssembly)** sin servidores externos, soportando `print()`, `input()`, manejo claro de errores y `import` entre archivos `.py` de la misma carpeta.
   - En archivos **`.css`**: previsualiza los estilos aplicados sobre el `.html` de su misma carpeta.
-  - En lenguajes no web (**`.c`**, **`.cpp`**, **`.sql`**, etc.): informa claramente que la vista previa en vivo no aplica a esa extensión.
+  - En lenguajes compilados de escritorio (**`.c`**, **`.cpp`**, **`.sql`**, etc.): informa claramente que la vista previa en vivo no aplica a esa extensión.
 
 ### 4. Persistencia offline (`IndexedDB`) y Sincronización con GitHub
 - Autoguardado continuo en **`IndexedDB`** con solicitud de almacenamiento persistente (`navigator.storage.persist()`) para proteger tus proyectos en Safari iPadOS incluso trabajando sin conexión.

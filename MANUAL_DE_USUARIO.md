@@ -9,7 +9,7 @@ Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad
 1. [Activar GitHub Pages e instalar la app en el iPad (PWA)](#1-activar-github-pages-e-instalar-la-app-en-el-ipad-pwa)
 2. [Recorrido por la interfaz y atajos rápidos](#2-recorrido-por-la-interfaz-y-atajos-rápidos)
 3. [Gestión de proyectos, archivos y guardado automático](#3-gestión-de-proyectos-archivos-y-guardado-automático)
-4. [Vista previa en vivo y Consola JS](#4-vista-previa-en-vivo-y-consola-js)
+4. [Vista previa en vivo y Consola (Web + Python 3)](#4-vista-previa-en-vivo-y-consola-web--python-3)
 5. [Configurar el Asistente de IA gratuito (y pasar claves al iPad)](#5-configurar-el-asistente-de-ia-gratuito-y-pasar-claves-al-ipad)
 6. [Trabajar con el Asistente IA sobre tu código](#6-trabajar-con-el-asistente-ia-sobre-tu-código)
 7. [Cómo conectar GitHub y hacer Commit y Push paso a paso](#7-cómo-conectar-github-y-hacer-commit-y-push-paso-a-paso)
@@ -73,15 +73,16 @@ Todo lo que escribís se guarda solo cada pocos milisegundos en la base de datos
 
 ---
 
-## 4. Vista previa en vivo y Consola JS
+## 4. Vista previa en vivo y Consola (Web + Python 3)
 
 El botón **Vista previa** (arriba a la derecha) funciona **según la pestaña en la que estás parado**:
 
 1. **Si estás en una pestaña `.html`:** muestra **Vista previa de HTML** y une automáticamente los archivos `.css` y `.js` que estén en **esa misma carpeta** para que veas tu sitio completo funcionando.
 2. **Si estás en una pestaña `.js`:** muestra **Vista previa de JS** y ejecuta tu código mostrando los resultados en pantalla y en la **Consola JS** de abajo.
    * Si en esa misma carpeta también tenés un `.html` (por ejemplo `index.html` + `app.js`), arriba te aparece un botón para alternar con un clic entre **Ver junto a index.html** o **Ejecutar solo este .js**.
-3. **Si estás en una pestaña `.css`:** muestra **Vista previa de CSS** aplicándolo sobre el `.html` que esté en su misma carpeta.
-4. **Si estás en `.c`, `.cpp`, `.sql`, etc.:** te avisa claramente que la vista previa web no está disponible para esa extensión.
+3. **Si estás en una pestaña `.py` (Python):** muestra **Vista previa de Python**, carga el motor **Python 3 (WebAssembly / Pyodide)** directamente en tu iPad o PC (solo tarda unos segundos la primera vez y luego queda en caché) y ejecuta tu código con soporte para `print(...)`, `input("...")`, trazas de error claras e `import` de otros `.py` de esa misma carpeta.
+4. **Si estás en una pestaña `.css`:** muestra **Vista previa de CSS** aplicándolo sobre el `.html` que esté en su misma carpeta.
+5. **Si estás en `.c`, `.cpp`, `.sql`, etc.:** te avisa claramente que la vista previa en vivo no está disponible para esa extensión.
 
 ---
 

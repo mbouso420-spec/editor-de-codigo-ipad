@@ -581,6 +581,8 @@ function defaultStarterTemplate(path) {
       return `#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n`;
     case "html":
       return `<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8" />\n  <title>Documento</title>\n</head>\n<body>\n\n</body>\n</html>\n`;
+    case "python":
+      return `def principal():\n    print("Hola desde Python en Studio IDE")\n\nif __name__ == "__main__":\n    principal()\n`;
     case "sql":
       return `SELECT 1;\n`;
     default:
