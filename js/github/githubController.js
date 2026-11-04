@@ -1,14 +1,17 @@
 import { icon } from "../ui/icons.js";
 import {
   clearGithubToken,
+  compareRemoteCommits,
   downloadRepoFiles,
   fetchGithubUser,
   fetchRepoTreeIndex,
   fetchRepositoryBranches,
+  fetchSingleRepoBlob,
   fetchUserRepositories,
   getCachedUserRepositories,
   getGithubToken,
   pushAtomicCommit,
+  RemoteAheadError,
   saveGithubToken
 } from "./githubService.js";
 import {
@@ -57,12 +60,19 @@ export function initGithubController({
   const pushBtn = document.getElementById("btn-gh-push");
   const pushStatusEl = document.getElementById("gh-push-status");
 
+  const conflictBox = document.getElementById("gh-conflict-box");
+  const conflictMsg = document.getElementById("gh-conflict-msg");
+  const conflictList = document.getElementById("gh-conflict-list");
+  const conflictViewBtn = document.getElementById("btn-gh-conflict-view");
+  const conflictForceBtn = document.getElementById("btn-gh-conflict-force");
+
   let reposCache = [];
   let pendingPullConfirm = false;
   let pullConfirmTimer = 0;
   /** @type {"live" | "clone" | null} */
   let pendingOpenConfirmKind = null;
   let openConfirmTimer = 0;
+  let activeConflict = null;
 
   function resetPullConfirm() {
     pendingPullConfirm = false;
@@ -86,10 +96,20 @@ export function initGithubController({
     }
   }
 
+  function hideConflictBox() {
+    activeConflict = null;
+    if (conflictBox) conflictBox.hidden = true;
+    if (conflictList) {
+      conflictList.hidden = true;
+      conflictList.innerHTML = "";
+    }
+  }
+
   openDialogBtn?.addEventListener("click", async () => {
     if (!dialog) return;
     resetPullConfirm();
     resetOpenConfirm();
+    hideConflictBox();
     await onFlushPendingSaves?.();
     const storedToken = getGithubToken();
     if (tokenInput) {
@@ -105,6 +125,7 @@ export function initGithubController({
   closeDialogBtn?.addEventListener("click", () => {
     resetPullConfirm();
     resetOpenConfirm();
+    hideConflictBox();
     dialog?.close();
   });
 
@@ -112,6 +133,7 @@ export function initGithubController({
     if (event.target === dialog) {
       resetPullConfirm();
       resetOpenConfirm();
+      hideConflictBox();
       dialog.close();
     }
   });
@@ -327,7 +349,7 @@ export function initGithubController({
     }
   });
 
-  pushBtn?.addEventListener("click", async () => {
+  async function executePush(force = false) {
     const project = getActiveProject();
     if (!project || project.kind !== "github" || !project.github) return;
 
@@ -353,6 +375,7 @@ export function initGithubController({
     }
 
     pushBtn.disabled = true;
+    if (conflictForceBtn) conflictForceBtn.disabled = true;
     setStatus(pushStatusEl, `Enviando commit con ${changes.length} archivo(s) a ${project.github.branch}…`, "neutral");
 
     try {
@@ -362,18 +385,118 @@ export function initGithubController({
         repo: project.github.repo,
         branch: project.github.branch,
         message,
-        changes
+        changes,
+        expectedBaseSha: project.github.commitSha || null,
+        force
       });
 
+      hideConflictBox();
       await markProjectSynced(project.id, commitSha);
       if (commitMsgInput) commitMsgInput.value = "";
       await onProjectClonedOrSynced(project.id);
       await refreshSyncPanel();
       setStatus(pushStatusEl, `Commit publicado con éxito (${commitSha.slice(0, 7)}).`, "ok");
     } catch (error) {
-      setStatus(pushStatusEl, error instanceof Error ? error.message : "Error al publicar commit.", "error");
+      if (error instanceof RemoteAheadError) {
+        showConflictBox(error, project, token);
+      } else {
+        setStatus(pushStatusEl, error instanceof Error ? error.message : "Error al publicar commit.", "error");
+      }
     } finally {
       pushBtn.disabled = false;
+      if (conflictForceBtn) conflictForceBtn.disabled = false;
+    }
+  }
+
+  function showConflictBox(error, project, token) {
+    activeConflict = {
+      remoteSha: error.remoteSha,
+      expectedSha: error.expectedSha,
+      project,
+      token
+    };
+    if (conflictBox) conflictBox.hidden = false;
+    if (conflictMsg) {
+      const baseShort = (error.expectedSha || "inicial").slice(0, 7);
+      const remoteShort = (error.remoteSha || "").slice(0, 7);
+      conflictMsg.textContent = `Push bloqueado: GitHub avanzó a ${remoteShort} desde tu última versión (${baseShort}). Podés ver qué cambió en remoto antes de decidir o forzar el envío con tu versión local.`;
+    }
+    setStatus(pushStatusEl, "Hay commits nuevos en GitHub que no tenés localmente.", "error");
+  }
+
+  pushBtn?.addEventListener("click", () => executePush(false));
+
+  conflictForceBtn?.addEventListener("click", () => executePush(true));
+
+  conflictViewBtn?.addEventListener("click", async () => {
+    if (!activeConflict || !conflictList) return;
+    conflictViewBtn.disabled = true;
+    try {
+      const diffFiles = await compareRemoteCommits({
+        token: activeConflict.token,
+        owner: activeConflict.project.github.owner,
+        repo: activeConflict.project.github.repo,
+        base: activeConflict.expectedSha,
+        head: activeConflict.remoteSha
+      });
+      conflictList.innerHTML = "";
+      conflictList.hidden = false;
+      if (diffFiles.length === 0) {
+        const li = document.createElement("li");
+        li.className = "gh-change-item";
+        li.textContent = "No se detectaron diferencias en archivos de texto.";
+        conflictList.appendChild(li);
+      } else {
+        for (const file of diffFiles) {
+          const li = document.createElement("li");
+          li.className = "gh-change-item";
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "code-font gh-change-path";
+          nameSpan.textContent = file.path;
+
+          const actionWrap = document.createElement("div");
+          actionWrap.className = "gh-change-actions";
+
+          const viewBtn = document.createElement("button");
+          viewBtn.type = "button";
+          viewBtn.className = "btn btn-ghost btn-sm";
+          viewBtn.innerHTML = `${icon("gitCompare")}<span>Diff</span>`;
+          viewBtn.addEventListener("click", async () => {
+            const currentEntries = await getPendingGithubChanges(activeConflict.project.id);
+            const localFile = currentEntries.find((f) => f.path === file.path);
+            let remoteContent = "";
+            if (file.blobSha) {
+              try {
+                remoteContent = await fetchSingleRepoBlob({
+                  token: activeConflict.token,
+                  owner: activeConflict.project.github.owner,
+                  repo: activeConflict.project.github.repo,
+                  blobSha: file.blobSha
+                });
+              } catch {
+                remoteContent = "(No se pudo descargar el archivo remoto)";
+              }
+            }
+            onOpenDiff?.({
+              title: `Remoto (${file.path}) vs Local`,
+              oldCode: remoteContent,
+              newCode: localFile ? localFile.content : "(Sin cambios locales)"
+            });
+          });
+
+          const tag = document.createElement("span");
+          tag.className = `gh-change-tag ${file.status === "added" ? "is-added" : file.status === "removed" ? "is-deleted" : "is-modified"}`;
+          tag.textContent = file.status;
+
+          actionWrap.append(viewBtn, tag);
+          li.append(nameSpan, actionWrap);
+          conflictList.appendChild(li);
+        }
+      }
+    } catch (err) {
+      setStatus(pushStatusEl, err instanceof Error ? err.message : "No se pudo comparar con GitHub.", "error");
+    } finally {
+      conflictViewBtn.disabled = false;
     }
   });
 

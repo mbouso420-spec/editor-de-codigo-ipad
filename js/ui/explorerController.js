@@ -1,5 +1,5 @@
 import { icon } from "./icons.js";
-import { inferFileMeta, normalizePath } from "../storage/workspaceDb.js";
+import { inferFileMeta, normalizePath, validateUserPath } from "../storage/workspaceDb.js";
 
 /**
  * Controlador del Explorador jerárquico con creación/renombrado inline,
@@ -94,10 +94,8 @@ export function initExplorerController({
       initialValue: prefix,
       ariaLabel: "Ruta del nuevo archivo",
       onSubmit: async (val) => {
-        const clean = normalizePath(val);
-        if (clean) {
-          await onCreateEntry(clean, false);
-        }
+        const clean = validateUserPath(val);
+        await onCreateEntry(clean, false);
       }
     });
   });
@@ -109,12 +107,10 @@ export function initExplorerController({
       initialValue: prefix,
       ariaLabel: "Ruta de la nueva carpeta",
       onSubmit: async (val) => {
-        const clean = normalizePath(val);
-        if (clean) {
-          collapsedFolders.delete(clean);
-          selectedFolderPath = clean;
-          await onCreateEntry(clean, true);
-        }
+        const clean = validateUserPath(val);
+        collapsedFolders.delete(clean);
+        selectedFolderPath = clean;
+        await onCreateEntry(clean, true);
       }
     });
   });
@@ -129,12 +125,25 @@ export function initExplorerController({
     if (fileList.length === 0) return;
 
     const imported = [];
+    const rejected = [];
     for (const file of fileList) {
-      const content = await file.text();
       const targetPath = selectedFolderPath ? `${selectedFolderPath}/${file.name}` : file.name;
-      imported.push({ path: normalizePath(targetPath), content });
+      let cleanPath;
+      try {
+        cleanPath = validateUserPath(targetPath);
+      } catch {
+        rejected.push(file.name);
+        continue;
+      }
+      const content = await file.text();
+      imported.push({ path: cleanPath, content });
     }
-    await onImportFiles(imported);
+    if (imported.length > 0) {
+      await onImportFiles(imported);
+    }
+    if (rejected.length > 0) {
+      setAutosaveStatus(`No se importó ${rejected.join(", ")}: el nombre tiene caracteres no permitidos`);
+    }
   });
 
   btnExport?.addEventListener("click", () => {
@@ -450,10 +459,18 @@ export function initExplorerController({
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const targetPath = normalizePath(input.value);
       const oldPath = node.path;
       const isFolder = node.isFolder;
-      if (!targetPath || targetPath === oldPath) {
+      let targetPath;
+      try {
+        targetPath = validateUserPath(input.value);
+      } catch (error) {
+        errEl.hidden = false;
+        errEl.textContent = error instanceof Error ? error.message : "Nombre inválido.";
+        input.focus();
+        return;
+      }
+      if (targetPath === oldPath) {
         renamingTarget = null;
         renderTree(currentEntries, currentActiveFileId);
         return;

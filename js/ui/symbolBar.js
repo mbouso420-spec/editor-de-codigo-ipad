@@ -116,6 +116,34 @@ const LANGUAGE_SYMBOLS = {
       { label: ">", insert: "> ", cursorBack: 0 },
       { label: "---", insert: "\n---\n", cursorBack: 0 }
     ]
+  },
+  json: {
+    label: "JSON",
+    keys: [
+      { label: "Tab", insert: "  ", cursorBack: 0 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "[ ]", insert: "[]", cursorBack: 1 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 },
+      { label: ":", insert: ": ", cursorBack: 0 },
+      { label: ",", insert: ",", cursorBack: 0 },
+      { label: "true", insert: "true", cursorBack: 0 },
+      { label: "false", insert: "false", cursorBack: 0 },
+      { label: "null", insert: "null", cursorBack: 0 }
+    ]
+  },
+  text: {
+    label: "Texto",
+    keys: [
+      { label: "Tab", insert: "  ", cursorBack: 0 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: "[ ]", insert: "[]", cursorBack: 1 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 },
+      { label: "-", insert: "- ", cursorBack: 0 },
+      { label: "#", insert: "#", cursorBack: 0 },
+      { label: "/", insert: "/", cursorBack: 0 },
+      { label: "_", insert: "_", cursorBack: 0 }
+    ]
   }
 };
 

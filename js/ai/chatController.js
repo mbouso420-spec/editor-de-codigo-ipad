@@ -628,11 +628,18 @@ export function initChatController({
     actions.className = "chat-code-actions-wrap";
 
     const btnInsert = createCodeActionButton("arrowDownLeft", "En cursor", "Insertar en la posición del cursor", async () => {
-      await onInsertAtCursor(code, lang);
-      btnInsert.innerHTML = `${icon("check")}<span>Insertado</span>`;
+      let inserted = false;
+      try {
+        inserted = (await onInsertAtCursor(code, lang)) !== false;
+      } catch {
+        inserted = false;
+      }
+      btnInsert.innerHTML = inserted
+        ? `${icon("check")}<span>Insertado</span>`
+        : `${icon("x")}<span>Sin archivo abierto</span>`;
       window.setTimeout(() => {
         btnInsert.innerHTML = `${icon("arrowDownLeft")}<span>En cursor</span>`;
-      }, 1300);
+      }, inserted ? 1300 : 2200);
     });
 
     const hasSelNow = Boolean(getContextSnapshot().selection?.lineCount > 0);

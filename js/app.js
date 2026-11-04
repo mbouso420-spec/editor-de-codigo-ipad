@@ -434,7 +434,9 @@ async function initApp() {
   async function ensureAnOpenFile(preferredLang = "") {
     if (activeFileId) return;
     if (filesOnly.length > 0) {
-      await openOrFocusFile(filesOnly[0].id);
+      // Preferir un archivo ya disponible en el iPad para no depender de la red
+      const candidate = filesOnly.find((f) => f.contentLoaded !== false) || filesOnly[0];
+      await openOrFocusFile(candidate.id);
       return;
     }
     const fallbackPath = inferFallbackFilename(preferredLang);
@@ -464,14 +466,17 @@ async function initApp() {
     },
     async onInsertAtCursor(code, lang) {
       await ensureAnOpenFile(lang);
-      editor.insertAtCursor(code, 0);
-      layout.closeRightOnCompactAction();
-    },
-    async onReplaceSelection(code) {
-      if (!activeSelection.lineCount) {
+      if (!activeFileId) {
         return false;
       }
-      await ensureAnOpenFile();
+      editor.insertAtCursor(code, 0);
+      layout.closeRightOnCompactAction();
+      return true;
+    },
+    async onReplaceSelection(code) {
+      if (!activeSelection.lineCount || !activeFileId) {
+        return false;
+      }
       editor.replaceSelection(code);
       layout.closeRightOnCompactAction();
       return true;

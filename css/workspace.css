@@ -359,6 +359,34 @@
   flex-shrink: 0;
 }
 
+/* Aviso de push bloqueado porque GitHub avanzó desde la última descarga */
+.gh-conflict-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-radius: var(--radius-card);
+  border: var(--rule-hair) solid var(--color-warning);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.gh-conflict-msg {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.gh-force-btn {
+  border-color: var(--color-error);
+  color: var(--color-ink);
+}
+
+.gh-force-btn:hover {
+  background: var(--color-error-soft);
+  border-color: var(--color-error);
+}
+
 /* Extensiones de Diálogos: Visor de Diferencias (Diff) y Vista Previa Web en Vivo */
 .ide-dialog-wide {
   width: min(780px, calc(100% - var(--space-lg)));

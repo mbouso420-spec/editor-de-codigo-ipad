@@ -31,6 +31,7 @@
         "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python@6.1.6?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.2.5?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-json": "https://esm.sh/@codemirror/lang-json@6.0.1?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.6.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.0?deps=@lezer/common@1.2.1",
         "@octokit/core": "https://esm.sh/@octokit/core@6.1.2"
@@ -516,6 +517,21 @@
             </button>
           </div>
           <p id="gh-push-status" class="gh-status-msg">Agrupa todos los archivos nuevos, editados y eliminados en un solo commit limpio.</p>
+
+          <div id="gh-conflict-box" class="gh-conflict-box" role="alert" hidden>
+            <p id="gh-conflict-msg" class="gh-conflict-msg"></p>
+            <ul id="gh-conflict-list" class="gh-changes-list" hidden></ul>
+            <div class="field-row gh-open-actions">
+              <button type="button" id="btn-gh-conflict-view" class="btn btn-sm">
+                <span data-icon="gitCompare"></span>
+                <span>Ver qué cambió</span>
+              </button>
+              <button type="button" id="btn-gh-conflict-force" class="btn btn-sm gh-force-btn">
+                <span data-icon="cloudUpload"></span>
+                <span>Forzar igual</span>
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </div>

@@ -325,9 +325,51 @@ export async function downloadRepoFiles({ token, owner, repo, branch, onProgress
 }
 
 /**
- * Crea un único Commit + Push atómico en GitHub (soporta incluso repositorios recién creados sin commits previos).
+ * Error lanzado cuando la rama remota avanzó desde la última descarga/sincronización local.
  */
-export async function pushAtomicCommit({ token, owner, repo, branch, message, changes }) {
+export class RemoteAheadError extends Error {
+  constructor(remoteSha, expectedSha) {
+    super("El repositorio en GitHub tiene commits nuevos que todavía no descargaste.");
+    this.name = "RemoteAheadError";
+    this.remoteSha = remoteSha;
+    this.expectedSha = expectedSha;
+  }
+}
+
+/**
+ * Lista los archivos que cambiaron en GitHub entre dos commits (compare API).
+ * @returns {Promise<Array<{ path: string, status: string, blobSha: string | null }>>}
+ */
+export async function compareRemoteCommits({ token, owner, repo, base, head }) {
+  const client = await createGithubClient(token);
+  const data = await client.request("GET /repos/{owner}/{repo}/compare/{basehead}", {
+    owner,
+    repo,
+    basehead: `${base}...${head}`
+  });
+  const files = Array.isArray(data?.files) ? data.files : [];
+  return files.map((f) => ({
+    path: f.filename,
+    previousPath: f.previous_filename || null,
+    status: f.status,
+    blobSha: f.status === "removed" ? null : f.sha || null
+  }));
+}
+
+/**
+ * Crea un único Commit + Push atómico en GitHub (soporta incluso repositorios recién creados sin commits previos).
+ * Si se indica expectedBaseSha y la rama remota avanzó, lanza RemoteAheadError salvo que force sea true.
+ */
+export async function pushAtomicCommit({
+  token,
+  owner,
+  repo,
+  branch,
+  message,
+  changes,
+  expectedBaseSha = null,
+  force = false
+}) {
   if (!changes.length) {
     throw new Error("No hay archivos modificados para enviar en el commit.");
   }
@@ -351,6 +393,11 @@ export async function pushAtomicCommit({ token, owner, repo, branch, message, ch
     const st = err?.status;
     const msg = String(err?.message || "").toLowerCase();
     if (st === 404 || st === 409 || msg.includes("not found") || msg.includes("empty")) {
+      if (expectedBaseSha && !force) {
+        throw new Error(
+          `La rama ${branch} ya no existe en GitHub o fue reiniciada. Tocá Actualizar remoto antes de subir.`
+        );
+      }
       // Repositorio vacío: inicializar rama con el primer archivo nuevo vía Contents API
       const firstAddedIdx = remainingChanges.findIndex((c) => c.status !== "deleted");
       if (firstAddedIdx === -1) {
@@ -386,6 +433,10 @@ export async function pushAtomicCommit({ token, owner, repo, branch, message, ch
 
   if (!latestCommitSha || !baseTreeSha) {
     throw new Error("No se pudo leer el último commit de la rama remota.");
+  }
+
+  if (!force && expectedBaseSha && latestCommitSha !== expectedBaseSha) {
+    throw new RemoteAheadError(latestCommitSha, expectedBaseSha);
   }
 
   const treeItems = remainingChanges.map((change) => {

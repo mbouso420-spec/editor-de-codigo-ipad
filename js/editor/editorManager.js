@@ -1,3 +1,5 @@
+import { inferFileMeta } from "../storage/workspaceDb.js";
+
 const PREF_KEYS = {
   wordWrap: "ide.editor.wordWrap",
   fontSize: "ide.editor.fontSize"
@@ -151,6 +153,8 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         return langs.markdown ? langs.markdown() : [];
       case "text":
         return [];
+      case "json":
+        return langs.json ? langs.json() : langs.javascript();
       case "cpp":
       case "c":
         return langs.cpp();
@@ -161,7 +165,6 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       case "sql":
         return langs.sql();
       case "js":
-      case "json":
       default:
         return langs.javascript();
     }
@@ -296,13 +299,35 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
 
     for (const [fromKey, toKey, stateVal] of updates) {
       statesByFile.delete(fromKey);
-      statesByFile.set(toKey, stateVal);
+      const oldLang = inferFileMeta(fromKey).lang;
+      const newLang = inferFileMeta(toKey).lang;
+      if (oldLang === newLang) {
+        statesByFile.set(toKey, stateVal);
+        continue;
+      }
+      // Cambió la extensión: reconstruir con el nuevo lenguaje e indentación conservando texto y cursor
+      const rebuilt = buildEditorState({
+        id: toKey,
+        lang: newLang,
+        content: stateVal.doc.toString()
+      });
+      const head = Math.min(stateVal.selection.main.head, rebuilt.doc.length);
+      const anchor = Math.min(stateVal.selection.main.anchor, rebuilt.doc.length);
+      statesByFile.set(toKey, rebuilt.update({ selection: { anchor, head } }).state);
     }
 
     if (activeFileId === oldPath) {
       activeFileId = newPath;
     } else if (isFolder && activeFileId && activeFileId.startsWith(`${oldPath}/`)) {
       activeFileId = `${newPath}${activeFileId.slice(oldPath.length)}`;
+    }
+
+    if (view && activeFileId && statesByFile.get(activeFileId) !== view.state) {
+      const refreshed = statesByFile.get(activeFileId);
+      if (refreshed) {
+        view.setState(refreshed);
+        emitSelection(view.state);
+      }
     }
   }
 
@@ -407,6 +432,7 @@ async function loadCodeMirrorModules() {
     jsMod,
     pyMod,
     mdMod,
+    jsonMod,
     sqlMod
   ] = await Promise.all([
     import("@codemirror/state"),
@@ -422,6 +448,7 @@ async function loadCodeMirrorModules() {
     import("@codemirror/lang-javascript"),
     import("@codemirror/lang-python").catch(() => null),
     import("@codemirror/lang-markdown").catch(() => null),
+    import("@codemirror/lang-json").catch(() => null),
     import("@codemirror/lang-sql")
   ]);
 
@@ -463,6 +490,7 @@ async function loadCodeMirrorModules() {
       javascript: jsMod.javascript,
       python: pyMod?.python ?? null,
       markdown: mdMod?.markdown ?? null,
+      json: jsonMod?.json ?? null,
       sql: sqlMod.sql
     }
   };
@@ -558,7 +586,17 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         activeFileId = null;
       }
     },
-    renameFileStates() {},
+    renameFileStates(oldPath, newPath, isFolder) {
+      if (!activeFileId) return;
+      if (activeFileId === oldPath) {
+        activeFileId = newPath;
+      } else if (isFolder && activeFileId.startsWith(`${oldPath}/`)) {
+        activeFileId = `${newPath}${activeFileId.slice(oldPath.length)}`;
+      } else {
+        return;
+      }
+      activeLang = inferFileMeta(activeFileId).lang;
+    },
     insertAtCursor: insertInTextarea,
     replaceSelection: (text) => insertInTextarea(text, 0),
     replaceEntireDocument(text) {

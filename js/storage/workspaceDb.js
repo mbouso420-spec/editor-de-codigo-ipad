@@ -52,8 +52,8 @@ export async function requestPersistentStorage() {
  * @param {string} path
  */
 export function inferFileMeta(path) {
-  const lower = path.toLowerCase();
-  const ext = lower.includes(".") ? lower.split(".").pop() : "";
+  const baseName = String(path || "").split("/").pop().toLowerCase();
+  const ext = baseName.includes(".") ? baseName.split(".").pop() : "";
 
   switch (ext) {
     case "cpp":
@@ -84,19 +84,52 @@ export function inferFileMeta(path) {
     case "ts":
     case "jsx":
     case "tsx":
-    case "json":
       return { lang: "js", badge: ext.toUpperCase(), icon: "fileCode" };
+    case "json":
+      return { lang: "json", badge: "JSON", icon: "fileCode" };
     default:
-      return { lang: "js", badge: ext ? ext.slice(0, 4).toUpperCase() : "TXT", icon: "fileText" };
+      return { lang: "text", badge: ext ? ext.slice(0, 4).toUpperCase() : "TXT", icon: "fileText" };
   }
 }
 
+/**
+ * Normaliza una ruta del proyecto: barras unificadas, sin barras al inicio/fin
+ * y con los segmentos "." y ".." resueltos (nunca sale de la raíz del proyecto).
+ */
 export function normalizePath(rawPath) {
-  return String(rawPath || "")
+  const unified = String(rawPath || "")
     .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\/{2,}/g, "/");
+    .replace(/\\/g, "/");
+  const stack = [];
+  for (const segment of unified.split("/")) {
+    const part = segment.trim();
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return stack.join("/");
+}
+
+const INVALID_PATH_CHARS = /[:*?"<>|\u0000-\u001f]/;
+
+/**
+ * Valida una ruta escrita por el usuario (crear, renombrar, importar).
+ * Devuelve la ruta normalizada o lanza un Error con un mensaje claro en español.
+ */
+export function validateUserPath(rawPath) {
+  const clean = normalizePath(rawPath);
+  if (!clean) {
+    throw new Error("Escribí un nombre válido.");
+  }
+  const badChar = clean.match(INVALID_PATH_CHARS);
+  if (badChar) {
+    const shown = badChar[0].charCodeAt(0) < 32 ? "caracteres de control" : `"${badChar[0]}"`;
+    throw new Error(`El nombre no puede contener ${shown}. Evitá : * ? " < > |`);
+  }
+  return clean;
 }
 
 function makeFileKey(projectId, path) {
