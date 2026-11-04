@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://esm.sh https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://generativelanguage.googleapis.com https://api.groq.com https://openrouter.ai https://api.mistral.ai https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data: https: blob:; frame-src 'self' blob: data:;">
   <meta name="theme-color" content="#10131a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -141,7 +142,10 @@
           </div>
 
           <div class="explorer-io-row">
-            <span id="explorer-autosave-status" class="explorer-autosave-note">Autoguardado en IndexedDB</span>
+            <div class="explorer-status-group">
+              <span id="explorer-autosave-status" class="explorer-autosave-note">Autoguardado en IndexedDB</span>
+              <span id="explorer-storage-status" class="explorer-storage-note code-font" title="Almacenamiento del navegador"></span>
+            </div>
             <div class="panel-actions">
               <button
                 type="button"
@@ -159,6 +163,9 @@
               </button>
               <button type="button" id="btn-export-file" class="btn btn-ghost btn-sm btn-icon" aria-label="Descargar archivo activo" title="Descargar archivo activo">
                 <span data-icon="download"></span>
+              </button>
+              <button type="button" id="btn-export-zip" class="btn btn-ghost btn-sm btn-icon" aria-label="Descargar proyecto completo como archivo ZIP" title="Descargar proyecto (.zip)">
+                <span data-icon="layers"></span>
               </button>
             </div>
           </div>
@@ -390,6 +397,13 @@
         </div>
 
         <form id="chat-composer-form" class="chat-composer">
+          <div class="chat-composer-info">
+            <span id="chat-token-counter" class="chat-token-counter code-font">~0 tokens</span>
+            <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
+              <span data-icon="refreshCw"></span>
+              <span>Regenerar respuesta</span>
+            </button>
+          </div>
           <div class="chat-input-row">
             <label for="chat-prompt-input" class="visually-hidden">Consultar al asistente sobre el código</label>
             <textarea
@@ -503,6 +517,24 @@
           </div>
 
           <p id="gh-sync-repo-title" class="field-label code-font"></p>
+
+          <div class="field-row gh-branch-sync-row">
+            <div class="field-group field-grow-2">
+              <label for="gh-sync-branch-select" class="field-label">Rama de trabajo</label>
+              <select id="gh-sync-branch-select" class="field-control code-font"></select>
+            </div>
+            <button type="button" id="btn-gh-new-branch" class="btn btn-ghost btn-sm" title="Crear una nueva rama">
+              <span data-icon="gitBranch"></span>
+              <span>Nueva rama</span>
+            </button>
+          </div>
+          <div id="gh-new-branch-box" class="field-row gh-new-branch-box" hidden>
+            <input type="text" id="gh-new-branch-input" class="field-control code-font" placeholder="feature/mi-rama" spellcheck="false" autocomplete="off">
+            <button type="button" id="btn-gh-create-branch" class="btn btn-primary btn-sm">Crear</button>
+            <button type="button" id="btn-gh-cancel-branch" class="btn btn-ghost btn-sm">Cancelar</button>
+          </div>
+          <p id="gh-branch-status" class="gh-status-msg" hidden></p>
+
           <ul id="gh-changes-list" class="gh-changes-list"></ul>
 
           <div class="field-group">
@@ -538,6 +570,28 @@
             </div>
           </div>
         </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal de confirmación accesible para acciones destructivas o con cambios pendientes -->
+  <dialog id="confirm-dialog" class="ide-dialog" aria-labelledby="confirm-dialog-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="alertTriangle"></span>
+          <h2 id="confirm-dialog-title" class="dialog-title">¿Cerrar pestaña con cambios?</h2>
+        </div>
+        <button type="button" id="btn-close-confirm" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar diálogo">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p id="confirm-dialog-message" class="confirm-dialog-text">Este archivo tiene cambios sin sincronizar con GitHub. Si lo cerrás, tus cambios siguen guardados en el iPad pero la pestaña se ocultará.</p>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" id="btn-confirm-cancel" class="btn">Cancelar</button>
+        <button type="button" id="btn-confirm-action" class="btn btn-primary">Cerrar pestaña</button>
       </div>
     </div>
   </dialog>
@@ -578,6 +632,17 @@
         </div>
 
         <div class="preview-toolbar-controls">
+          <div class="preview-device-switcher" role="radiogroup" aria-label="Tamaño de emulación de pantalla">
+            <button type="button" class="btn btn-ghost btn-sm preview-device-btn" data-device="mobile" title="Móvil (390px)">
+              <span>390px</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm preview-device-btn" data-device="tablet" title="Tablet / iPad (820px)">
+              <span>820px</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm preview-device-btn is-active" data-device="desktop" title="Escritorio (100%)">
+              <span>100%</span>
+            </button>
+          </div>
           <button type="button" id="btn-preview-js-mode" class="btn btn-ghost btn-sm" hidden></button>
           <button type="button" id="btn-preview-reload" class="btn btn-ghost btn-sm" title="Recargar vista previa">
             <span data-icon="refreshCw"></span>
@@ -602,12 +667,14 @@
           <p id="preview-unavailable-desc" class="editor-empty-desc"></p>
         </div>
 
-        <iframe
-          id="preview-iframe"
-          class="preview-iframe"
-          sandbox="allow-scripts allow-modals"
-          title="Vista previa web en vivo"
-        ></iframe>
+        <div id="preview-iframe-wrapper" class="preview-iframe-wrapper">
+          <iframe
+            id="preview-iframe"
+            class="preview-iframe device-desktop"
+            sandbox="allow-scripts allow-modals"
+            title="Vista previa web en vivo"
+          ></iframe>
+        </div>
 
         <section id="preview-console-panel" class="preview-console-panel" aria-label="Consola de ejecución">
           <div class="preview-console-header">

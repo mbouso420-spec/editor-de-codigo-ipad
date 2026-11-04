@@ -206,24 +206,77 @@ export async function fetchGithubUser(token) {
 
 export async function fetchUserRepositories(token) {
   const client = await createGithubClient(token);
-  const repos = await client.request("GET /user/repos", {
-    sort: "updated",
-    per_page: 80,
-    affiliation: "owner,collaborator,organization_member"
-  });
-  if (Array.isArray(repos)) {
-    saveCachedUserRepositories(repos);
+  const allRepos = [];
+  const perPage = 100;
+  for (let page = 1; page <= 3; page += 1) {
+    const batch = await client.request("GET /user/repos", {
+      sort: "updated",
+      per_page: perPage,
+      page,
+      affiliation: "owner,collaborator,organization_member"
+    });
+    if (!Array.isArray(batch) || batch.length === 0) {
+      break;
+    }
+    allRepos.push(...batch);
+    if (batch.length < perPage) {
+      break;
+    }
   }
-  return repos;
+  if (allRepos.length > 0) {
+    saveCachedUserRepositories(allRepos);
+  }
+  return allRepos;
 }
 
 export async function fetchRepositoryBranches(token, owner, repo) {
+  return fetchRepoBranches(token, owner, repo);
+}
+
+/**
+ * Obtiene la lista de ramas de un repositorio de GitHub (GET /repos/{owner}/{repo}/branches).
+ * Admite tanto llamada posicional (token, owner, repo) como objeto { token, owner, repo }.
+ */
+export async function fetchRepoBranches(paramsOrToken, maybeOwner, maybeRepo) {
+  let token, owner, repo;
+  if (paramsOrToken && typeof paramsOrToken === "object") {
+    token = paramsOrToken.token;
+    owner = paramsOrToken.owner;
+    repo = paramsOrToken.repo;
+  } else {
+    token = paramsOrToken;
+    owner = maybeOwner;
+    repo = maybeRepo;
+  }
   const client = await createGithubClient(token);
   return client.request("GET /repos/{owner}/{repo}/branches", {
     owner,
     repo,
     per_page: 100
   });
+}
+
+/**
+ * Crea una nueva rama en GitHub a partir de un commit SHA de origen (POST /repos/{owner}/{repo}/git/refs).
+ * @param {{ token: string, owner: string, repo: string, branchName: string, fromSha: string }} params
+ * @returns {Promise<{ ref: string, commitSha: string }>}
+ */
+export async function createRepoBranch({ token, owner, repo, branchName, fromSha }) {
+  const cleanBranch = String(branchName || "").replace(/^refs\/heads\//, "").trim();
+  if (!cleanBranch) {
+    throw new Error("El nombre de la rama no puede estar vacío.");
+  }
+  const client = await createGithubClient(token);
+  const res = await client.request("POST /repos/{owner}/{repo}/git/refs", {
+    owner,
+    repo,
+    ref: `refs/heads/${cleanBranch}`,
+    sha: fromSha
+  });
+  return {
+    ref: res?.ref || `refs/heads/${cleanBranch}`,
+    commitSha: res?.object?.sha || fromSha
+  };
 }
 
 /**
@@ -297,9 +350,12 @@ export async function fetchRepoTreeIndex({ token, owner, repo, branch }) {
       mode: node.mode === "100755" ? "100755" : "100644"
     }));
 
+  const isTruncated = Boolean(treeData?.truncated);
+
   return {
     commitSha,
     isEmptyRepo: false,
+    isTruncated,
     branch,
     entries
   };

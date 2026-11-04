@@ -212,7 +212,7 @@ function assertNoRawTags(html, allowed) {
 }
 
 describe("Seguridad: Markdown del chat IA (formatProseHtml)", () => {
-  const allowed = ["p", "br", "strong", "em", "code", "h3", "hr", "blockquote", "ul", "ol", "li"];
+  const allowed = ["p", "br", "strong", "em", "code", "h3", "hr", "blockquote", "ul", "ol", "li", "a"];
   for (const payload of XSS_PAYLOADS) {
     test(`escapa ${JSON.stringify(payload).slice(0, 50)}`, () => {
       assertNoRawTags(formatProseHtml(payload), allowed);

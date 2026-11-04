@@ -12,6 +12,7 @@ const BINARY_EXTENSIONS = new Set([
   "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "sqlite", "db"
 ]);
 
+export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const SNIFF_BYTES = 8000;
 
 /**
@@ -20,6 +21,9 @@ const SNIFF_BYTES = 8000;
  * @returns {{ ok: true, text: string } | { ok: false, reason: string }}
  */
 export function decodeImportedFile(bytes, fileName) {
+  if (bytes && bytes.length > MAX_IMPORT_FILE_BYTES) {
+    return { ok: false, reason: "supera el límite de 5 MB por archivo" };
+  }
   const base = String(fileName || "").split("/").pop() || "";
   const ext = base.includes(".") ? base.split(".").pop().toLowerCase() : "";
   if (BINARY_EXTENSIONS.has(ext)) {

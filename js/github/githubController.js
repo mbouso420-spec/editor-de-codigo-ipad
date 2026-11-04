@@ -2,6 +2,7 @@ import { icon } from "../ui/icons.js";
 import {
   clearGithubToken,
   compareRemoteCommits,
+  createRepoBranch,
   downloadRepoFiles,
   fetchGithubUser,
   fetchRepoTreeIndex,
@@ -21,7 +22,8 @@ import {
   hydrateGithubProject,
   hydrateLazyGithubProject,
   makeGithubProjectId,
-  markProjectSynced
+  markProjectSynced,
+  saveProjectState
 } from "../storage/workspaceDb.js";
 
 /**
@@ -56,6 +58,13 @@ export function initGithubController({
 
   const syncSection = document.getElementById("gh-sync-section");
   const syncRepoTitle = document.getElementById("gh-sync-repo-title");
+  const syncBranchSelect = document.getElementById("gh-sync-branch-select");
+  const btnNewBranch = document.getElementById("btn-gh-new-branch");
+  const newBranchBox = document.getElementById("gh-new-branch-box");
+  const newBranchInput = document.getElementById("gh-new-branch-input");
+  const btnCreateBranch = document.getElementById("btn-gh-create-branch");
+  const btnCancelBranch = document.getElementById("btn-gh-cancel-branch");
+  const branchStatusEl = document.getElementById("gh-branch-status");
   const pullBtn = document.getElementById("btn-gh-pull");
   const changesListEl = document.getElementById("gh-changes-list");
   const commitMsgInput = document.getElementById("gh-commit-msg");
@@ -567,6 +576,86 @@ export function initGithubController({
     }
   });
 
+  btnNewBranch?.addEventListener("click", () => {
+    if (newBranchBox) {
+      newBranchBox.hidden = false;
+      newBranchInput?.focus();
+    }
+  });
+
+  btnCancelBranch?.addEventListener("click", () => {
+    if (newBranchBox) {
+      newBranchBox.hidden = true;
+      if (newBranchInput) newBranchInput.value = "";
+    }
+    if (branchStatusEl) branchStatusEl.hidden = true;
+  });
+
+  btnCreateBranch?.addEventListener("click", async () => {
+    const project = getActiveProject();
+    if (!project || !project.github) return;
+    const branchName = String(newBranchInput?.value || "").trim();
+    if (!branchName) {
+      if (branchStatusEl) {
+        branchStatusEl.hidden = false;
+        branchStatusEl.textContent = "Escribí un nombre para la nueva rama.";
+      }
+      return;
+    }
+    const token = getGithubToken();
+    if (!token) {
+      if (branchStatusEl) {
+        branchStatusEl.hidden = false;
+        branchStatusEl.textContent = "Conectá tu token de GitHub antes de crear ramas.";
+      }
+      return;
+    }
+
+    if (btnCreateBranch) btnCreateBranch.disabled = true;
+    if (branchStatusEl) {
+      branchStatusEl.hidden = false;
+      branchStatusEl.textContent = `Creando rama "${branchName}" en GitHub…`;
+    }
+
+    try {
+      await createRepoBranch({
+        token,
+        owner: project.github.owner,
+        repo: project.github.repo,
+        branchName,
+        fromSha: project.github.commitSha || project.github.baseCommitSha
+      });
+      project.github.branch = branchName;
+      await saveProjectState(project);
+      if (newBranchBox) {
+        newBranchBox.hidden = true;
+        if (newBranchInput) newBranchInput.value = "";
+      }
+      if (branchStatusEl) {
+        branchStatusEl.textContent = `Rama "${branchName}" creada y activa.`;
+      }
+      await refreshSyncPanel();
+    } catch (err) {
+      if (branchStatusEl) {
+        branchStatusEl.hidden = false;
+        branchStatusEl.textContent = err instanceof Error ? err.message : "Error al crear la rama";
+      }
+    } finally {
+      if (btnCreateBranch) btnCreateBranch.disabled = false;
+    }
+  });
+
+  syncBranchSelect?.addEventListener("change", async () => {
+    const project = getActiveProject();
+    if (!project || !project.github) return;
+    const chosen = syncBranchSelect.value;
+    if (!chosen || chosen === project.github.branch) return;
+
+    project.github.branch = chosen;
+    await saveProjectState(project);
+    await refreshSyncPanel();
+  });
+
   async function connectAndLoadRepos(token) {
     connectBtn.disabled = true;
     setStatus(authMsgEl, "Verificando cuenta y repositorios en GitHub…", "neutral");
@@ -647,6 +736,31 @@ export function initGithubController({
     if (syncSection) syncSection.hidden = false;
     if (syncRepoTitle) {
       syncRepoTitle.textContent = `${project.github.owner}/${project.github.repo} (${project.github.branch})`;
+    }
+
+    if (syncBranchSelect) {
+      const token = getGithubToken();
+      if (token && project.github.owner && project.github.repo) {
+        fetchRepositoryBranches(token, project.github.owner, project.github.repo)
+          .then((branches) => {
+            if (!Array.isArray(branches) || branches.length === 0) return;
+            syncBranchSelect.innerHTML = "";
+            for (const b of branches) {
+              const opt = document.createElement("option");
+              opt.value = b.name;
+              opt.textContent = b.name;
+              if (b.name === project.github.branch) {
+                opt.selected = true;
+              }
+              syncBranchSelect.appendChild(opt);
+            }
+          })
+          .catch(() => {
+            syncBranchSelect.innerHTML = `<option value="${project.github.branch}" selected>${project.github.branch}</option>`;
+          });
+      } else {
+        syncBranchSelect.innerHTML = `<option value="${project.github.branch}" selected>${project.github.branch}</option>`;
+      }
     }
 
     const changes = await getPendingGithubChanges(project.id);

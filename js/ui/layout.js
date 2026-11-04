@@ -83,6 +83,11 @@ export function initLayoutController() {
       leftOpen = false;
     }
     applyState();
+    restorePanelWidths();
+  });
+
+  window.addEventListener("resize", () => {
+    restorePanelWidths();
   });
 
   // Atajos de teclado (Cmd/Ctrl + B para Explorador, Cmd/Ctrl + J para Asistente, Escape para cerrar drawers)
@@ -312,13 +317,19 @@ function bindVisualViewport() {
 }
 
 function restorePanelWidths() {
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
   const leftW = Number(safeGetStorage(STORAGE_KEYS.leftWidth));
   const rightW = Number(safeGetStorage(STORAGE_KEYS.rightWidth));
-  if (Number.isFinite(leftW) && leftW >= 190 && leftW <= 420) {
-    document.documentElement.style.setProperty("--left-panel-w", `${leftW}px`);
+  const maxLeft = Math.min(420, Math.floor(viewportWidth * 0.36));
+  const maxRight = Math.min(540, Math.floor(viewportWidth * 0.44));
+
+  if (Number.isFinite(leftW) && leftW >= 190) {
+    const clampedL = clamp(leftW, 190, maxLeft);
+    document.documentElement.style.setProperty("--left-panel-w", `${clampedL}px`);
   }
-  if (Number.isFinite(rightW) && rightW >= 260 && rightW <= 540) {
-    document.documentElement.style.setProperty("--right-panel-w", `${rightW}px`);
+  if (Number.isFinite(rightW) && rightW >= 260) {
+    const clampedR = clamp(rightW, 260, maxRight);
+    document.documentElement.style.setProperty("--right-panel-w", `${clampedR}px`);
   }
 }
 

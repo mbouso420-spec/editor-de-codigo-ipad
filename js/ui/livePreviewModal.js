@@ -66,8 +66,29 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
 
   let consoleVisible = true;
   let previewRunSeq = 0;
+  let currentPreviewPath = null;
   /** @type {"auto" | "standalone" | "folder"} */
   let jsRunOverride = "auto";
+
+  const deviceButtons = dialog?.querySelectorAll(".preview-device-btn") || [];
+  deviceButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const device = btn.getAttribute("data-device") || "desktop";
+      deviceButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
+      if (iframe) {
+        iframe.className = `preview-iframe device-${device}`;
+      }
+    });
+  });
+
+  // Precargar el analizador Acorn en segundo plano para tener el guardián listo de inmediato
+  if (typeof window !== "undefined") {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => void loadAcorn());
+    } else {
+      window.setTimeout(() => void loadAcorn(), 1500);
+    }
+  }
 
   openBtn?.addEventListener("click", async () => {
     jsRunOverride = "auto";
@@ -123,8 +144,45 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       clearConsoleOutput();
       return;
     }
+    if (data.action === "navigate" && typeof data.href === "string") {
+      handlePreviewNavigation(data.href);
+      return;
+    }
     appendConsoleLine(data.level || "log", data.text || "");
   });
+
+  function handlePreviewNavigation(href) {
+    if (!currentPreviewPath) return;
+    const baseFolder = getParentFolder(currentPreviewPath);
+    const cleanRef = href.split("?")[0].split("#")[0];
+    const resolvedPath = resolveRelativePath(baseFolder, cleanRef);
+    const { files } = getWorkspaceSnapshot();
+
+    const targetFile = files.find((f) => normalizePath(f.path) === normalizePath(resolvedPath));
+    if (!targetFile) {
+      appendConsoleLine("warn", `No se encontró "${href}" en el proyecto (ruta resuelta: "${resolvedPath}").`);
+      return;
+    }
+
+    const ext = getFileExtension(targetFile.path);
+    if (!HTML_EXTENSIONS.has(ext)) {
+      appendConsoleLine("warn", `El archivo destino "${targetFile.path}" no es un documento HTML ejecutable.`);
+      return;
+    }
+
+    currentPreviewPath = targetFile.path;
+    const folder = getParentFolder(targetFile.path);
+    const sameFolderFiles = filterFolderScopeFiles(files, folder);
+    const sameFolderMap = new Map(sameFolderFiles.map((f) => [normalizePath(f.path), f]));
+    const compiledHtml = bundleHtmlWithFolderAssets(targetFile.path, targetFile.content, sameFolderMap, null, guardJs);
+
+    showRunnableIframe({
+      headerTitle: "Vista previa de HTML",
+      badgeText: targetFile.path,
+      compiledHtml,
+      siblingHtml: null
+    });
+  }
 
   function stopIframe() {
     if (iframe) {
@@ -239,6 +297,8 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       });
       return;
     }
+
+    currentPreviewPath = activeFile.path;
 
     const ext = getFileExtension(activeFile.path);
     const extLabel = ext ? `.${ext}` : "sin extensión";
@@ -673,6 +733,24 @@ ${buildLoopGuardRuntime()}
   window.addEventListener("unhandledrejection", function (e) {
     send("error", ["Promesa rechazada: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason))]);
   });
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a") : null;
+    if (!a) return;
+    var href = a.getAttribute("href");
+    if (!href) return;
+    if (href.startsWith("#") || href.startsWith("javascript:")) return;
+    if (/^(https?:|mailto:|tel:|blob:|data:)/i.test(href)) {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+      return;
+    }
+    e.preventDefault();
+    parent.postMessage({
+      source: "studio-ide-preview",
+      action: "navigate",
+      href: href
+    }, "*");
+  }, true);
 })();
 </script>`;
 }

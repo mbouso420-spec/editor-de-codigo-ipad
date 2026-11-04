@@ -20,6 +20,24 @@ export function getIndentSize(lang) {
 }
 
 /**
+ * Envuelve un texto seleccionado entre delimitadores de apertura y cierre
+ * calculados a partir de la longitud del texto y la distancia de retroceso del cursor.
+ * @param {string} text
+ * @param {string} selectedText
+ * @param {number} cursorBack
+ * @returns {{ text: string, selectFrom: number, selectTo: number }}
+ */
+export function wrapTextWithDelimiters(text, selectedText, cursorBack) {
+  const openDelim = text.slice(0, text.length - cursorBack);
+  const closeDelim = text.slice(text.length - cursorBack);
+  return {
+    text: `${openDelim}${selectedText}${closeDelim}`,
+    selectFrom: openDelim.length,
+    selectTo: openDelim.length + selectedText.length
+  };
+}
+
+/**
  * Gestor del motor de código principal basado en CodeMirror 6 vía ES Modules,
  * con caché de estado (historial Undo/Redo y cursor por archivo), indentación inteligente,
  * controles táctiles y respaldo resiliente si no hay red en la primera carga.
@@ -336,6 +354,19 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       return;
     }
     const range = view.state.selection.main;
+    const hasSelection = range.from < range.to;
+    if (hasSelection && cursorBack > 0 && cursorBack < text.length) {
+      const selectedText = view.state.sliceDoc(range.from, range.to);
+      const wrapped = wrapTextWithDelimiters(text, selectedText, cursorBack);
+      view.dispatch({
+        changes: { from: range.from, to: range.to, insert: wrapped.text },
+        selection: { anchor: range.from + wrapped.selectFrom, head: range.from + wrapped.selectTo },
+        scrollIntoView: true
+      });
+      view.focus();
+      return;
+    }
+
     const nextAnchor = Math.max(0, range.from + text.length - cursorBack);
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: text },
@@ -343,6 +374,19 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       scrollIntoView: true
     });
     view.focus();
+  }
+
+  function goToLine(lineNo) {
+    if (!view) return;
+    const doc = view.state.doc;
+    const targetLine = Math.min(Math.max(1, lineNo), doc.lines);
+    const lineObj = doc.line(targetLine);
+    view.dispatch({
+      selection: { anchor: lineObj.from },
+      scrollIntoView: true
+    });
+    view.focus();
+    emitSelection(view.state);
   }
 
   function replaceSelection(text) {
@@ -354,8 +398,10 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       return;
     }
     view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: text }
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      selection: { anchor: 0 }
     });
+    emitSelection(view.state);
   }
 
   function triggerUndo() {
@@ -407,6 +453,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     insertAtCursor,
     replaceSelection,
     replaceEntireDocument,
+    goToLine,
     triggerUndo,
     triggerRedo,
     triggerSearch,
@@ -555,10 +602,17 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     const start = textarea.selectionStart ?? textarea.value.length;
     const end = textarea.selectionEnd ?? textarea.value.length;
     textarea.focus();
-    textarea.setRangeText(text, start, end, "end");
-    if (cursorBack > 0) {
-      const pos = Math.max(0, start + text.length - cursorBack);
-      textarea.setSelectionRange(pos, pos);
+    if (start !== end && cursorBack > 0 && cursorBack < text.length) {
+      const selected = textarea.value.slice(start, end);
+      const wrapped = wrapTextWithDelimiters(text, selected, cursorBack);
+      textarea.setRangeText(wrapped.text, start, end, "select");
+      textarea.setSelectionRange(start + wrapped.selectFrom, start + wrapped.selectTo);
+    } else {
+      textarea.setRangeText(text, start, end, "end");
+      if (cursorBack > 0) {
+        const pos = Math.max(0, start + text.length - cursorBack);
+        textarea.setSelectionRange(pos, pos);
+      }
     }
     if (activeFileId) {
       onDocChange(activeFileId, textarea.value);
@@ -601,9 +655,22 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     replaceSelection: (text) => insertInTextarea(text, 0),
     replaceEntireDocument(text) {
       textarea.value = text;
+      textarea.setSelectionRange(0, 0);
       if (activeFileId) {
         onDocChange(activeFileId, text);
       }
+      emitSel();
+    },
+    goToLine(lineNo) {
+      const target = Math.max(1, parseInt(lineNo, 10) || 1);
+      const lines = textarea.value.split("\n");
+      const boundedLine = Math.min(target, lines.length);
+      let offset = 0;
+      for (let i = 0; i < boundedLine - 1; i++) {
+        offset += lines[i].length + 1;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(offset, offset);
       emitSel();
     },
     triggerUndo() {

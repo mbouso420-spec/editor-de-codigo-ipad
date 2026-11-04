@@ -1,163 +1,165 @@
 # Manual de Usuario — Studio IDE
 
-Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad, aprovechar la interfaz en PC o *Stage Manager*, conectar modelos de inteligencia artificial gratuitos y sincronizar tus proyectos con **GitHub**.
+Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad o PC, dominar todos los atajos de teclado y gestos táctiles, gestionar ramas en GitHub, previsualizar sitios web multi-página de forma responsiva y programar asistido por inteligencia artificial gratuita.
 
 ---
 
 ## Índice
 
-1. [Activar GitHub Pages e instalar la app en el iPad (PWA)](#1-activar-github-pages-e-instalar-la-app-en-el-ipad-pwa)
-2. [Recorrido por la interfaz y atajos rápidos](#2-recorrido-por-la-interfaz-y-atajos-rápidos)
-3. [Gestión de proyectos, archivos y guardado automático](#3-gestión-de-proyectos-archivos-y-guardado-automático)
-4. [Vista previa en vivo y Consola (Web + Python 3)](#4-vista-previa-en-vivo-y-consola-web--python-3)
-5. [Configurar el Asistente de IA gratuito (y pasar claves al iPad)](#5-configurar-el-asistente-de-ia-gratuito-y-pasar-claves-al-ipad)
+1. [Instalación en iPad (PWA a pantalla completa) y PC](#1-instalación-en-ipad-pwa-a-pantalla-completa-y-pc)
+2. [Recorrido por la interfaz, atajos y gestos táctiles](#2-recorrido-por-la-interfaz-atajos-y-gestos-táctiles)
+3. [Gestión de proyectos, exportación `.zip` y almacenamiento](#3-gestión-de-proyectos-exportación-zip-y-almacenamiento)
+4. [Vista previa web multi-página, medidas responsivas y Python 3](#4-vista-previa-web-multi-página-medidas-responsivas-y-python-3)
+5. [Configurar el Asistente de IA gratuito y pasar claves](#5-configurar-el-asistente-de-ia-gratuito-y-pasar-claves)
 6. [Trabajar con el Asistente IA sobre tu código](#6-trabajar-con-el-asistente-ia-sobre-tu-código)
-7. [Cómo conectar GitHub y hacer Commit y Push paso a paso](#7-cómo-conectar-github-y-hacer-commit-y-push-paso-a-paso)
+7. [GitHub avanzado: Ramas, Diff visual y Commit + Push](#7-github-avanzado-ramas-diff-visual-y-commit--push)
 
 ---
 
-## 1. Activar GitHub Pages e instalar la app en el iPad (PWA)
+## 1. Instalación en iPad (PWA a pantalla completa) y PC
 
-### Paso A: Activar el link web gratuito en GitHub (una sola vez)
-1. Entrá a tu repositorio en GitHub: `https://github.com/mbouso420-spec/editor-de-codigo-ipad`
-2. Tocá la pestaña **Settings** (arriba) y en el menú lateral izquierdo entrá a **Pages**.
-3. En **Build and deployment** -> **Source**, dejá elegido **Deploy from a branch**.
-4. En **Branch**, seleccioná **`main`** y carpeta **`/ (root)`**, y tocá **Save**.
-5. Esperá entre 1 y 2 minutos: arriba te va a aparecer tu dirección pública lista:
+### Paso A: Activar GitHub Pages (una sola vez)
+1. Entrá a tu repositorio en GitHub: `https://github.com/mbouso420-spec/editor-de-codigo-ipad`.
+2. Dirigite a **Settings** -> menú lateral izquierdo **Pages**.
+3. En **Build and deployment** -> **Source**, seleccioná **Deploy from a branch**.
+4. En **Branch**, elegí **`main`** y carpeta **`/ (root)`**, luego tocá **Save**.
+5. Tras 1 o 2 minutos, tu app estará disponible en:
    `https://mbouso420-spec.github.io/editor-de-codigo-ipad/`
 
-### Paso B: Instalarla a pantalla completa en tu iPad
-1. Abrí **Safari** en tu iPad y entrá a `https://mbouso420-spec.github.io/editor-de-codigo-ipad/`.
-2. Tocá el botón **Compartir** (el cuadrado con la flecha hacia arriba en la barra de Safari).
-3. Elegí **Agregar a inicio** (*Add to Home Screen*) y tocá **Agregar**.
-4. Listo: ahora tenés el icono azul de **Studio IDE** en tu pantalla de inicio. Al abrirlo desde ahí corre **a pantalla completa sin barras de Safari** y es 100% compatible con el cambio de tamaño de ventanas en **Stage Manager**.
+### Paso B: Instalar como app en tu iPad (PWA)
+1. Abrí **Safari** en el iPad y navegá a tu URL de GitHub Pages.
+2. Tocá el botón **Compartir** (el cuadrado con la flecha hacia arriba).
+3. Seleccioná **Agregar a inicio** (*Add to Home Screen*) y tocá **Agregar**.
+4. Abrí el nuevo icono azul de **Studio IDE**: se iniciará **a pantalla completa sin marcos de navegador** y con adaptación fluida a ventanas de **Stage Manager**.
 
 ---
 
-## 2. Recorrido por la interfaz y atajos rápidos
+## 2. Recorrido por la interfaz, atajos y gestos táctiles
 
-La pantalla está dividida en **3 islas independientes**:
+La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
+* **Izquierda (`Explorador`):** selector de proyectos, árbol de archivos, monitor de cuota y herramientas de importación/exportación.
+* **Centro (`Editor`):** barra de pestañas, controles de edición (`Deshacer`, `Rehacer`, `Buscar`, `Ajuste de línea`, tamaño tipográfico), editor de código y la **barra táctil de símbolos rápidos**.
+* **Derecha (`Asistente`):** chat contextual con IA, contador de tokens en vivo y configuración de proveedores gratuitos.
 
-* **Izquierda (`Explorador`):** tus proyectos, carpetas y archivos.
-* **Centro (`Editor`):** pestañas abiertas, herramientas táctiles (`Deshacer`, `Rehacer`, `Buscar`, `Ajuste de línea`, `- / +` tamaño de letra), área de código y la **barra inferior de símbolos rápidos** pensada para el teclado táctil del iPad.
-* **Derecha (`Asistente`):** chat con IA conectado en vivo a lo que estás editando.
+### Atajos de teclado (PC o Magic Keyboard en iPad)
 
-### Redimensionar y ocultar paneles
-* **En pantalla ancha (PC o iPad horizontal amplio):** arrastrá las líneas divisorias entre los paneles para darles el ancho que quieras, o tocá **Explorador** / **Asistente** arriba para ocultarlos y dejar el código a pantalla completa.
-* **En ventana mediana de Stage Manager o iPad vertical:** los paneles laterales pasan automáticamente a modo cajón flotante (*drawer*). Podés cerrarlos tocando afuera o deslizando el dedo hacia el borde.
-* **Barra de símbolos:** tocá el botón **Símbolos** en la barra superior si usás un teclado físico en el iPad o la PC y querés ganar más renglones de código.
-
-### Atajos de teclado físico (PC o Magic Keyboard en iPad)
 | Atajo | Acción |
 | :--- | :--- |
-| `Ctrl + S` / `Cmd + S` | Fuerza el guardado inmediato en `IndexedDB` sin abrir el cartel del navegador |
-| `Ctrl + B` / `Cmd + B` | Muestra u oculta el panel **Explorador** (izquierda) |
-| `Ctrl + J` / `Cmd + J` | Muestra u oculta el panel **Asistente IA** (derecha) |
-| `Ctrl + F` / `Cmd + F` | Abre el buscador y reemplazador dentro del archivo activo |
-| `Ctrl + Z` / `Cmd + Z` | Deshacer cambio en el archivo actual |
-| `Ctrl + Espacio` | Fuerza la apertura manual del menú de autocompletado |
-| `Enter` (en el chat IA) | Envía tu consulta (`Shift + Enter` hace salto de línea) |
-| `Escape` | Cierra ventanas abiertas o paneles flotantes |
+| `Alt + W` / `Cmd + W` / `Ctrl + W` | Cierra la pestaña activa (con confirmación si tiene cambios pendientes) |
+| `Clic central` (trackpad o mouse) | Cierra la pestaña sobre la que se hace clic (`auxclick`) |
+| `Cmd + P` / `Ctrl + P` | Abre la paleta de apertura rápida de archivos |
+| `Cmd + P` seguido de `:número` | Salto directo al número de línea (ej. `app.js:140` o `:45` en el archivo activo) |
+| `Ctrl + S` / `Cmd + S` | Fuerza el guardado inmediato en `IndexedDB` |
+| `Ctrl + B` / `Cmd + B` | Muestra u oculta el panel lateral del Explorador |
+| `Ctrl + J` / `Cmd + J` | Muestra u oculta el panel lateral del Asistente IA |
+| `Ctrl + F` / `Cmd + F` | Abre el buscador y reemplazador dentro del editor |
+| `Ctrl + Z` / `Cmd + Z` | Deshacer en el archivo actual |
+| `Ctrl + Espacio` | Abre manualmente el menú de autocompletado inteligente |
+| `Enter` (en el chat IA) | Envía el prompt (`Shift + Enter` inserta salto de línea) |
+| `Escape` | Cierra cualquier diálogo modal, menú contextual o paleta |
+
+### Gestos y ergonomía táctil en el iPad
+
+1. **Menú contextual por pulsación prolongada (*Long-Press*):**
+   - Mantené presionado cualquier archivo o carpeta durante ~500 ms (o hacé clic derecho en PC) para abrir el menú flotante con las opciones:
+     - **Renombrar:** edición inline sin cuadros de diálogo intrusivos.
+     - **Duplicar:** crea una copia exacta respetando extensiones (ej. `modelo.js` -> `modelo.copia.js`).
+     - **Descargar:** baja el archivo seleccionado directamente a tu dispositivo.
+     - **Eliminar:** pide confirmación visual para evitar borrados accidentales.
+2. **Auto-Wrap de selecciones con la barra de símbolos:**
+   - Seleccioná con el dedo o cursor una palabra o bloque de texto en el editor y tocá cualquiera de los delimitadores en la barra inferior: `( )`, `{ }`, `[ ]`, `" "`, `' '` o ```` ``` ````.
+   - En lugar de sobrescribir el texto, el editor **lo envolverá automáticamente conservando la selección interna**.
+3. **Protección al cerrar pestañas:**
+   - Si intentás cerrar una pestaña que tiene cambios locales aún no sincronizados con GitHub, el IDE abre un diálogo de confirmación accesible antes de purgar el estado de memoria del archivo.
 
 ---
 
-## 3. Gestión de proyectos, archivos y guardado automático
+## 3. Gestión de proyectos, exportación `.zip` y almacenamiento
 
-Todo lo que escribís se guarda solo cada pocos milisegundos en la base de datos interna del navegador (**`IndexedDB`**), incluso si te quedás sin Wi-Fi.
+### Exportación completa a `.zip` (100% Offline)
+- En la barra superior del Explorador, tocá el botón **Descargar proyecto (.zip)** (icono de capas).
+- El sistema compilará todos los archivos en un archivo `<nombre-del-proyecto>.zip` válido (formato PKZIP 2.0 nativo con CRC-32) y lo descargará en tu iPad o PC al instante, sin necesidad de conexión a internet ni servidores externos.
 
-* **Crear archivo o carpeta:** tocá el icono **`+`** (nuevo archivo) o **carpeta con `+`** arriba en el Explorador.
-  * *Tip:* si tenés seleccionada una carpeta del árbol, el archivo se crea adentro de esa carpeta; también podés escribir rutas directas como `src/utilidades/calculo.cpp`.
-* **Renombrar o borrar:** en cada fila del árbol tenés el icono del **lápiz** (renombrar conservando el historial de *Undo/Redo*) y el **cesto** (pide confirmación con un segundo toque antes de borrar).
-* **Nuevo proyecto local:** tocá el botón de **capas** al lado del selector de proyectos. Los proyectos locales viven únicamente en ese dispositivo.
-* **Importar / Descargar archivos sueltos:** usá la **flecha hacia arriba** para cargar archivos desde la app *Archivos* del iPad o tu PC, y la **flecha hacia abajo** para descargar a tu dispositivo el archivo que tengas abierto.
+### Importación segura de archivos
+- Tocá el botón de la **flecha hacia arriba** para importar archivos sueltos desde la app *Archivos* de iPadOS o tu explorador de PC.
+- Por estabilidad y rendimiento en el iPad, las importaciones cuentan con un límite de seguridad de **5 MB por archivo** y detección automática de codificación UTF-8.
 
----
-
-## 4. Vista previa en vivo y Consola (Web + Python 3)
-
-El botón **Vista previa** (arriba a la derecha) funciona **según la pestaña en la que estás parado**:
-
-1. **Si estás en una pestaña `.html`:** muestra **Vista previa de HTML** y une automáticamente los archivos `.css` y `.js` que estén en **esa misma carpeta** para que veas tu sitio completo funcionando.
-2. **Si estás en una pestaña `.js`:** muestra **Vista previa de JS** y ejecuta tu código mostrando los resultados en pantalla y en la **Consola JS** de abajo.
-   * Si en esa misma carpeta también tenés un `.html` (por ejemplo `index.html` + `app.js`), arriba te aparece un botón para alternar con un clic entre **Ver junto a index.html** o **Ejecutar solo este .js**.
-3. **Si estás en una pestaña `.py` (Python):** muestra **Vista previa de Python**, carga el motor **Python 3 (WebAssembly / Pyodide)** directamente en tu iPad o PC (solo tarda unos segundos la primera vez y luego queda en caché) y ejecuta tu código con soporte para `print(...)`, `input("...")`, trazas de error claras e `import` de otros `.py` de esa misma carpeta.
-4. **Si estás en una pestaña `.css`:** muestra **Vista previa de CSS** aplicándolo sobre el `.html` que esté en su misma carpeta.
-5. **Si estás en `.c`, `.cpp`, `.sql`, etc.:** te avisa claramente que la vista previa en vivo no está disponible para esa extensión.
+### Monitor de almacenamiento local
+- En la parte inferior del Explorador verás el estado en vivo de tu almacenamiento (`~1.2 MB / 1.5 GB`).
+- Esta cifra se actualiza automáticamente consultando `navigator.storage.estimate()` para que sepas en todo momento cuánto espacio tenés disponible en tu dispositivo.
 
 ---
 
-## 5. Configurar el Asistente de IA gratuito (y pasar claves al iPad)
+## 4. Vista previa web multi-página, medidas responsivas y Python 3
 
-En el panel derecho (**Asistente**), tocá el icono del **engranaje** (o el cartel **Falta clave**). Tenés 4 proveedores gratuitos listos para usar:
+Al presionar el botón **Vista previa** en la barra superior:
 
-### ¿Cuál conviene elegir?
-1. **Groq (Gratis — Ultrarrápido)** *(Recomendado principal)*
-   * Creá tu clave gratis sin tarjeta en: `https://console.groq.com/keys`
-   * Modelo recomendado: **`GPT-OSS 120B`** (`openai/gpt-oss-120b`). Es rapidísimo y excelente en lógica, C/C++, JS y SQL.
-2. **Google Gemini (Gratis — AI Studio)**
-   * Creá tu clave gratis en: `https://aistudio.google.com/apikey`
-   * Si en hora pico un modelo tiene alta demanda, el IDE prueba automáticamente otro modelo gratuito disponible de tu cuenta.
-3. **OpenRouter (Modelos `:free`)**
-   * Creá tu clave en: `https://openrouter.ai/keys`
-   * El selector `openrouter/free` enruta automáticamente hacia los mejores modelos gratuitos activos.
-4. **Mistral (Gratis — La Plateforme)**
-   * Creá tu clave en: `https://console.mistral.ai/api-keys` (incluye *Codestral* especializado en código).
+### Navegación Multi-Página en vivo
+- Si tu proyecto tiene múltiples páginas HTML (por ejemplo `index.html` y `contacto.html`), podés hacer clic libremente en enlaces relativos (`<a href="contacto.html">` o `<a href="../blog/post.html">`).
+- El visor capturará la navegación de forma interna, buscará el archivo correspondiente en el proyecto y lo cargará de inmediato con sus hojas CSS y scripts, sin cerrar el modal ni reiniciar la sesión.
 
-### Cómo pasar todas tus claves de la PC al iPad sin copiarlas una por una
-Como por seguridad tus claves no se suben a internet, tenés un botón especial adentro del engranaje del Asistente:
-1. En tu PC (donde ya cargaste tus API Keys y tu token de GitHub), tocá **Copiar pack de claves**.
-2. Mandátelo a vos mismo al iPad (por AirDrop, Notas de iCloud, WhatsApp o mail).
-3. En el iPad, abrí el engranaje del Asistente, tocá **Importar pack**, pegá el texto y tocá **Guardar**. Se configuran todas las IA y GitHub de una sola vez.
+### Emulador de medidas responsivas
+En la barra superior del modal de vista previa podés alternar el tamaño de pantalla:
+- **390px (Móvil):** simula la visualización en teléfonos modernos.
+- **820px (Tablet / iPad):** ajusta el contenedor al ancho clásico de tablets.
+- **100% (Escritorio):** aprovecha todo el ancho disponible del diálogo.
 
-### Privacidad en equipos compartidos
-* **Este dispositivo:** recuerda tus claves aunque cierres Safari o apagues el iPad.
-* **Solo esta sesión:** borra automáticamente todas las claves apenas cerrás la pestaña (ideal si algún día abrís tu IDE en una PC prestada o de la facultad).
+### Protección contra bucles infinitos (Loop Guard)
+- **JavaScript / HTML:** si un script contiene un `while(true)` o bucle bloqueante, el sistema de protección analiza el código y corta la ejecución a los 2,5 segundos avisando en la consola el número exacto de línea donde se originó el bucle, evitando que Safari se cuelgue.
+- **Python 3 (Pyodide WebAssembly):** la ejecución de Python corre en un **Web Worker aislado en segundo plano**. Si un script entra en un bucle prolongado, a los 5 segundos aparece un aviso preventivo y contás con un botón **Detener** que cancela el hilo al instante.
+- La consola de Python admite entrada interactiva sin bloqueos mediante la función `input()`.
+
+---
+
+## 5. Configurar el Asistente de IA gratuito y pasar claves
+
+En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu proveedor favorito:
+
+1. **Groq (Gratis — Ultrarrápido):** recomendadísimo para programar en el iPad (`https://console.groq.com/keys`). Modelo sugerido: `openai/gpt-oss-120b`.
+2. **Google Gemini (Gratis — AI Studio):** clave en `https://aistudio.google.com/apikey`. Cuenta con selección de modelos gratuitos (`gemini-2.5-flash`, etc.).
+3. **OpenRouter (Modelos gratuitos `:free`):** clave en `https://openrouter.ai/keys`.
+4. **Mistral (Gratis — La Plateforme):** clave en `https://console.mistral.ai/api-keys`.
+
+### Migración de claves en un toque (PC a iPad)
+1. En tu PC, abrí el engranaje del chat y tocá **Copiar pack de claves**.
+2. Enviate ese texto a tu iPad (por AirDrop, Notas de iCloud o mensaje).
+3. En el iPad, abrí el engranaje, tocá **Importar pack**, pegá el contenido y tocá **Guardar**. Se configurarán tus APIs de IA y tu token de GitHub automáticamente.
 
 ---
 
 ## 6. Trabajar con el Asistente IA sobre tu código
 
-* **Lectura automática:** no hace falta que copies y pegues tu archivo en el chat; el Asistente lee siempre el **archivo activo** que tenés abierto en el centro.
-* **Consultar sobre unas líneas puntuales:** seleccioná con el dedo o el mouse una función o bloque de renglones. Arriba del chat vas a ver *"X líneas seleccionadas"* para que la IA se enfoque ahí.
-* **Sumar otras pestañas como referencia:** si tenés varios archivos abiertos (por ejemplo `index.html` y `app.js`), debajo de la barra de contexto aparecen botones `+ app.js`. Tocalos para que la IA lea ambos archivos a la vez.
-* **Botones en cada bloque de código que te responde la IA:**
-  * **En cursor:** pega ese código justo donde dejaste el cursor en el editor.
-  * **Reemplazar sel.:** cambia únicamente el fragmento que tenías pintado/seleccionado.
-  * **Aplicar archivo:** antes de tocar tu archivo, te abre el **Visor de Diferencias (Diff)** mostrándote en **verde** las líneas nuevas y en **rojo** las que se quitan. Recién se aplica si tocás **Confirmar y aplicar**.
-  * **Copiar:** copia el bloque al portapapeles.
+* **Lectura contextual inteligente:** el asistente lee el archivo activo y las líneas seleccionadas en el editor.
+* **Presupuesto de contexto:** si el archivo es muy extenso, el IDE conserva inteligentemente las funciones iniciales y finales avisando cuántas líneas intermedias fueron omitidas, respetando los límites de tokens de los planes gratuitos.
+* **Contador de tokens en vivo:** debajo del campo de texto podés ver cuántos tokens aproximados insume tu mensaje antes de enviarlo.
+* **Regenerar respuesta:** si la respuesta no te conforma o querés otra alternativa, tocá el botón **Regenerar respuesta** para reintentar la consulta en un solo toque.
+* **Enlaces seguros:** todos los enlaces a documentación que recomiende la IA se abren en pestañas nuevas seguras (`target="_blank" rel="noopener noreferrer"`).
+* **Inyección de código con un toque:**
+  - **En cursor:** inserta el código exactamente en la posición del cursor.
+  - **Reemplazar sel.:** sustituye únicamente el bloque que tengas seleccionado.
+  - **Aplicar archivo:** abre el **Visor de Diferencias (Diff)** para que veas en verde y rojo los cambios antes de aceptarlos.
 
 ---
 
-## 7. Cómo conectar GitHub y hacer Commit y Push paso a paso
+## 7. GitHub avanzado: Ramas, Diff visual y Commit + Push
 
-Usá un repositorio de GitHub cada vez que quieras **respaldar un proyecto en la nube** o **empezar a programar en la PC y seguir en el iPad** (o viceversa).
+### Conectar tu cuenta con Personal Access Token (PAT)
+1. En GitHub, creá un token en **Settings** -> **Developer settings** -> **Personal access tokens** -> **Fine-grained tokens**.
+2. Concedele permisos de lectura y escritura a **Contents** y copialo (`github_pat_...`).
+3. En el IDE, tocá **Repositorio**, pegá el token y tocá **Conectar**.
 
-### Paso 1: Crear tu llave de permiso en GitHub (solo la primera vez)
-1. Entrá a **GitHub.com** -> tocá tu **foto de perfil** (arriba a la derecha) -> **Settings**.
-2. Bajá hasta el final del menú izquierdo -> **Developer settings** -> **Personal access tokens** -> **Fine-grained tokens** -> **Generate new token**.
-3. Completá:
-   * **Token name:** `Studio IDE`
-   * **Repository access:** marcá **All repositories**
-   * **Permissions:** desplegá **Repository permissions**, buscá **Contents** y elegí **Read and write** *(obligatorio para poder subir commits)*.
-4. Tocá **Generate token** y copiá el código que empieza con `github_pat_...`.
+### Carga bajo demanda y modo offline
+- Tus repositorios aparecerán en el selector del Explorador. Al seleccionar uno, el árbol de carpetas se genera en milisegundos y los archivos se descargan individualmente recién al abrirlos.
+- Si vas a viajar o quedarte sin conexión, tocá el botón **Guardar copia offline** (icono de nube en el explorador) para descargar todo el proyecto al iPad (`[Offline]`).
 
-### Paso 2: Elegir tu repositorio directo en el Explorador (sin necesidad de descargarlo)
-1. Si todavía no conectaste tu cuenta, tocá una sola vez el botón azul **Repositorio** arriba a la derecha, pegá tu token `github_pat_...` y tocá **Conectar** (aparecerá tu `@usuario` en verde).
-2. A partir de ese momento, andá directamente al **menú desplegable arriba a la izquierda en el Explorador**: vas a ver dos secciones:
-   * **`En este iPad`:** tus proyectos locales.
-   * **`Mis repos de GitHub`:** todos los repositorios de tu cuenta listos para elegir con un toque.
-3. Elegí el repositorio que quieras usar: el árbol completo de carpetas y archivos aparece **al instante sin descargar todo el repositorio**, y cada archivo se abre bajo demanda recién cuando lo tocás (y queda guardado en caché en tu iPad).
-4. **¿Querés tenerlo completo para trabajar sin internet?** Tocá el **icono de la nube con flecha** en la barra del Explorador (*Guardar copia offline en el iPad*) o el botón **Guardar copia offline** dentro de **Repositorio**. Cuando termina, el icono se pone en verde y el proyecto muestra la etiqueta **`[Offline]`**.
+### Gestión de Ramas (Branches)
+- En el modal **Repositorio** (sección de sincronización):
+  - **Selector de rama:** podés alternar en qué rama de trabajo querés sincronizar tus cambios.
+  - **Nueva rama:** tocá **Nueva rama**, escribí el nombre (ej. `feature/formulario-contacto`) y tocá **Crear**. La rama se bifurcará en GitHub a partir del commit actual y quedará lista como tu rama activa.
 
-### Paso 3: Subir tus avances a GitHub (`Commit y Push`)
-1. Mientras editás, creás o borrás archivos, todo se autoguarda localmente en tu dispositivo y el botón superior pasa a mostrar cuántos archivos cambiaron: **`Commit (1)`**, **`Commit (2)`**, etc.
-2. Cuando termines una parte y quieras subirla a GitHub, tocá ese botón **`Commit (X)`**.
-3. En **3. Cambios locales listos para Commit**:
-   * Podés tocar **Diff** al lado de cada archivo para revisar en verde y rojo qué modificaste.
-   * Escribí un **Mensaje del commit** breve (ej. `Agregué validación al formulario`).
-   * Tocá **Commit y Push a GitHub**.
-4. Cuando veas el aviso verde **`Commit ... publicado en main`**, tus cambios ya están guardados en GitHub.
-
-### Paso 4: Traer cambios cuando cambiás entre PC e iPad (`Actualizar remoto`)
-* Si hiciste un *Commit y Push* desde tu PC y más tarde agarrás el iPad, abrí el botón **Repositorio** en el iPad y tocá **Actualizar remoto** antes de empezar a editar para asegurarte de tener la última versión descargada.
-  *(Si tenías ediciones locales sin subir en el iPad, el botón te va a pedir un segundo toque de confirmación para no pisar tu trabajo por accidente).*
+### Inspección de cambios y Commit + Push atómico
+1. Cada modificación, archivo nuevo o eliminado se calcula en tiempo real frente al árbol remoto.
+2. Tocá el botón **Commit (X)** arriba a la derecha.
+3. Podés tocar **Diff** al lado de cualquier archivo para revisar línea por línea las modificaciones en verde y rojo.
+4. Escribí un mensaje descriptivo y presioná **Commit y Push a GitHub**.
+5. Se generará un commit atómico en el servidor de GitHub preservando permisos de ejecución de scripts y garantizando la integridad de tu código.

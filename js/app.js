@@ -1,7 +1,8 @@
 import { hydrateIcons, icon } from "./ui/icons.js";
 import { initLayoutController } from "./ui/layout.js";
 import { initSymbolBar } from "./ui/symbolBar.js";
-import { initExplorerController } from "./ui/explorerController.js";
+import { generateDuplicatePath, initExplorerController } from "./ui/explorerController.js";
+import { buildZipArchive, downloadZip } from "./storage/zipExporter.js";
 import { initDiffModal } from "./ui/diffModal.js";
 import { initLivePreviewModal } from "./ui/livePreviewModal.js";
 import { initQuickOpenModal } from "./ui/quickOpenModal.js";
@@ -122,8 +123,12 @@ async function initApp() {
 
   initQuickOpenModal({
     getFiles: () => filesOnly,
-    onSelectFile(path) {
-      void openOrFocusFile(path);
+    getActiveFile: () => (activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null),
+    async onSelectFile(path, targetLine) {
+      await openOrFocusFile(path);
+      if (typeof targetLine === "number" && targetLine > 0) {
+        editor.goToLine(targetLine);
+      }
     }
   });
 
@@ -300,6 +305,55 @@ async function initApp() {
       }
       await github.refreshTopbarBadge();
     },
+    async onDuplicateEntry(sourcePath) {
+      await flushPendingSaves();
+      const source = filesOnly.find((f) => f.id === sourcePath);
+      if (!source) return;
+
+      try {
+        await ensureFileContentLoaded(source);
+      } catch (error) {
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "No se pudo leer el archivo a duplicar"
+        );
+        return;
+      }
+
+      const existingPaths = new Set(filesOnly.map((f) => f.path));
+      const newPath = generateDuplicatePath(source.path, existingPaths);
+
+      await upsertEntry(activeProject.id, newPath, {
+        isFolder: false,
+        content: source.content,
+        allowOverwrite: false
+      });
+      await reloadProjectEntries();
+      await openOrFocusFile(newPath);
+      explorer.setAutosaveStatus(`Archivo duplicado como "${newPath.split("/").pop()}"`);
+      await github.refreshTopbarBadge();
+    },
+    async onDownloadFile(filePath) {
+      const target = filesOnly.find((f) => f.id === filePath);
+      if (!target) return;
+      try {
+        await ensureFileContentLoaded(target);
+      } catch (error) {
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "No se pudo descargar el archivo desde GitHub"
+        );
+        return;
+      }
+      const filename = target.path.split("/").pop() || "archivo.txt";
+      const blob = new Blob([target.content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
     async onDownloadActiveFile() {
       const current = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
       if (!current) return;
@@ -321,6 +375,40 @@ async function initApp() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+    },
+    async onExportProjectZip() {
+      await flushPendingSaves();
+      if (!filesOnly || filesOnly.length === 0) {
+        explorer.setAutosaveStatus("No hay archivos para exportar");
+        return;
+      }
+      explorer.setAutosaveStatus("Preparando archivo ZIP…");
+
+      const unloaded = filesOnly.filter((f) => f.contentLoaded === false && f.blobSha);
+      if (unloaded.length > 0) {
+        try {
+          await ensureFilesLoaded(unloaded, (done, total) => {
+            explorer.setAutosaveStatus(`Descargando archivos para el ZIP (${done}/${total})…`);
+          });
+        } catch {
+          // Continuar si falla la red
+        }
+      }
+
+      try {
+        const zipFiles = filesOnly.map((f) => ({
+          path: f.path,
+          content: f.content || ""
+        }));
+        const zipBytes = buildZipArchive(zipFiles);
+        const projectName = (activeProject?.name || "proyecto").replace(/[/\\?%*:|"<>]/g, "-");
+        downloadZip(zipBytes, `${projectName}.zip`);
+        explorer.setAutosaveStatus(`Proyecto exportado como "${projectName}.zip"`);
+      } catch (err) {
+        explorer.setAutosaveStatus(
+          err instanceof Error ? `Error al exportar ZIP: ${err.message}` : "No se pudo crear el archivo ZIP"
+        );
+      }
     },
     async onSaveRepoOffline() {
       if (activeProject.kind !== "github" || !activeProject.github) return;
@@ -555,6 +643,20 @@ async function initApp() {
         await flushPendingSaves();
         explorer.setAutosaveStatus("Guardado en IndexedDB");
       })();
+    }
+  });
+
+  // Atajo universal Cmd+W / Ctrl+W / Alt+W para cerrar la pestaña activa (Alt+W prioritario en Safari PWA)
+  window.addEventListener("keydown", (event) => {
+    if (
+      (event.ctrlKey || event.metaKey || event.altKey) &&
+      !event.shiftKey &&
+      (event.key === "w" || event.key === "W")
+    ) {
+      if (activeFileId) {
+        event.preventDefault();
+        requestCloseTab(activeFileId);
+      }
     }
   });
 
@@ -856,11 +958,90 @@ async function initApp() {
     layout.closeLeftOnCompactSelect();
   }
 
+  function showConfirmDialog({
+    title,
+    message,
+    confirmText = "Confirmar",
+    confirmVariant = "btn-primary",
+    onConfirm
+  }) {
+    const dialog = document.getElementById("confirm-dialog");
+    const titleEl = document.getElementById("confirm-dialog-title");
+    const msgEl = document.getElementById("confirm-dialog-message");
+    const cancelBtn = document.getElementById("btn-confirm-cancel");
+    const actionBtn = document.getElementById("btn-confirm-action");
+    const closeBtn = document.getElementById("btn-close-confirm");
+
+    if (!dialog) {
+      if (window.confirm(message)) {
+        onConfirm?.();
+      }
+      return;
+    }
+
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (actionBtn) {
+      actionBtn.textContent = confirmText;
+      actionBtn.className = `btn ${confirmVariant}`;
+    }
+
+    const cleanup = () => {
+      cancelBtn?.removeEventListener("click", onCancel);
+      closeBtn?.removeEventListener("click", onCancel);
+      actionBtn?.removeEventListener("click", onProceed);
+      dialog.removeEventListener("close", onDialogClose);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      dialog.close();
+    };
+
+    const onProceed = () => {
+      cleanup();
+      dialog.close();
+      onConfirm?.();
+    };
+
+    const onDialogClose = () => {
+      cleanup();
+    };
+
+    cancelBtn?.addEventListener("click", onCancel);
+    closeBtn?.addEventListener("click", onCancel);
+    actionBtn?.addEventListener("click", onProceed);
+    dialog.addEventListener("close", onDialogClose);
+
+    dialog.showModal();
+  }
+
+  function requestCloseTab(filePath) {
+    const file = filesOnly.find((f) => f.id === filePath);
+    if (!file) return;
+
+    if (isFileDirtyForProject(file)) {
+      showConfirmDialog({
+        title: "¿Cerrar pestaña con cambios?",
+        message: `El archivo "${file.shortName}" tiene modificaciones pendientes frente al repositorio. Si lo cerrás, tus cambios siguen guardados en el almacenamiento del iPad pero la pestaña se ocultará.`,
+        confirmText: "Cerrar pestaña",
+        confirmVariant: "btn-primary",
+        onConfirm: () => {
+          void closeTab(filePath);
+        }
+      });
+      return;
+    }
+
+    void closeTab(filePath);
+  }
+
   async function closeTab(filePath) {
     const idx = openTabIds.indexOf(filePath);
     if (idx === -1) return;
 
     openTabIds.splice(idx, 1);
+    editor.dropFileState(filePath);
     if (activeFileId === filePath) {
       activeFileId = openTabIds.length > 0 ? openTabIds[Math.min(idx, openTabIds.length - 1)] : null;
     }
@@ -929,7 +1110,15 @@ async function initApp() {
       closeBtn.innerHTML = icon("x");
       closeBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        closeTab(file.id);
+        requestCloseTab(file.id);
+      });
+
+      wrapper.addEventListener("auxclick", (event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          requestCloseTab(file.id);
+        }
       });
 
       wrapper.append(selectBtn, closeBtn);

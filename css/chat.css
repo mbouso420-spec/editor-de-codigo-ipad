@@ -307,3 +307,35 @@
   font-size: var(--text-xs);
   color: var(--color-accent-text);
 }
+
+.chat-composer-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding-inline: var(--space-2xs);
+  padding-bottom: var(--space-3xs);
+}
+
+.chat-token-counter {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.btn-xs {
+  font-size: var(--text-xs);
+  padding-block: 2px;
+  padding-inline: var(--space-xs);
+  min-height: 24px;
+}
+
+.chat-link {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.chat-link:hover {
+  color: var(--color-ink);
+}

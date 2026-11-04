@@ -1,10 +1,33 @@
 import { icon } from "./icons.js";
 
 /**
+ * Parsea una consulta de apertura rápida separando el nombre de archivo de la línea de salto opcional.
+ * Admite formatos como: "app.js:42", ":42" (para el archivo activo), "src/main.py:100".
+ * @param {string} rawQuery
+ * @returns {{ fileQuery: string, targetLine: number | null }}
+ */
+export function parseQuickOpenQuery(rawQuery) {
+  const text = String(rawQuery || "").trim();
+  const colonIdx = text.lastIndexOf(":");
+  if (colonIdx === -1) {
+    return { fileQuery: text, targetLine: null };
+  }
+  const afterColon = text.slice(colonIdx + 1).trim();
+  if (/^\d+$/.test(afterColon)) {
+    const lineNum = parseInt(afterColon, 10);
+    return {
+      fileQuery: text.slice(0, colonIdx).trim(),
+      targetLine: lineNum > 0 ? lineNum : null
+    };
+  }
+  return { fileQuery: text, targetLine: null };
+}
+
+/**
  * Paleta de apertura rápida de archivos (Cmd/Ctrl + P y botón de búsqueda en el Explorador),
  * ideal para saltar en un toque a cualquier archivo de un repositorio grande en el iPad o PC.
  */
-export function initQuickOpenModal({ getFiles, onSelectFile }) {
+export function initQuickOpenModal({ getFiles, getActiveFile, onSelectFile }) {
   const openBtn = document.getElementById("btn-quick-open");
   const dialog = document.getElementById("quick-open-dialog");
   const closeBtn = document.getElementById("btn-close-quick-open");
@@ -13,6 +36,7 @@ export function initQuickOpenModal({ getFiles, onSelectFile }) {
 
   let filtered = [];
   let activeIndex = 0;
+  let currentTargetLine = null;
 
   function open() {
     if (!dialog) return;
@@ -20,6 +44,7 @@ export function initQuickOpenModal({ getFiles, onSelectFile }) {
       input.value = "";
     }
     activeIndex = 0;
+    currentTargetLine = null;
     renderResults("");
     if (!dialog.open) {
       dialog.showModal();
@@ -68,7 +93,7 @@ export function initQuickOpenModal({ getFiles, onSelectFile }) {
       event.preventDefault();
       const chosen = filtered[activeIndex];
       if (chosen) {
-        pickFile(chosen.path);
+        pickFile(chosen.path, currentTargetLine);
       }
     }
   });
@@ -84,18 +109,26 @@ export function initQuickOpenModal({ getFiles, onSelectFile }) {
     }
   });
 
-  function pickFile(path) {
+  function pickFile(path, targetLine = currentTargetLine) {
     close();
-    onSelectFile(path);
+    onSelectFile(path, targetLine);
   }
 
   function renderResults(rawQuery) {
     if (!listEl) return;
     const allFiles = getFiles() || [];
-    const query = String(rawQuery || "").trim().toLowerCase();
+    const parsed = parseQuickOpenQuery(rawQuery);
+    currentTargetLine = parsed.targetLine;
+    const query = parsed.fileQuery.toLowerCase();
+    const activeFile = getActiveFile ? getActiveFile() : null;
 
     if (!query) {
-      filtered = allFiles.slice(0, 50);
+      if (currentTargetLine && activeFile) {
+        const rest = allFiles.filter((f) => f.id !== activeFile.id);
+        filtered = [activeFile, ...rest].slice(0, 50);
+      } else {
+        filtered = allFiles.slice(0, 50);
+      }
     } else {
       const scored = [];
       for (const file of allFiles) {
@@ -132,15 +165,21 @@ export function initQuickOpenModal({ getFiles, onSelectFile }) {
       btn.type = "button";
       btn.className = idx === activeIndex ? "quick-open-item is-active" : "quick-open-item";
       const dir = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "raíz";
+      const lineBadge = currentTargetLine
+        ? `<span class="quick-open-line-badge code-font">:l ${currentTargetLine}</span>`
+        : "";
       btn.innerHTML = `
         <span class="quick-open-main">
           ${icon(file.icon)}
           <span class="quick-open-name">${escapeHtml(file.shortName)}</span>
           <span class="quick-open-dir code-font">${escapeHtml(dir)}</span>
         </span>
-        <span class="file-tree-lang">${escapeHtml(file.badge)}</span>
+        <span class="quick-open-meta">
+          ${lineBadge}
+          <span class="file-tree-lang">${escapeHtml(file.badge)}</span>
+        </span>
       `;
-      btn.addEventListener("click", () => pickFile(file.path));
+      btn.addEventListener("click", () => pickFile(file.path, currentTargetLine));
       li.appendChild(btn);
       listEl.appendChild(li);
     });

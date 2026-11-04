@@ -1,111 +1,157 @@
 # Studio IDE — Editor de Código Web para iPadOS y Escritorio
 
-**Studio IDE** es un entorno de desarrollo web ligero, modular y sin servidores intermedios, diseñado específicamente para programar con fluidez desde un **iPad** (instalado como PWA a pantalla completa en Safari y totalmente adaptable a ventanas de **Stage Manager**) así como desde una **PC de escritorio**.
+**Studio IDE** es un entorno de desarrollo web ligero, modular y 100% offline-first sin servidores intermedios, diseñado específicamente para programar con fluidez desde un **iPad** (instalado como PWA a pantalla completa en Safari y adaptable a ventanas de **Stage Manager**) así como desde una **PC de escritorio**.
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
-- **Guía paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
+- **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
+- **Suite de pruebas automáticas:** 244 tests unitarios pasando al 100% (42 suites, 0 fallos).
 
 ---
 
 ## Características principales
 
-### 1. Interfaz de 3 islas pensada para iPadOS y PC
-- **Isla izquierda (Explorador):** gestión de múltiples proyectos locales o vinculados a repositorios de GitHub, árbol jerárquico de carpetas y archivos con creación, renombrado y borrado inline (sin ventanas emergentes que bloqueen Safari), además de importación y descarga directa de archivos.
-- **Isla central (Editor CodeMirror 6):** soporte para múltiples pestañas, resaltado de sintaxis para **Python, C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda y reemplazo, ajuste de línea (*word wrap*), control de tamaño de fuente e historial independiente de *Undo/Redo* por archivo.
-- **Barra táctil contextual de símbolos:** fila inferior con teclas rápidas (`{`, `}`, `(`, `)`, `:`, `def`, `print()`, `;`, `->`, `=>`, `Tab`, etc.) que cambian automáticamente según el lenguaje del archivo activo para escribir código rápido con el teclado en pantalla del iPad.
-- **Adaptación a Stage Manager y teclado virtual:** soporte dinámico de `visualViewport` para evitar desplazamientos al abrir el teclado táctil en Safari y paneles laterales que pasan automáticamente a *drawers* deslizables en ventanas medianas o verticales.
+### 1. Interfaz de 3 islas optimizada para iPadOS y Escritorio
+- **Isla izquierda (Explorador):**
+  - Gestión de múltiples proyectos locales o vinculados a repositorios de GitHub.
+  - Árbol jerárquico de carpetas y archivos con creación, renombrado y borrado inline accesible (sin popups que bloqueen Safari ni pérdida de posición de scroll).
+  - **Menú contextual táctil (`Long-Press` ~500ms y clic derecho):** menú flotante para renombrar, duplicar inteligentemente (ej. `archivo.copia.js`, `archivo.copia 2.js`), descargar y eliminar.
+  - **Trampa de foco accesible:** navegación fluida con `Tab` / `Shift+Tab` dentro de los formularios inline.
+  - **Exportación e importación segura:** descarga del proyecto completo en formato `.zip` estándar (PKZIP 2.0 nativo 100% offline) y límite de seguridad de 5 MB en importaciones con detección de codificación.
+  - **Monitor de almacenamiento persistente:** indicador en vivo de cuota y uso (`navigator.storage.estimate`) en la barra inferior del explorador.
+- **Isla central (Editor CodeMirror 6 con fallback resiliente):**
+  - Soporte de pestañas múltiples con liberación inmediata de memoria (`dropFileState`) al cerrarlas.
+  - **Atajos de cierre rápido:** `Alt + W`, `Cmd + W`, `Ctrl + W` o clic central del mouse/trackpad (`auxclick`).
+  - **Protección contra pérdida de datos:** diálogo modal de confirmación accesible (`#confirm-dialog`) si se intenta cerrar una pestaña con cambios pendientes frente al repositorio.
+  - **Barra táctil de símbolos con Auto-Wrap:** al seleccionar texto y tocar delimitadores (`( )`, `{ }`, `[ ]`, `" "`, `' '`, ```` ``` ````), el contenido seleccionado se envuelve automáticamente conservando la selección interna.
+  - **Paleta de apertura rápida (`Cmd + P` / `Ctrl + P`):** filtrado instantáneo de archivos y salto directo a línea mediante la sintaxis `:número` (ej. `app.js:140` o `:45` sobre el archivo activo).
+  - Resaltado de sintaxis para **Python, C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda/reemplazo y control de tamaño tipográfico.
+- **Adaptación a Stage Manager y teclado virtual:**
+  - Control dinámico de `visualViewport` para evitar desplazamientos accidentales al desplegar el teclado táctil de iPadOS.
+  - Re-clamp dinámico de dimensiones de paneles al rotar el dispositivo o redimensionar ventanas en Stage Manager.
 
-### 2. Asistente de IA integrado (100% sobre APIs gratuitas)
-- Conecta directamente desde el navegador con niveles gratuitos de **Groq** (`openai/gpt-oss-120b`), **Google Gemini** (`AI Studio`), **OpenRouter** (`openrouter/free`) y **Mistral** (`La Plateforme`), sincronizando en vivo los modelos disponibles de cada cuenta.
-- Lee automáticamente el **archivo activo**, las **líneas seleccionadas** en el editor y cualquier **otra pestaña abierta** que adjuntes con un toque.
-- Acciones directas en cada bloque de código devuelto por la IA:
-  - **En cursor:** inserta el fragmento exactamente donde está posicionado el cursor.
-  - **Reemplazar sel.:** sustituye únicamente el bloque resaltado.
-  - **Aplicar archivo:** abre primero un **Visor de Diferencias (Diff)** en verde y rojo para revisar línea por línea antes de confirmar el reemplazo.
-  - **Copiar:** copia limpia al portapapeles.
-- Conserva el historial de conversación por separado para cada proyecto en `IndexedDB`.
+### 2. Asistente de IA integrado (APIs gratuitas y seguras)
+- Conexión directa desde el navegador con niveles gratuitos de **Groq** (`openai/gpt-oss-120b`), **Google Gemini** (`AI Studio`), **OpenRouter** (`openrouter/free`) y **Mistral** (`La Plateforme`), con sincronización automática de modelos.
+- **Presupuesto y truncamiento inteligente de contexto:** preserva cabecera y pie del código advirtiendo líneas omitidas para evitar agotar la ventana de contexto de modelos gratuitos.
+- **Contador de tokens en tiempo real:** estimador visual (~4 caracteres por token) en el compositor del chat.
+- **Regeneración rápida de respuestas:** botón dedicado para reintentar la última consulta con un solo toque.
+- **Saneamiento automático del historial:** limpia notas de interrupción si se cancela una generación en curso.
+- **Enlaces Markdown seguros:** renderizado sanitizado con `target="_blank"` y `rel="noopener noreferrer"`, bloqueando esquemas no seguros (`javascript:`, `data:`).
+- **Acciones directas en bloques de código:** *En cursor*, *Reemplazar selección*, *Copiar* y *Aplicar archivo* con apertura previa del **Visor de Diferencias (Diff)** visual en verde y rojo.
 
-### 3. Vista previa en vivo contextual (Web + Python 3) y Consola integrada
-- Funciona según la **pestaña activa**:
-  - En archivos **`.html`**: ensambla en tiempo real las hojas `.css` y scripts `.js` de su misma carpeta dentro de un `<iframe sandbox>` seguro.
-  - En archivos **`.js`**: ejecuta el script mostrando su salida directa en pantalla y en la **Consola JS** integrada (fundamental en iPadOS donde Safari no incluye consola de desarrollador nativa), con opción de alternar junto al `.html` de su misma carpeta.
-  - En archivos **`.py` (Python 3)**: ejecuta tus scripts de Python directamente en el navegador mediante **Pyodide (WebAssembly)** sin servidores externos, soportando `print()`, `input()`, manejo claro de errores y `import` entre archivos `.py` de la misma carpeta.
-  - En archivos **`.css`**: previsualiza los estilos aplicados sobre el `.html` de su misma carpeta.
-  - En lenguajes compilados de escritorio (**`.c`**, **`.cpp`**, **`.sql`**, etc.): informa claramente que la vista previa en vivo no aplica a esa extensión.
+### 3. Vista previa en vivo contextual, Consola y Navegación Multi-Página
+- **Navegación multi-página interna:** enlaces relativos (`<a href="contacto.html">`, `../index.html`) interceptados mediante bridge seguro para navegar fluidamente entre documentos sin recargas de página.
+- **Selector de medidas responsivas (Device Switcher):** botones de alternancia en la cabecera del visor para probar el diseño en **Móvil (390px)**, **Tablet / iPad (820px)** y **Escritorio (100%)** con transiciones suaves.
+- **Protección contra bucles infinitos (Loop Guard):**
+  - **JavaScript / HTML:** instrumentación de bucles vía AST (Acorn) que interrumpe bucles infinitos a los 2,5 s indicando el número de línea exacto para proteger la memoria del iPad.
+  - **Python 3:** ejecución aislada en un **Web Worker** en segundo plano (Pyodide WebAssembly) con botón de **Detener** inmediato que aborta bucles infinitos sin congelar la interfaz.
+- **Consola integrada:** captura de `console.log`, `warn`, `error` y trazas de Python con entrada inline interactiva (`input()`).
 
-### 4. Persistencia offline (`IndexedDB`) y Sincronización instantánea con GitHub
-- Autoguardado continuo en **`IndexedDB`** con solicitud de almacenamiento persistente (`navigator.storage.persist()`) para proteger tus proyectos en Safari iPadOS incluso trabajando sin conexión.
-- Integración directa con la API oficial de **GitHub (`Octokit` / REST v3)**:
-  - **Apertura instantánea sin descargar todo:** una vez conectado tu token, tus repositorios aparecen directamente en el selector superior del **Explorador** (`Mis repos de GitHub`). Al elegir cualquiera, el árbol completo de carpetas y archivos carga al instante y cada archivo se trae bajo demanda recién cuando lo tocás.
-  - **Copia offline opcional:** si vas a viajar o quedarte sin Wi-Fi, podés tocar el icono de nube en el Explorador (**Guardar copia offline**) para descargar el repositorio entero al iPad (`[Offline]`).
-  - **Diff y Commit atómico:** detecta archivos nuevos, editados o eliminados, permite inspeccionar el **Diff** en verde/rojo y publica **Commits + Push** directamente a tu rama (incluso en repositorios recién creados vacíos).
+### 4. Persistencia offline y Sincronización avanzada con GitHub
+- Autoguardado continuo en **`IndexedDB`** con respaldo síncrono de emergencia (`localStorage`) ante suspensiones repentinas de Safari.
+- **Integración con GitHub REST API v3 / Octokit:**
+  - **Apertura instantánea sin clonar todo:** visualización del árbol de directorios con descarga perezosa (*lazy*) de archivos bajo demanda.
+  - **Gestión de Ramas (Branches):** selector de rama activa y creación/bifurcación de nuevas ramas directamente desde el IDE.
+  - **Detección de divergencias remotas:** protección contra sobrescritura si el repositorio remoto avanzó (`RemoteAheadError`).
+  - **Commits atómicos:** creación de árbol Git completo (altas, modificaciones y bajas en una sola transacción) preservando modos ejecutables (`100755`).
+  - **Modo Offline:** descarga completa del repositorio (`[Offline]`) para trabajar en aviones o zonas sin conectividad.
 
 ---
 
-## Arquitectura y estructura del proyecto
+## Seguridad y Arquitectura Offline
 
-Aplicación 100% estática construida con **HTML5 semántico**, **CSS moderno basado en tokens (`oklch`)** y **JavaScript ES Modules nativos**, sin pasos de compilación obligatorios para poder alojarse gratis en GitHub Pages:
+1. **Content Security Policy (CSP) Estricta:**
+   `index.html` declara una directiva CSP restrictiva que autoriza únicamente las APIs oficiales de GitHub y proveedores de IA (`api.github.com`, `generativelanguage.googleapis.com`, `api.groq.com`, `openrouter.ai`, `api.mistral.ai`), CDNs certificados para ESM (`esm.sh`, `cdn.jsdelivr.net`) y orígenes de fuentes seguros (`fonts.googleapis.com`, `fonts.gstatic.com`).
+2. **Service Worker (`studio-ide-shell-v17`):**
+   - Estrategia **Network-First** para el App Shell propio garantizando la versión más fresca con internet y fallback offline automático.
+   - Pre-cacheo de módulos críticos (incluyendo el analizador sintáctico Acorn) en `RUNTIME_CACHE` durante el evento `install`.
+3. **Privacidad de credenciales:**
+   Las API Keys y tokens personales (PAT) de GitHub nunca se envían a servidores intermedios; residen exclusivamente en `localStorage` o `sessionStorage` según la preferencia del usuario.
+4. **Empaquetador ZIP Nativo:**
+   Implementación pura en JavaScript sin librerías externas para exportar proyectos a `.zip` cumpliendo estrictamente con la CSP y operando 100% fuera de línea.
+
+---
+
+## Estructura del Proyecto
 
 ```text
 .
-├── index.html                  # Estructura principal, importmap ESM y diálogos modales
+├── index.html                  # Shell principal, CSP, diálogos modales accesibles y maquetación
 ├── manifest.json               # Manifiesto Web App (PWA standalone para iPadOS y escritorio)
-├── sw.js                       # Service Worker (Network-First + respaldo offline en caché)
-├── .nojekyll                   # Desactiva Jekyll en GitHub Pages para servir módulos directos
-├── MANUAL_DE_USUARIO.md        # Manual detallado de instalación, IA gratuita y uso con GitHub
+├── sw.js                       # Service Worker v17 (App Shell + Runtime Cache de Acorn/CDNs)
+├── .nojekyll                   # Desactiva el procesamiento de Jekyll en GitHub Pages
+├── README.md                   # Documentación técnica y arquitectura de la solución
+├── MANUAL_DE_USUARIO.md        # Manual exhaustivo para el usuario final (iPad y PC)
 ├── assets/
-│   ├── icon.svg                # Emblema vectorial de Studio IDE
-│   ├── apple-touch-icon.png    # Icono 180x180 para pantalla de inicio en iPadOS
+│   ├── icon.svg                # Isotipo vectorial
+│   ├── apple-touch-icon.png    # Icono 180x180 para inicio de iPadOS
 │   └── icon-512.png            # Icono 512x512 para instalación PWA
 ├── css/
-│   ├── tokens.css              # Variables de diseño (colores oklch, espaciado, tipografía)
-│   ├── base.css                # Reset accesible y reglas base
-│   ├── layout.css              # Layout de 3 islas, resizers táctiles y Stage Manager
-│   ├── editor.css              # Pestañas, tema CodeMirror 6 y menú de autocompletado
-│   ├── chat.css                # Panel del asistente IA, configuración de claves y Markdown
-│   ├── workspace.css           # Árbol de archivos, modal de GitHub, visor Diff y Vista previa
-│   └── app.css                 # Punto de entrada de estilos y controles comunes
-└── js/
-    ├── app.js                  # Orquestador principal de estado, proyectos y atajos globales
-    ├── editor/
-    │   └── editorManager.js    # Integración con CodeMirror 6 y estados por archivo
-    ├── storage/
-    │   └── workspaceDb.js      # Capa de persistencia en IndexedDB y cálculo de cambios Git
-    ├── ai/
-    │   ├── providers.js        # Adaptadores multi-proveedor gratuitos, fallback y bóveda local
-    │   └── chatController.js   # Lógica del chat contextual e inyección de código
-    ├── github/
-    │   ├── githubService.js    # Cliente GitHub API (árboles Git, descarga y commit atómico)
-    │   └── githubController.js # Interfaz de conexión PAT, clonado local, Diff y Push
-    └── ui/
-        ├── layout.js           # Control de paneles, gestos swipe y visualViewport en iPad
-        ├── explorerController.js
-        ├── symbolBar.js        # Barra rápida de símbolos por lenguaje
-        ├── diffModal.js        # Motor LCS y visor de diferencias línea por línea
-        ├── livePreviewModal.js # Empaquetador web por carpeta y puente de consola JS
-        └── icons.js            # Conjunto de iconos vectoriales SVG (Lucide)
+│   ├── tokens.css              # Tokens de diseño (oklch, tipografía, espaciado, elevación)
+│   ├── base.css                # Reset accesible, focus visible y reglas base
+│   ├── layout.css              # 3 islas, drawers para Stage Manager y gestión de visualViewport
+│   ├── editor.css              # Estilos de pestañas, CodeMirror 6 y scrollbars
+│   ├── chat.css                # Panel de IA, medidor de tokens y Markdown con enlaces seguros
+│   ├── workspace.css           # Árbol de archivos, menú contextual, modal de ramas, Diff y visor responsivo
+│   └── app.css                 # Importador central y utilidades globales
+├── js/
+│   ├── app.js                  # Orquestador central de estado, atajos globales y diálogos
+│   ├── editor/
+│   │   └── editorManager.js    # Motor CodeMirror 6, auto-wrap y ciclo de vida de estados (dropFileState)
+│   ├── storage/
+│   │   ├── workspaceDb.js      # Persistencia IndexedDB y modelo de diferencias locales
+│   │   ├── emergencyBackup.js  # Respaldo síncrono para suspensiones de Safari
+│   │   ├── fileImport.js       # Decodificación segura de archivos con límite de 5 MB
+│   │   ├── storageQuota.js     # Monitor de cuota y uso (navigator.storage.estimate)
+│   │   └── zipExporter.js      # Exportador ZIP nativo (PKZIP 2.0 y CRC-32)
+│   ├── ai/
+│   │   ├── providers.js        # Adaptadores de proveedores de IA y bóveda de claves
+│   │   └── chatController.js   # Chat contextual, contador de tokens y saneamiento
+│   ├── github/
+│   │   ├── githubService.js    # Cliente REST GitHub (árboles, ramas, blobs y push atómico)
+│   │   └── githubController.js # Interfaz de usuario para repositorios, ramas y sincronización
+│   ├── net/
+│   │   └── networkErrors.js    # Manejo amigable y categorización de fallas de red
+│   ├── preview/
+│   │   └── loopGuard.js        # Protección contra bucles infinitos en JS/HTML vía AST
+│   └── ui/
+│       ├── layout.js           # Re-clamp de paneles, rotación y Stage Manager
+│       ├── explorerController.js # Árbol del explorador, long-press, duplicación y scroll
+│       ├── symbolBar.js        # Barra de símbolos dinámicos según el lenguaje
+│       ├── quickOpenModal.js   # Paleta Cmd+P con soporte de salto a línea (:num)
+│       ├── diffModal.js        # Visor de diferencias LCS línea por línea
+│       ├── livePreviewModal.js # Previsualización multi-página y switcher de medidas
+│       └── icons.js            # Iconografía SVG optimizada
+└── tests/                      # Suite automatizada con 244 pruebas unitarias
 ```
 
 ---
 
-## Privacidad y seguridad de tus claves
+## Verificación de Calidad y Pruebas
 
-Este repositorio **no contiene ni envía claves a ningún servidor propio**:
-- Tus **API Keys de IA** y tu **Personal Access Token de GitHub** se guardan únicamente en el navegador de tu dispositivo (`localStorage` si elegís *Este dispositivo* o `sessionStorage` si elegís *Solo esta sesión*).
-- Las peticiones viajan de forma directa desde tu navegador (`HTTPS`) hacia el proveedor oficial correspondiente (`api.groq.com`, `generativelanguage.googleapis.com`, `openrouter.ai`, `api.mistral.ai` o `api.github.com`).
+Para ejecutar la suite completa de pruebas unitarias y de integración sobre Node.js:
+
+```bash
+npm --prefix tests test
+```
+
+Resultado actual:
+- **244 pruebas unitarias ejecutadas.**
+- **42 suites completadas.**
+- **0 fallos, 0 pruebas canceladas.**
+- Tiempo de ejecución: **~2.2 segundos.**
 
 ---
 
-## Uso local en PC
+## Ejecución Local en Desarrollo
 
-Si querés abrir el proyecto localmente en tu computadora antes de subir cambios, serví la carpeta con cualquier servidor estático (necesario para ES Modules):
+Para probar localmente la aplicación antes de subir cambios a producción:
 
 ```bash
-# Opción con Python
+# Servidor HTTP estático nativo de Python 3
 python -m http.server 8080
 
-# Opción con Node.js
+# O bien mediante Node.js
 npx serve .
 ```
 
-Luego abrí `http://localhost:8080` en tu navegador. Para instrucciones completas de instalación en el iPad, configuración de IA gratuita y uso de GitHub, consultá el [**Manual de Usuario (`MANUAL_DE_USUARIO.md`)**](./MANUAL_DE_USUARIO.md).
+Abrí `http://localhost:8080` en tu navegador. Para más información, consultá el [**Manual de Usuario (`MANUAL_DE_USUARIO.md`)**](./MANUAL_DE_USUARIO.md).

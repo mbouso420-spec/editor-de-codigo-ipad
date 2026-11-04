@@ -1,6 +1,41 @@
 import { icon } from "./icons.js";
 import { inferFileMeta, normalizePath, validateUserPath } from "../storage/workspaceDb.js";
-import { decodeImportedFile } from "../storage/fileImport.js";
+import { decodeImportedFile, MAX_IMPORT_FILE_BYTES } from "../storage/fileImport.js";
+import { getStorageQuotaEstimate } from "../storage/storageQuota.js";
+
+/**
+ * Genera una ruta única para un duplicado insertando ".copia" antes de la extensión.
+ * Si ya existe, añade un sufijo numérico secuencial: ".copia 2", ".copia 3", etc.
+ * @param {string} sourcePath
+ * @param {Set<string>|string[]} existingPaths
+ * @returns {string}
+ */
+export function generateDuplicatePath(sourcePath, existingPaths) {
+  const existingSet = existingPaths instanceof Set ? existingPaths : new Set(existingPaths || []);
+  const lastSlash = sourcePath.lastIndexOf("/");
+  const dir = lastSlash === -1 ? "" : sourcePath.slice(0, lastSlash + 1);
+  const fileName = lastSlash === -1 ? sourcePath : sourcePath.slice(lastSlash + 1);
+
+  let baseName = fileName;
+  let ext = "";
+
+  const lastDot = fileName.lastIndexOf(".");
+  if (lastDot > 0) {
+    baseName = fileName.slice(0, lastDot);
+    ext = fileName.slice(lastDot);
+  }
+
+  const candidate = `${dir}${baseName}.copia${ext}`;
+  if (!existingSet.has(candidate)) {
+    return candidate;
+  }
+
+  let counter = 2;
+  while (existingSet.has(`${dir}${baseName}.copia ${counter}${ext}`)) {
+    counter++;
+  }
+  return `${dir}${baseName}.copia ${counter}${ext}`;
+}
 
 /**
  * Controlador del Explorador jerárquico con creación/renombrado inline,
@@ -11,11 +46,14 @@ export function initExplorerController({
   onCreateEntry,
   onRenameEntry,
   onDeleteEntry,
+  onDuplicateEntry,
+  onDownloadFile,
   onSwitchProject,
   onCreateProject,
   onDeleteCurrentProject,
   onImportFiles,
   onDownloadActiveFile,
+  onExportProjectZip,
   onSaveRepoOffline
 }) {
   const projectSelect = document.getElementById("explorer-project-select");
@@ -27,9 +65,24 @@ export function initExplorerController({
   const btnImport = document.getElementById("btn-import-files");
   const importInput = document.getElementById("explorer-import-input");
   const btnExport = document.getElementById("btn-export-file");
+  const btnExportZip = document.getElementById("btn-export-zip");
   const inlineSlot = document.getElementById("explorer-inline-slot");
   const treeContainer = document.getElementById("file-tree");
   const autosaveLabel = document.getElementById("explorer-autosave-status");
+  const storageLabel = document.getElementById("explorer-storage-status");
+
+  async function refreshStorageIndicator() {
+    if (!storageLabel) return;
+    const est = await getStorageQuotaEstimate();
+    if (est.supported && est.usageBytes > 0) {
+      storageLabel.textContent = `${est.usageFormatted} usados`;
+      storageLabel.hidden = false;
+    } else {
+      storageLabel.hidden = true;
+    }
+  }
+
+  void refreshStorageIndicator();
 
   /** @type {Set<string>} */
   const collapsedFolders = new Set();
@@ -39,6 +92,100 @@ export function initExplorerController({
   let renamingTarget = null; // { path, isFolder }
   let currentEntries = [];
   let currentActiveFileId = null;
+  let contextMenuEl = null;
+
+  function closeContextMenu() {
+    if (contextMenuEl) {
+      contextMenuEl.hidden = true;
+    }
+  }
+
+  function getOrCreateContextMenu() {
+    if (contextMenuEl) return contextMenuEl;
+    contextMenuEl = document.createElement("div");
+    contextMenuEl.id = "tree-context-menu";
+    contextMenuEl.className = "tree-context-menu";
+    contextMenuEl.hidden = true;
+    document.body.appendChild(contextMenuEl);
+
+    document.addEventListener("pointerdown", (event) => {
+      if (contextMenuEl && !contextMenuEl.hidden && !contextMenuEl.contains(event.target)) {
+        closeContextMenu();
+      }
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && contextMenuEl && !contextMenuEl.hidden) {
+        closeContextMenu();
+      }
+    });
+
+    window.addEventListener("scroll", closeContextMenu, { passive: true });
+    window.addEventListener("blur", closeContextMenu);
+
+    return contextMenuEl;
+  }
+
+  function openContextMenu(node, clientX, clientY) {
+    const menu = getOrCreateContextMenu();
+    menu.innerHTML = "";
+
+    const renameItem = document.createElement("button");
+    renameItem.type = "button";
+    renameItem.className = "tree-context-item";
+    renameItem.innerHTML = `${icon("edit")}<span>Renombrar</span>`;
+    renameItem.addEventListener("click", () => {
+      closeContextMenu();
+      renamingTarget = { path: node.path, isFolder: node.isFolder };
+      renderTree(currentEntries, currentActiveFileId);
+    });
+    menu.appendChild(renameItem);
+
+    if (!node.isFolder) {
+      if (onDuplicateEntry) {
+        const dupItem = document.createElement("button");
+        dupItem.type = "button";
+        dupItem.className = "tree-context-item";
+        dupItem.innerHTML = `${icon("copy")}<span>Duplicar</span>`;
+        dupItem.addEventListener("click", () => {
+          closeContextMenu();
+          onDuplicateEntry(node.path);
+        });
+        menu.appendChild(dupItem);
+      }
+
+      if (onDownloadFile) {
+        const dlItem = document.createElement("button");
+        dlItem.type = "button";
+        dlItem.className = "tree-context-item";
+        dlItem.innerHTML = `${icon("download")}<span>Descargar</span>`;
+        dlItem.addEventListener("click", () => {
+          closeContextMenu();
+          onDownloadFile(node.path);
+        });
+        menu.appendChild(dlItem);
+      }
+    }
+
+    const delItem = document.createElement("button");
+    delItem.type = "button";
+    delItem.className = "tree-context-item is-danger";
+    delItem.innerHTML = `${icon("trash")}<span>Eliminar</span>`;
+    delItem.addEventListener("click", () => {
+      closeContextMenu();
+      pendingDeletePath = node.path;
+      renderTree(currentEntries, currentActiveFileId);
+    });
+    menu.appendChild(delItem);
+
+    menu.hidden = false;
+    const menuWidth = 180;
+    const menuHeight = node.isFolder ? 80 : 160;
+    const posX = Math.min(clientX, Math.max(12, window.innerWidth - menuWidth - 12));
+    const posY = Math.min(clientY, Math.max(12, window.innerHeight - menuHeight - 12));
+    menu.style.left = `${Math.max(12, posX)}px`;
+    menu.style.top = `${Math.max(12, posY)}px`;
+  }
 
   projectSelect?.addEventListener("change", () => {
     pendingProjectDelete = false;
@@ -128,6 +275,10 @@ export function initExplorerController({
     const imported = [];
     const rejected = [];
     for (const file of fileList) {
+      if (typeof file.size === "number" && file.size > MAX_IMPORT_FILE_BYTES) {
+        rejected.push(`${file.name} (supera el límite de 5 MB por archivo)`);
+        continue;
+      }
       const targetPath = selectedFolderPath ? `${selectedFolderPath}/${file.name}` : file.name;
       let cleanPath;
       try {
@@ -221,6 +372,10 @@ export function initExplorerController({
     onDownloadActiveFile();
   });
 
+  btnExportZip?.addEventListener("click", () => {
+    onExportProjectZip?.();
+  });
+
   btnOfflineRepo?.addEventListener("click", () => {
     onSaveRepoOffline?.();
   });
@@ -265,10 +420,20 @@ export function initExplorerController({
     };
 
     cancelBtn.addEventListener("click", close);
-    input.addEventListener("keydown", (event) => {
+    form.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         close();
+      } else if (event.key === "Tab") {
+        const focusable = [input, okBtn, cancelBtn];
+        const idx = focusable.indexOf(document.activeElement);
+        if (event.shiftKey && idx <= 0) {
+          event.preventDefault();
+          cancelBtn.focus();
+        } else if (!event.shiftKey && idx === focusable.length - 1) {
+          event.preventDefault();
+          input.focus();
+        }
       }
     });
 
@@ -295,6 +460,7 @@ export function initExplorerController({
   let currentRenderedProjectId = "";
 
   function renderProjects(projects, activeProjectId, remoteGithubRepos = null) {
+    closeContextMenu();
     if (Array.isArray(remoteGithubRepos)) {
       lastRemoteRepos = remoteGithubRepos;
     }
@@ -365,8 +531,10 @@ export function initExplorerController({
   function renderTree(entries, activeFileId) {
     currentEntries = entries;
     currentActiveFileId = activeFileId;
+    closeContextMenu();
 
     if (!treeContainer) return;
+    const prevScrollTop = treeContainer.scrollTop;
     treeContainer.innerHTML = "";
 
     const hierarchy = buildHierarchy(entries);
@@ -395,6 +563,58 @@ export function initExplorerController({
         .filter(Boolean)
         .join(" ");
 
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let longPressTimer = null;
+      let longPressTriggered = false;
+
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openContextMenu(node, event.clientX, event.clientY);
+      });
+
+      row.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "touch") {
+          touchStartX = event.clientX;
+          touchStartY = event.clientY;
+          longPressTriggered = false;
+          if (longPressTimer) clearTimeout(longPressTimer);
+          longPressTimer = window.setTimeout(() => {
+            longPressTriggered = true;
+            openContextMenu(node, touchStartX, touchStartY);
+          }, 500);
+        }
+      });
+
+      row.addEventListener("pointermove", (event) => {
+        if (longPressTimer && event.pointerType === "touch") {
+          const dist = Math.hypot(event.clientX - touchStartX, event.clientY - touchStartY);
+          if (dist > 8) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+        }
+      });
+
+      row.addEventListener("pointerup", (event) => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+        if (longPressTriggered) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+
+      row.addEventListener("pointercancel", () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
+
       const mainBtn = document.createElement("button");
       mainBtn.type = "button";
       mainBtn.className = "tree-node-btn";
@@ -411,6 +631,10 @@ export function initExplorerController({
           <span class="file-tree-name">${escapeHtml(node.name)}</span>
         `;
         mainBtn.addEventListener("click", () => {
+          if (longPressTriggered) {
+            longPressTriggered = false;
+            return;
+          }
           if (collapsedFolders.has(node.path)) {
             collapsedFolders.delete(node.path);
           } else {
@@ -427,6 +651,10 @@ export function initExplorerController({
           <span class="file-tree-lang">${escapeHtml(meta.badge)}</span>
         `;
         mainBtn.addEventListener("click", () => {
+          if (longPressTriggered) {
+            longPressTriggered = false;
+            return;
+          }
           const idx = node.path.lastIndexOf("/");
           selectedFolderPath = idx > 0 ? node.path.slice(0, idx) : "";
           onSelectFile(node.path);
@@ -496,6 +724,10 @@ export function initExplorerController({
       li.appendChild(row);
       treeContainer.appendChild(li);
     }
+
+    if (prevScrollTop > 0) {
+      treeContainer.scrollTop = prevScrollTop;
+    }
   }
 
   function buildInlineRenameRow(node) {
@@ -529,10 +761,20 @@ export function initExplorerController({
     };
 
     cancelBtn.addEventListener("click", cancel);
-    input.addEventListener("keydown", (event) => {
+    form.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         cancel();
+      } else if (event.key === "Tab") {
+        const focusable = [input, okBtn, cancelBtn];
+        const idx = focusable.indexOf(document.activeElement);
+        if (event.shiftKey && idx <= 0) {
+          event.preventDefault();
+          cancelBtn.focus();
+        } else if (!event.shiftKey && idx === focusable.length - 1) {
+          event.preventDefault();
+          input.focus();
+        }
       }
     });
 
@@ -604,7 +846,8 @@ export function initExplorerController({
     renderProjects,
     renderTree,
     setAutosaveStatus,
-    setOfflineRepoState
+    setOfflineRepoState,
+    refreshStorageIndicator
   };
 }
 

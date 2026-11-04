@@ -1,5 +1,6 @@
-const SHELL_CACHE = "studio-ide-shell-v15";
+const SHELL_CACHE = "studio-ide-shell-v17";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
+const ACORN_CDN_URL = "https://esm.sh/acorn@8.14.0";
 
 const APP_SHELL_URLS = [
   "./",
@@ -29,6 +30,8 @@ const APP_SHELL_URLS = [
   "./js/storage/workspaceDb.js",
   "./js/storage/emergencyBackup.js",
   "./js/storage/fileImport.js",
+  "./js/storage/storageQuota.js",
+  "./js/storage/zipExporter.js",
   "./js/net/networkErrors.js",
   "./js/preview/loopGuard.js",
   "./js/github/githubService.js",
@@ -44,26 +47,37 @@ const CACHEABLE_CDN_HOSTS = new Set([
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) =>
-        Promise.all(
-          APP_SHELL_URLS.map((url) =>
-            fetch(new Request(url, { cache: "reload" }))
-              .then((res) => {
-                if (res && res.ok) {
-                  return cache.put(url, res);
-                }
-                return undefined;
-              })
-              .catch((err) => {
-                console.warn("PWA prefetch skip:", url, err);
-                return undefined;
-              })
+    Promise.all([
+      caches
+        .open(SHELL_CACHE)
+        .then((cache) =>
+          Promise.all(
+            APP_SHELL_URLS.map((url) =>
+              fetch(new Request(url, { cache: "reload" }))
+                .then((res) => {
+                  if (res && res.ok) {
+                    return cache.put(url, res);
+                  }
+                  return undefined;
+                })
+                .catch((err) => {
+                  console.warn("PWA prefetch skip:", url, err);
+                  return undefined;
+                })
+            )
           )
-        )
+        ),
+      caches.open(RUNTIME_CACHE).then((cache) =>
+        fetch(new Request(ACORN_CDN_URL, { mode: "cors" }))
+          .then((res) => {
+            if (res && res.ok) {
+              return cache.put(ACORN_CDN_URL, res);
+            }
+            return undefined;
+          })
+          .catch(() => undefined)
       )
-      .then(() => self.skipWaiting())
+    ]).then(() => self.skipWaiting())
   );
 });
 

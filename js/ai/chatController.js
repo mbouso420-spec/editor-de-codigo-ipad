@@ -56,6 +56,8 @@ export function initChatController({
   const composerForm = document.getElementById("chat-composer-form");
   const promptInput = document.getElementById("chat-prompt-input");
   const submitBtn = document.getElementById("chat-submit-btn");
+  const tokenCounterEl = document.getElementById("chat-token-counter");
+  const regenerateBtn = document.getElementById("btn-chat-regenerate");
 
   let activeProviderId = getSavedProviderId();
   let activeModelId = getSavedModel(activeProviderId);
@@ -355,6 +357,64 @@ export function initChatController({
     }
   });
 
+  function updateTokenEstimate() {
+    if (!tokenCounterEl) return;
+    const promptLen = promptInput ? promptInput.value.length : 0;
+    const snapshot = getContextSnapshot ? getContextSnapshot() : null;
+    let contextLen = 0;
+    if (snapshot?.activeFile) {
+      if (snapshot.selection && snapshot.selection.text) {
+        contextLen += snapshot.selection.text.length;
+      } else {
+        contextLen += (snapshot.activeFile.content || "").length;
+      }
+    }
+    if (snapshot?.otherOpenFiles) {
+      for (const f of snapshot.otherOpenFiles) {
+        if (attachedTabIds.has(f.id)) {
+          contextLen += (f.content || "").length;
+        }
+      }
+    }
+    const totalChars = promptLen + contextLen;
+    const tokens = estimateTokens(totalChars);
+    tokenCounterEl.textContent = `~${tokens} tokens (${totalChars} car.)`;
+  }
+
+  function syncRegenerateButton() {
+    if (!regenerateBtn) return;
+    const hasAssistantResponse = conversation.some((m) => m.role === "assistant");
+    const isStreaming = activeStreams.has(conversationKey);
+    regenerateBtn.hidden = !hasAssistantResponse || isStreaming;
+  }
+
+  promptInput?.addEventListener("input", updateTokenEstimate);
+
+  regenerateBtn?.addEventListener("click", async () => {
+    const running = activeStreams.get(conversationKey);
+    if (running) return;
+
+    let lastUserIdx = -1;
+    for (let i = conversation.length - 1; i >= 0; i -= 1) {
+      if (conversation[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    if (lastUserIdx === -1) return;
+
+    const userText = conversation[lastUserIdx].content;
+    const apiKey = getApiKey(activeProviderId);
+    if (!apiKey) {
+      toggleSettings(true);
+      apiKeyInput?.focus();
+      return;
+    }
+
+    conversation.splice(lastUserIdx);
+    await sendPrompt(userText, apiKey);
+  });
+
   promptInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -432,7 +492,7 @@ export function initChatController({
         model: activeModelId,
         apiKey,
         systemPrompt,
-        history: convo.slice(0, -1),
+        history: cleanHistoryForAi(convo.slice(0, -1)),
         signal: stream.controller.signal,
         onModelsSynced(syncedProviderId, liveModels) {
           if (activeProviderId === syncedProviderId && Array.isArray(liveModels) && liveModels.length > 0) {
@@ -615,16 +675,19 @@ export function initChatController({
   }
 
   function setStreamingUiState(streaming) {
-    if (!submitBtn) return;
-    if (streaming) {
-      submitBtn.setAttribute("aria-label", "Detener respuesta");
-      submitBtn.title = "Detener respuesta";
-      submitBtn.innerHTML = icon("square");
-    } else {
-      submitBtn.setAttribute("aria-label", "Enviar consulta");
-      submitBtn.title = "Enviar consulta";
-      submitBtn.innerHTML = icon("send");
+    if (submitBtn) {
+      if (streaming) {
+        submitBtn.setAttribute("aria-label", "Detener respuesta");
+        submitBtn.title = "Detener respuesta";
+        submitBtn.innerHTML = icon("square");
+      } else {
+        submitBtn.setAttribute("aria-label", "Enviar consulta");
+        submitBtn.title = "Enviar consulta";
+        submitBtn.innerHTML = icon("send");
+      }
     }
+    syncRegenerateButton();
+    updateTokenEstimate();
   }
 
   function renderExtraTabChips() {
@@ -708,6 +771,9 @@ export function initChatController({
         streamContainer.appendChild(aiNode);
       }
     });
+
+    syncRegenerateButton();
+    updateTokenEstimate();
   }
 
   function updateLastAssistantMessage(markdownText, isStreaming) {
@@ -860,21 +926,24 @@ export function initChatController({
     ];
 
     if (snapshot.activeFile) {
+      const safeActiveContent = truncateCodeContent(snapshot.activeFile.content, 16000);
       parts.push(
-        `\n--- ARCHIVO ACTIVO EN EL EDITOR: ${snapshot.activeFile.name} (${snapshot.activeFile.lang}) ---\n\`\`\`${snapshot.activeFile.lang}\n${snapshot.activeFile.content}\n\`\`\``
+        `\n--- ARCHIVO ACTIVO EN EL EDITOR: ${snapshot.activeFile.name} (${snapshot.activeFile.lang}) ---\n\`\`\`${snapshot.activeFile.lang}\n${safeActiveContent}\n\`\`\``
       );
     }
 
-    if (snapshot.selection.text) {
+    if (snapshot.selection && snapshot.selection.text) {
+      const safeSelection = truncateCodeContent(snapshot.selection.text, 10000);
       parts.push(
-        `\n--- FRAGMENTO SELECCIONADO POR EL USUARIO (${snapshot.selection.lineCount} líneas) ---\n\`\`\`\n${snapshot.selection.text}\n\`\`\``
+        `\n--- FRAGMENTO SELECCIONADO POR EL USUARIO (${snapshot.selection.lineCount} líneas) ---\n\`\`\`\n${safeSelection}\n\`\`\``
       );
     }
 
     const attachedFiles = snapshot.otherOpenFiles.filter((f) => attachedTabIds.has(f.id));
     for (const extra of attachedFiles) {
+      const safeExtraContent = truncateCodeContent(extra.content, 6000);
       parts.push(
-        `\n--- PESTAÑA ADJUNTA DE REFERENCIA: ${extra.name} (${extra.lang}) ---\n\`\`\`${extra.lang}\n${extra.content}\n\`\`\``
+        `\n--- PESTAÑA ADJUNTA DE REFERENCIA: ${extra.name} (${extra.lang}) ---\n\`\`\`${extra.lang}\n${safeExtraContent}\n\`\`\``
       );
     }
 
@@ -899,9 +968,11 @@ export function initChatController({
     notifyWorkspaceChanged() {
       renderExtraTabChips();
       syncReplaceButtonsState();
+      updateTokenEstimate();
     },
     notifySelectionChanged() {
       syncReplaceButtonsState();
+      updateTokenEstimate();
     },
     setConversation(nextHistory, key = null) {
       conversationKey = key;
@@ -929,6 +1000,51 @@ export function initChatController({
       scrollToBottom();
     }
   };
+}
+
+/**
+ * Limpia anotaciones de interrupción o errores de transporte del historial antes de enviarlo a la API de IA.
+ * @param {Array<{ role: string, content: string }>} rawConvo
+ * @returns {Array<{ role: string, content: string }>}
+ */
+export function cleanHistoryForAi(rawConvo) {
+  if (!Array.isArray(rawConvo)) return [];
+  return rawConvo
+    .map((m) => {
+      let content = String(m?.content || "");
+      content = content
+        .replace(/\n\n\*\((?:Generación detenida|Respuesta interrumpida:[^)]*)\)\*/g, "")
+        .trim();
+      return { role: m.role, content };
+    })
+    .filter((m) => Boolean(m.content));
+}
+
+/**
+ * Trunca contenido de código extenso de forma equilibrada (conservando cabecera y pie)
+ * para no desbordar el presupuesto de tokens de modelos gratuitos (TPM).
+ * @param {string} content
+ * @param {number} [maxChars]
+ * @returns {string}
+ */
+export function truncateCodeContent(content, maxChars = 16000) {
+  if (typeof content !== "string" || content.length <= maxChars) {
+    return typeof content === "string" ? content : "";
+  }
+  const headTarget = Math.floor(maxChars * 0.6);
+  const tailTarget = maxChars - headTarget;
+
+  const headEnd = content.lastIndexOf("\n", headTarget);
+  const headSlice = headEnd > 0 ? content.slice(0, headEnd) : content.slice(0, headTarget);
+
+  const tailStartOffset = content.length - tailTarget;
+  const tailStart = content.indexOf("\n", tailStartOffset);
+  const tailSlice = tailStart > 0 ? content.slice(tailStart + 1) : content.slice(tailStartOffset);
+
+  const middleText = content.slice(headSlice.length, content.length - tailSlice.length);
+  const omittedLines = Math.max(1, middleText.split("\n").length);
+
+  return `${headSlice}\n\n// ... [${omittedLines} líneas omitidas por límite de contexto de la API gratuita] ...\n\n${tailSlice}`;
 }
 
 export function parseMarkdownSegments(raw) {
@@ -1052,6 +1168,16 @@ export function formatProseHtml(text) {
   return out.join("");
 }
 
+/**
+ * Estima la cantidad de tokens según la cantidad de caracteres (regla estándar de ~4 caracteres por token).
+ * @param {number} charCount
+ * @returns {number}
+ */
+export function estimateTokens(charCount) {
+  const count = Math.max(0, Number(charCount) || 0);
+  return Math.ceil(count / 4);
+}
+
 export function formatInlineMarkdown(str) {
   const codeTokens = [];
   const withPlaceholders = String(str).replace(/`([^`]+)`/g, (_, code) => {
@@ -1061,10 +1187,23 @@ export function formatInlineMarkdown(str) {
   });
 
   let safe = escapeHtml(withPlaceholders);
+  safe = safe.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>'
+  );
   safe = safe.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   safe = safe.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
   safe = safe.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeTokens[Number(idx)] || "");
   return safe;
+}
+
+function escapeAttr(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 async function copyToClipboardSafe(text) {
