@@ -25,22 +25,24 @@ export const AI_PROVIDERS = {
     protocol: "gemini",
     supportsLiveModels: true,
     keyPlaceholder: "AIzaSy…",
-    helpText: "Sincroniza automáticamente los modelos 3.x gratuitos activos en tu cuenta y reintenta solo si hay alta demanda.",
+    helpText: "Sincroniza automáticamente los modelos Flash gratuitos activos en tu cuenta y reintenta si hay alta demanda.",
     models: [
-      { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (Rápido, menor demanda)" },
-      { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash (Estable)" },
-      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Más reciente, con auto-reintento)" }
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recomendado, cuota gratuita)" },
+      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Rápido, menor latencia)" },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Estable, alta velocidad)" }
     ]
   },
   groq: {
     id: "groq",
-    name: "Groq (GPT de OpenAI y modelos abiertos Gratis)",
+    name: "Groq (Llama 3.3, GPT de OpenAI y modelos abiertos)",
     protocol: "openai",
     endpoint: "https://api.groq.com/openai/v1/chat/completions",
     supportsLiveModels: true,
     keyPlaceholder: "gsk_…",
-    helpText: "100% gratis sin tarjeta en console.groq.com/keys. Incluye GPT-OSS 120B de OpenAI y responde al instante.",
+    helpText: "100% gratis sin tarjeta en console.groq.com/keys. Incluye Llama 3.3 70B y responde al instante.",
     models: [
+      { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Potente y gratuito)" },
+      { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Ultrarrápido)" },
       { id: "openai/gpt-oss-120b", label: "OpenAI GPT-OSS 120B (Gratis y ultrarrápido)" },
       { id: "openai/gpt-oss-20b", label: "OpenAI GPT-OSS 20B (Instantáneo, cuota amplia)" }
     ]
@@ -84,8 +86,6 @@ export function isFreeActiveGoogleModelId(id) {
   const retiredOrPaidOrSpecial = [
     "1.0",
     "1.5",
-    "2.0",
-    "2.5",
     "argon",
     "-pro",
     "ultra",
@@ -118,9 +118,7 @@ function isActiveGroqChatModelId(id) {
     "orpheus",
     "guard",
     "safeguard",
-    "embedding",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant"
+    "embedding"
   ];
   return !excluded.some((token) => lower.includes(token));
 }

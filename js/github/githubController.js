@@ -16,6 +16,7 @@ import {
 } from "./githubService.js";
 import {
   getPendingGithubChanges,
+  getProjectEntries,
   hydrateGithubProject,
   hydrateLazyGithubProject,
   makeGithubProjectId,
@@ -462,8 +463,8 @@ export function initGithubController({
           viewBtn.className = "btn btn-ghost btn-sm";
           viewBtn.innerHTML = `${icon("gitCompare")}<span>Diff</span>`;
           viewBtn.addEventListener("click", async () => {
-            const currentEntries = await getPendingGithubChanges(activeConflict.project.id);
-            const localFile = currentEntries.find((f) => f.path === file.path);
+            const allEntries = await getProjectEntries(activeConflict.project.id);
+            const localFile = allEntries.find((f) => f.path === file.path);
             let remoteContent = "";
             if (file.blobSha) {
               try {
@@ -477,10 +478,27 @@ export function initGithubController({
                 remoteContent = "(No se pudo descargar el archivo remoto)";
               }
             }
+            let localContent = "(Archivo no existe localmente)";
+            if (localFile) {
+              if (localFile.contentLoaded !== false && typeof localFile.content === "string") {
+                localContent = localFile.content;
+              } else if (localFile.blobSha) {
+                try {
+                  localContent = await fetchSingleRepoBlob({
+                    token: activeConflict.token,
+                    owner: activeConflict.project.github.owner,
+                    repo: activeConflict.project.github.repo,
+                    blobSha: localFile.blobSha
+                  });
+                } catch {
+                  localContent = "(No se pudo descargar el archivo local)";
+                }
+              }
+            }
             onOpenDiff?.({
               title: `Remoto (${file.path}) vs Local`,
               oldCode: remoteContent,
-              newCode: localFile ? localFile.content : "(Sin cambios locales)"
+              newCode: localContent
             });
           });
 

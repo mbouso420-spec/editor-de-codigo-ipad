@@ -788,7 +788,7 @@ export function initChatController({
 
 function parseMarkdownSegments(raw) {
   const segments = [];
-  const fenceRegex = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)(?:```|$)/g;
+  const fenceRegex = /```([^\r\n]*)\r?\n?([\s\S]*?)(?:```|$)/g;
   let lastIndex = 0;
   let match;
 
@@ -799,9 +799,11 @@ function parseMarkdownSegments(raw) {
         segments.push({ type: "prose", content: prose });
       }
     }
+    const rawHeader = (match[1] || "").trim();
+    const lang = (rawHeader.split(/\s+/)[0] || "").toLowerCase();
     segments.push({
       type: "code",
-      lang: (match[1] || "").trim(),
+      lang,
       code: (match[2] || "").replace(/\n$/, "")
     });
     lastIndex = fenceRegex.lastIndex;

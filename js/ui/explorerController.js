@@ -221,10 +221,24 @@ export function initExplorerController({
   }
 
   let lastRemoteRepos = [];
+  let currentRenderedProjectId = "";
 
   function renderProjects(projects, activeProjectId, remoteGithubRepos = null) {
     if (Array.isArray(remoteGithubRepos)) {
       lastRemoteRepos = remoteGithubRepos;
+    }
+    if (currentRenderedProjectId !== activeProjectId) {
+      currentRenderedProjectId = activeProjectId;
+      selectedFolderPath = "";
+      pendingDeletePath = null;
+      renamingTarget = null;
+      pendingProjectDelete = false;
+      collapsedFolders.clear();
+      if (inlineSlot) {
+        inlineSlot.hidden = true;
+        inlineSlot.innerHTML = "";
+      }
+      updateProjectDeleteBtn();
     }
     if (!projectSelect) return;
     projectSelect.innerHTML = "";

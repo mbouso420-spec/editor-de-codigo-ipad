@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v12";
+const SHELL_CACHE = "studio-ide-shell-v13";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 
 const APP_SHELL_URLS = [
@@ -45,12 +45,17 @@ self.addEventListener("install", (event) => {
       .then((cache) =>
         Promise.all(
           APP_SHELL_URLS.map((url) =>
-            fetch(new Request(url, { cache: "reload" })).then((res) => {
-              if (res && res.ok) {
-                return cache.put(url, res);
-              }
-              return undefined;
-            })
+            fetch(new Request(url, { cache: "reload" }))
+              .then((res) => {
+                if (res && res.ok) {
+                  return cache.put(url, res);
+                }
+                return undefined;
+              })
+              .catch((err) => {
+                console.warn("PWA prefetch skip:", url, err);
+                return undefined;
+              })
           )
         )
       )

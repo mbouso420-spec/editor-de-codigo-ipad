@@ -96,9 +96,12 @@ async function createGithubClient(token) {
       const bodyPayload = { ...params };
 
       path = path.replace(/\{([^}]+)\}/g, (_, key) => {
-        const val = bodyPayload[key];
+        const val = String(bodyPayload[key] ?? "");
         delete bodyPayload[key];
-        return encodeURIComponent(String(val ?? ""));
+        if (key === "ref" || key === "branch") {
+          return val.split("/").map(encodeURIComponent).join("/");
+        }
+        return encodeURIComponent(val);
       });
 
       let url = `https://api.github.com${path}`;

@@ -42,7 +42,7 @@ export function initDiffModal() {
       titleEl.textContent = title || "Revisar diferencias";
     }
 
-    const { rows, addedCount, removedCount } = computeLineDiff(oldCode || "", newCode || "");
+    const { rows, addedCount, removedCount, lineEndingsOnly } = computeLineDiff(oldCode || "", newCode || "");
     if (statsEl) {
       statsEl.innerHTML = `
         <span class="diff-stat-add">+${addedCount}</span>
@@ -54,7 +54,9 @@ export function initDiffModal() {
     if (rows.length === 0 || (addedCount === 0 && removedCount === 0)) {
       const empty = document.createElement("div");
       empty.className = "diff-empty-note";
-      empty.textContent = "El contenido nuevo es idéntico al actual (sin diferencias).";
+      empty.textContent = lineEndingsOnly
+        ? "Los archivos solo difieren en el formato de fin de línea (CRLF de Windows vs LF de Unix)."
+        : "El contenido nuevo es idéntico al actual (sin diferencias).";
       bodyEl.appendChild(empty);
     } else {
       const frag = document.createDocumentFragment();
@@ -131,12 +133,33 @@ export function initDiffModal() {
 }
 
 function computeLineDiff(oldStr, newStr) {
+  const lineEndingsOnly =
+    oldStr !== newStr &&
+    oldStr.replace(/\r\n/g, "\n") === newStr.replace(/\r\n/g, "\n");
+
   const a = oldStr === "" ? [] : oldStr.replace(/\r\n/g, "\n").split("\n");
   const b = newStr === "" ? [] : newStr.replace(/\r\n/g, "\n").split("\n");
 
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) {
+    start += 1;
+  }
+
+  let endA = a.length - 1;
+  let endB = b.length - 1;
+  while (endA >= start && endB >= start && a[endA] === b[endB]) {
+    endA -= 1;
+    endB -= 1;
+  }
+
+  const midA = a.slice(start, endA + 1);
+  const midB = b.slice(start, endB + 1);
+  const n = midA.length;
+  const m = midB.length;
+
   let rawOps = [];
-  if (a.length * b.length <= 900000) {
-    rawOps = lcsDiff(a, b);
+  if (n * m <= 900000) {
+    rawOps = lcsDiff(a, b, start, endA, endB, midA, midB);
   } else {
     rawOps = fastLargeDiff(a, b);
   }
@@ -153,9 +176,9 @@ function computeLineDiff(oldStr, newStr) {
   const keep = new Array(rawOps.length).fill(false);
   for (let i = 0; i < rawOps.length; i += 1) {
     if (rawOps[i].type !== "eq") {
-      const start = Math.max(0, i - CONTEXT);
-      const end = Math.min(rawOps.length - 1, i + CONTEXT);
-      for (let k = start; k <= end; k += 1) {
+      const segStart = Math.max(0, i - CONTEXT);
+      const segEnd = Math.min(rawOps.length - 1, i + CONTEXT);
+      for (let k = segStart; k <= segEnd; k += 1) {
         keep[k] = true;
       }
     }
@@ -178,28 +201,15 @@ function computeLineDiff(oldStr, newStr) {
     rows.push({ type: "skip", count: skipped });
   }
 
-  return { rows, addedCount, removedCount };
+  return { rows, addedCount, removedCount, lineEndingsOnly };
 }
 
-function lcsDiff(a, b) {
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) {
-    start += 1;
-  }
-
-  let endA = a.length - 1;
-  let endB = b.length - 1;
-  while (endA >= start && endB >= start && a[endA] === b[endB]) {
-    endA -= 1;
-    endB -= 1;
-  }
-
-  const midA = a.slice(start, endA + 1);
-  const midB = b.slice(start, endB + 1);
+function lcsDiff(a, b, start, endA, endB, midA, midB) {
   const n = midA.length;
   const m = midB.length;
 
-  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  const ArrType = Math.max(n, m) >= 65535 ? Uint32Array : Uint16Array;
+  const dp = Array.from({ length: n + 1 }, () => new ArrType(m + 1));
   for (let i = n - 1; i >= 0; i -= 1) {
     for (let j = m - 1; j >= 0; j -= 1) {
       if (midA[i] === midB[j]) {

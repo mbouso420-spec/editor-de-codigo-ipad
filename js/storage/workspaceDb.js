@@ -120,7 +120,24 @@ const INVALID_PATH_CHARS = /[:*?"<>|\u0000-\u001f]/;
  * Devuelve la ruta normalizada o lanza un Error con un mensaje claro en español.
  */
 export function validateUserPath(rawPath) {
-  const clean = normalizePath(rawPath);
+  const raw = String(rawPath || "").trim();
+  if (!raw) {
+    throw new Error("Escribí un nombre válido.");
+  }
+  if (raw.includes("//") || raw.includes("\\\\")) {
+    throw new Error('El nombre no puede contener barras consecutivas "//".');
+  }
+  const rawSegments = raw.split(/[/\\]/);
+  for (const seg of rawSegments) {
+    if (seg === "." || seg === "..") {
+      throw new Error('El nombre no puede contener referencias relativas "." o "..".');
+    }
+    if (seg.length > 255) {
+      throw new Error("El nombre de archivo o carpeta no puede superar los 255 caracteres.");
+    }
+  }
+
+  const clean = normalizePath(raw);
   if (!clean) {
     throw new Error("Escribí un nombre válido.");
   }
@@ -432,7 +449,6 @@ export async function upsertEntry(
     !isFolder &&
       !fromGithub &&
       existing &&
-      existing.deleted &&
       existing.trackedInGithub &&
       existing.contentLoaded === false
   );

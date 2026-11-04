@@ -85,6 +85,9 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (!data || data.source !== "studio-ide-preview") {
       return;
     }
+    if (!iframe || event.source !== iframe.contentWindow) {
+      return;
+    }
     if (data.action === "clear") {
       clearConsoleOutput();
       return;
@@ -434,7 +437,7 @@ function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = 
   if (deferredScripts.length > 0) {
     const deferredBlock = deferredScripts.join("\n");
     if (/<\/body>/i.test(html)) {
-      html = html.replace(/<\/body>/i, `${deferredBlock}\n</body>`);
+      html = html.replace(/<\/body>/i, () => `${deferredBlock}\n</body>`);
     } else {
       html = `${html}\n${deferredBlock}`;
     }
@@ -451,6 +454,53 @@ function buildStandaloneJsPreview(jsFile) {
   const bridge = buildConsoleBridgeScript(true);
   const safeJs = jsFile.content.replace(/<\/script>/gi, "<\\/script>");
   const safeName = escapeHtmlText(jsFile.path);
+  const isModule = /\b(import|export|await)\b/.test(jsFile.content);
+
+  const scriptSnippet = isModule
+    ? `<script type="module">
+${safeJs}
+</script>
+<script type="module">
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      var st = document.getElementById("__js_status");
+      if (st && st.dataset.failed !== "1") {
+        st.textContent = "Ejecutado correctamente (Módulo ES)";
+      }
+      var out = document.getElementById("__js_screen_log");
+      if (out && out.children.length === 0) {
+        var note = document.createElement("div");
+        note.className = "js-empty";
+        note.textContent = "El módulo JS se cargó sin errores. Usá console.log(...) para mostrar resultados acá.";
+        out.appendChild(note);
+      }
+    }, 40);
+  });
+</script>`
+    : `<script>
+    try {
+${safeJs}
+      var st = document.getElementById("__js_status");
+      if (st && st.dataset.failed !== "1") {
+        st.textContent = "Ejecutado correctamente";
+      }
+      var out = document.getElementById("__js_screen_log");
+      if (out && out.children.length === 0) {
+        var note = document.createElement("div");
+        note.className = "js-empty";
+        note.textContent = "El archivo se ejecutó sin errores. Usá console.log(...) para mostrar resultados acá.";
+        out.appendChild(note);
+      }
+    } catch (err) {
+      var stErr = document.getElementById("__js_status");
+      if (stErr) {
+        stErr.dataset.failed = "1";
+        stErr.style.color = "var(--err)";
+        stErr.textContent = "Error en ejecución";
+      }
+      console.error(err && err.message ? err.message : String(err));
+    }
+  </script>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -534,30 +584,7 @@ function buildStandaloneJsPreview(jsFile) {
     <div id="__js_screen_log" class="js-runner-output"></div>
   </section>
   <div id="app"></div>
-  <script>
-    try {
-${safeJs}
-      var st = document.getElementById("__js_status");
-      if (st && st.dataset.failed !== "1") {
-        st.textContent = "Ejecutado correctamente";
-      }
-      var out = document.getElementById("__js_screen_log");
-      if (out && out.children.length === 0) {
-        var note = document.createElement("div");
-        note.className = "js-empty";
-        note.textContent = "El archivo se ejecutó sin errores. Usá console.log(...) para mostrar resultados acá.";
-        out.appendChild(note);
-      }
-    } catch (err) {
-      var stErr = document.getElementById("__js_status");
-      if (stErr) {
-        stErr.dataset.failed = "1";
-        stErr.style.color = "var(--err)";
-        stErr.textContent = "Error en ejecución";
-      }
-      console.error(err && err.message ? err.message : String(err));
-    }
-  </script>
+  ${scriptSnippet}
 </body>
 </html>`;
 }
@@ -640,17 +667,24 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
   const prefix = baseFolder ? `${baseFolder}/` : "";
   const modules = [];
   const modPrefixes = new Set();
+  const TEXT_OR_DATA_EXTENSIONS = new Set([
+    "json", "txt", "csv", "tsv", "sql", "xml", "yaml", "yml", "md"
+  ]);
 
   for (const candidate of sameFolderFiles) {
     const ext = getFileExtension(candidate.path);
-    if (!PYTHON_EXTENSIONS.has(ext)) continue;
+    const isPy = PYTHON_EXTENSIONS.has(ext);
+    const isData = TEXT_OR_DATA_EXTENSIONS.has(ext);
+    if (!isPy && !isData) continue;
     const cleanPath = normalizePath(candidate.path);
     if (cleanPath === normalizePath(pyFile.path)) continue;
     const relPath = prefix && cleanPath.startsWith(prefix) ? cleanPath.slice(prefix.length) : cleanPath;
     if (relPath && !relPath.startsWith("..")) {
       modules.push({ path: relPath, content: candidate.content });
-      const topMod = relPath.split("/")[0].replace(/\.(py|pyw)$/i, "");
-      if (topMod) modPrefixes.add(topMod);
+      if (isPy) {
+        const topMod = relPath.split("/")[0].replace(/\.(py|pyw)$/i, "");
+        if (topMod) modPrefixes.add(topMod);
+      }
     }
   }
 
@@ -699,6 +733,9 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
     "        _lines.append(f'  Archivo \"{_f.filename}\", línea {_f.lineno}, en {_f.name}')",
     "    _lines.extend([l.rstrip('\\n') for l in traceback.format_exception_only(type(_exc), _exc)])",
     "    print('\\n'.join(_lines), file=sys.stderr)",
+    "finally:",
+    "    sys.stdout.flush()",
+    "    sys.stderr.flush()",
     "json.dumps(_result)"
   ].join("\n");
 
@@ -903,6 +940,12 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
       }
 
       function writeFolderModules(pyodide) {
+        ensureParentDirs(pyodide.FS, payload.entryName);
+        try { pyodide.FS.writeFile(payload.entryName, payload.code, { encoding: "utf8" }); } catch (_) {}
+        if (payload.entryPath && payload.entryPath !== payload.entryName) {
+          ensureParentDirs(pyodide.FS, payload.entryPath);
+          try { pyodide.FS.writeFile(payload.entryPath, payload.code, { encoding: "utf8" }); } catch (_) {}
+        }
         for (var i = 0; i < payload.modules.length; i += 1) {
           var mod = payload.modules[i];
           ensureParentDirs(pyodide.FS, mod.path);
@@ -1121,7 +1164,7 @@ function buildMarkdownPreview(mdFile) {
 
 function renderMarkdownDocumentHtml(rawMd) {
   const blocks = [];
-  const fenceRe = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+  const fenceRe = /```([^\r\n]*)\r?\n?([\s\S]*?)```/g;
   let cursor = 0;
   let m;
 
@@ -1129,7 +1172,9 @@ function renderMarkdownDocumentHtml(rawMd) {
     if (m.index > cursor) {
       blocks.push({ type: "prose", text: rawMd.slice(cursor, m.index) });
     }
-    blocks.push({ type: "code", lang: m[1] || "", code: m[2].replace(/\n$/, "") });
+    const rawHeader = (m[1] || "").trim();
+    const lang = (rawHeader.split(/\s+/)[0] || "").toLowerCase();
+    blocks.push({ type: "code", lang, code: m[2].replace(/\n$/, "") });
     cursor = fenceRe.lastIndex;
   }
   if (cursor < rawMd.length) {

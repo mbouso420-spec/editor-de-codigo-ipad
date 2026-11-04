@@ -563,8 +563,9 @@ async function initApp() {
   function scheduleAutosave(projectId, filePath, content) {
     explorer.setAutosaveStatus("Guardando…");
     const timerKey = `${projectId}::${filePath}`;
-    if (saveTimers.has(timerKey)) {
-      window.clearTimeout(saveTimers.get(timerKey));
+    const prev = saveTimers.get(timerKey);
+    if (prev && prev.timerId) {
+      window.clearTimeout(prev.timerId);
     }
 
     const timerId = window.setTimeout(async () => {
@@ -574,20 +575,19 @@ async function initApp() {
       await github.refreshTopbarBadge();
     }, 240);
 
-    saveTimers.set(timerKey, timerId);
+    saveTimers.set(timerKey, { timerId, projectId, filePath, content });
   }
 
   async function flushPendingSaves() {
     if (saveTimers.size === 0) return;
-    for (const [timerKey, timerId] of saveTimers.entries()) {
-      window.clearTimeout(timerId);
-      saveTimers.delete(timerKey);
-      const sep = timerKey.indexOf("::");
-      const projId = timerKey.slice(0, sep);
-      const path = timerKey.slice(sep + 2);
-      const fileObj = filesOnly.find((f) => f.id === path);
-      if (fileObj && projId === activeProject.id) {
-        await updateFileContent(projId, path, fileObj.content);
+    const entries = [...saveTimers.entries()];
+    saveTimers.clear();
+    for (const [_, item] of entries) {
+      if (item && item.timerId) {
+        window.clearTimeout(item.timerId);
+      }
+      if (item && item.projectId && item.filePath && typeof item.content === "string") {
+        await updateFileContent(item.projectId, item.filePath, item.content);
       }
     }
     explorer.setAutosaveStatus("Autoguardado en IndexedDB");
@@ -756,21 +756,36 @@ async function initApp() {
     await saveProjectState(activeProject);
   }
 
+  let openRequestSeq = 0;
+
   async function openOrFocusFile(filePath) {
     const target = filesOnly.find((f) => f.id === filePath);
     if (!target) return;
+
+    const currentSeq = ++openRequestSeq;
+    const currentProjId = activeProject?.id;
 
     if (target.contentLoaded === false) {
       explorer.setAutosaveStatus(`Abriendo ${target.shortName}…`);
       try {
         await ensureFileContentLoaded(target);
+        if (currentSeq !== openRequestSeq || activeProject?.id !== currentProjId) {
+          return;
+        }
         explorer.setAutosaveStatus("Archivo cargado desde GitHub");
       } catch (error) {
+        if (currentSeq !== openRequestSeq || activeProject?.id !== currentProjId) {
+          return;
+        }
         explorer.setAutosaveStatus(
           error instanceof Error ? error.message : "Sin conexión para abrir este archivo de GitHub"
         );
         return;
       }
+    }
+
+    if (currentSeq !== openRequestSeq || activeProject?.id !== currentProjId) {
+      return;
     }
 
     if (!openTabIds.includes(target.id)) {

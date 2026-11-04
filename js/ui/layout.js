@@ -144,6 +144,55 @@ export function initLayoutController() {
 function bindSplitter(handle, side) {
   let activePointerId = null;
 
+  handle.setAttribute("role", "separator");
+  handle.setAttribute("tabindex", "0");
+  handle.setAttribute("aria-orientation", "vertical");
+  handle.setAttribute(
+    "aria-label",
+    side === "left" ? "Divisor de ancho del explorador de archivos" : "Divisor de ancho del panel de asistente"
+  );
+
+  const applyWidth = (nextWidth) => {
+    if (side === "left") {
+      document.documentElement.style.setProperty("--left-panel-w", `${nextWidth}px`);
+      safeSetStorage(STORAGE_KEYS.leftWidth, String(nextWidth));
+    } else {
+      document.documentElement.style.setProperty("--right-panel-w", `${nextWidth}px`);
+      safeSetStorage(STORAGE_KEYS.rightWidth, String(nextWidth));
+    }
+    handle.setAttribute("aria-valuenow", String(nextWidth));
+  };
+
+  handle.addEventListener("keydown", (event) => {
+    const step = 16;
+    const viewportWidth = window.innerWidth;
+    const isLeft = side === "left";
+    const currentW = isLeft
+      ? Number(safeGetStorage(STORAGE_KEYS.leftWidth)) || 256
+      : Number(safeGetStorage(STORAGE_KEYS.rightWidth)) || 360;
+
+    let targetW = currentW;
+    if (event.key === "ArrowLeft") {
+      targetW = isLeft ? currentW - step : currentW + step;
+    } else if (event.key === "ArrowRight") {
+      targetW = isLeft ? currentW + step : currentW - step;
+    } else if (event.key === "Home") {
+      targetW = isLeft ? 190 : 260;
+    } else if (event.key === "End") {
+      targetW = isLeft
+        ? Math.min(420, Math.floor(viewportWidth * 0.36))
+        : Math.min(540, Math.floor(viewportWidth * 0.44));
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    const clampedW = isLeft
+      ? clamp(targetW, 190, Math.min(420, Math.floor(viewportWidth * 0.36)))
+      : clamp(targetW, 260, Math.min(540, Math.floor(viewportWidth * 0.44)));
+    applyWidth(clampedW);
+  });
+
   handle.addEventListener("pointerdown", (event) => {
     activePointerId = event.pointerId;
     handle.setPointerCapture(event.pointerId);
@@ -159,12 +208,10 @@ function bindSplitter(handle, side) {
     const viewportWidth = window.innerWidth;
     if (side === "left") {
       const nextWidth = clamp(Math.round(event.clientX - 8), 190, Math.min(420, Math.floor(viewportWidth * 0.36)));
-      document.documentElement.style.setProperty("--left-panel-w", `${nextWidth}px`);
-      safeSetStorage(STORAGE_KEYS.leftWidth, String(nextWidth));
+      applyWidth(nextWidth);
     } else {
       const nextWidth = clamp(Math.round(viewportWidth - event.clientX - 8), 260, Math.min(540, Math.floor(viewportWidth * 0.44)));
-      document.documentElement.style.setProperty("--right-panel-w", `${nextWidth}px`);
-      safeSetStorage(STORAGE_KEYS.rightWidth, String(nextWidth));
+      applyWidth(nextWidth);
     }
   });
 
