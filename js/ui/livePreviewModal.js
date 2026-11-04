@@ -1,5 +1,7 @@
 import { normalizePath } from "../storage/workspaceDb.js";
 import { buildLoopGuardRuntime, instrumentLoops } from "../preview/loopGuard.js";
+import { buildSqlRunnerPreview } from "../preview/sqlRunner.js";
+import { buildCRunnerPreview } from "../preview/cRunner.js";
 
 const ACORN_URL = "https://esm.sh/acorn@8.14.0";
 let acornModule = null;
@@ -35,6 +37,9 @@ const JS_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
 const CSS_EXTENSIONS = new Set(["css"]);
 const PYTHON_EXTENSIONS = new Set(["py", "pyw"]);
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
+const SQL_EXTENSIONS = new Set(["sql"]);
+const C_EXTENSIONS = new Set(["c"]);
+const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "h", "hpp"]);
 
 /**
  * Vista previa contextual según la pestaña activa:
@@ -63,12 +68,106 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   const consoleTitleEl = document.getElementById("preview-console-title");
   const consoleList = document.getElementById("preview-console-list");
   const iframe = document.getElementById("preview-iframe");
+  const pageSelect = document.getElementById("preview-page-select");
+  const backBtn = document.getElementById("btn-preview-back");
+  const forwardBtn = document.getElementById("btn-preview-forward");
+  const navControls = dialog?.querySelector(".preview-nav-controls");
 
   let consoleVisible = true;
   let previewRunSeq = 0;
   let currentPreviewPath = null;
   /** @type {"auto" | "standalone" | "folder"} */
   let jsRunOverride = "auto";
+
+  let historyStack = [];
+  let historyIndex = -1;
+
+  function updateNavButtons() {
+    if (backBtn) backBtn.disabled = historyIndex <= 0;
+    if (forwardBtn) forwardBtn.disabled = historyIndex >= historyStack.length - 1;
+  }
+
+  function hideWebNavigationControls() {
+    if (pageSelect) pageSelect.hidden = true;
+    if (navControls) navControls.hidden = true;
+  }
+
+  function syncPageSelect(allFiles, activeHtmlPath) {
+    if (!pageSelect) return;
+    const htmlFiles = (allFiles || []).filter((f) => {
+      const ext = getFileExtension(f.path);
+      return HTML_EXTENSIONS.has(ext);
+    });
+
+    if (htmlFiles.length === 0) {
+      hideWebNavigationControls();
+      return;
+    }
+
+    pageSelect.innerHTML = "";
+    for (const hf of htmlFiles) {
+      const opt = document.createElement("option");
+      opt.value = hf.path;
+      opt.textContent = hf.shortName || hf.path;
+      if (normalizePath(hf.path) === normalizePath(activeHtmlPath)) {
+        opt.selected = true;
+      }
+      pageSelect.appendChild(opt);
+    }
+
+    pageSelect.hidden = false;
+    if (navControls) navControls.hidden = false;
+  }
+
+  pageSelect?.addEventListener("change", () => {
+    if (pageSelect.value) {
+      navigateToHtml(pageSelect.value, true);
+    }
+  });
+
+  backBtn?.addEventListener("click", () => {
+    if (historyIndex > 0) {
+      historyIndex -= 1;
+      navigateToHtml(historyStack[historyIndex], false);
+    }
+  });
+
+  forwardBtn?.addEventListener("click", () => {
+    if (historyIndex < historyStack.length - 1) {
+      historyIndex += 1;
+      navigateToHtml(historyStack[historyIndex], false);
+    }
+  });
+
+  function navigateToHtml(targetPath, pushHistory = true) {
+    const { files } = getWorkspaceSnapshot();
+    const targetFile = files.find((f) => normalizePath(f.path) === normalizePath(targetPath));
+    if (!targetFile) return;
+
+    currentPreviewPath = targetFile.path;
+
+    if (pushHistory) {
+      if (historyIndex < historyStack.length - 1) {
+        historyStack = historyStack.slice(0, historyIndex + 1);
+      }
+      historyStack.push(targetFile.path);
+      historyIndex = historyStack.length - 1;
+    }
+    updateNavButtons();
+    syncPageSelect(files, targetFile.path);
+
+    const folder = getParentFolder(targetFile.path);
+    const sameFolderFiles = filterFolderScopeFiles(files, folder);
+    const sameFolderMap = new Map(sameFolderFiles.map((f) => [normalizePath(f.path), f]));
+    const compiledHtml = bundleHtmlWithFolderAssets(targetFile.path, targetFile.content, sameFolderMap, null, guardJs);
+
+    showRunnableIframe({
+      headerTitle: "Vista previa de HTML",
+      badgeText: targetFile.path,
+      compiledHtml,
+      siblingHtml: null
+    });
+  }
 
   const deviceButtons = dialog?.querySelectorAll(".preview-device-btn") || [];
   deviceButtons.forEach((btn) => {
@@ -152,36 +251,14 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   });
 
   function handlePreviewNavigation(href) {
-    if (!currentPreviewPath) return;
-    const baseFolder = getParentFolder(currentPreviewPath);
-    const cleanRef = href.split("?")[0].split("#")[0];
-    const resolvedPath = resolveRelativePath(baseFolder, cleanRef);
     const { files } = getWorkspaceSnapshot();
-
-    const targetFile = files.find((f) => normalizePath(f.path) === normalizePath(resolvedPath));
+    const targetFile = findTargetHtmlFile(files, currentPreviewPath, href);
     if (!targetFile) {
-      appendConsoleLine("warn", `No se encontró "${href}" en el proyecto (ruta resuelta: "${resolvedPath}").`);
+      appendConsoleLine("warn", `No se encontró "${href}" en el proyecto (navegación desde "${currentPreviewPath || 'raíz'}").`);
       return;
     }
 
-    const ext = getFileExtension(targetFile.path);
-    if (!HTML_EXTENSIONS.has(ext)) {
-      appendConsoleLine("warn", `El archivo destino "${targetFile.path}" no es un documento HTML ejecutable.`);
-      return;
-    }
-
-    currentPreviewPath = targetFile.path;
-    const folder = getParentFolder(targetFile.path);
-    const sameFolderFiles = filterFolderScopeFiles(files, folder);
-    const sameFolderMap = new Map(sameFolderFiles.map((f) => [normalizePath(f.path), f]));
-    const compiledHtml = bundleHtmlWithFolderAssets(targetFile.path, targetFile.content, sameFolderMap, null, guardJs);
-
-    showRunnableIframe({
-      headerTitle: "Vista previa de HTML",
-      badgeText: targetFile.path,
-      compiledHtml,
-      siblingHtml: null
-    });
+    navigateToHtml(targetFile.path, true);
   }
 
   function stopIframe() {
@@ -220,6 +297,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   function showUnavailableState({ headerTitle, badgeText, messageTitle, messageDesc }) {
     stopIframe();
     clearConsoleOutput();
+    hideWebNavigationControls();
 
     if (titleEl) titleEl.textContent = headerTitle;
     if (fileBadgeEl) {
@@ -308,6 +386,12 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
 
     // 1. Pestaña HTML: ensambla recursos relativos de su misma carpeta/subcarpetas
     if (HTML_EXTENSIONS.has(ext)) {
+      currentPreviewPath = activeFile.path;
+      historyStack = [activeFile.path];
+      historyIndex = 0;
+      updateNavButtons();
+      syncPageSelect(files, activeFile.path);
+
       const compiledHtml = bundleHtmlWithFolderAssets(activeFile.path, activeFile.content, sameFolderMap, null, guardJs);
       showRunnableIframe({
         headerTitle: "Vista previa de HTML",
@@ -318,65 +402,89 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       return;
     }
 
-    // 2. Pestaña JS: ejecuta el archivo .js (o junto al HTML de su misma carpeta si interactúa con el DOM)
+    // 2. Pestaña JS: ejecuta el archivo .js (asociado al HTML del proyecto o en sandbox aislado)
     if (JS_EXTENSIONS.has(ext)) {
-      const siblingHtml = findSiblingHtmlInSameFolder(sameFolderFiles, folder, activeFile);
-      const usesDom = /\b(document\s*\.|window\s*\.)/.test(activeFile.content);
+      const bestHtml = findBestHtmlEntrypoint(files, activeFile);
 
       if (jsRunOverride === "auto") {
-        jsRunOverride = siblingHtml && siblingHtml.linksThisJs && usesDom ? "folder" : "standalone";
+        jsRunOverride = bestHtml ? "folder" : "standalone";
       }
 
-      if (jsRunOverride === "folder" && siblingHtml) {
+      if (jsRunOverride === "folder" && bestHtml) {
+        currentPreviewPath = bestHtml.path;
+        historyStack = [bestHtml.path];
+        historyIndex = 0;
+        updateNavButtons();
+        syncPageSelect(files, bestHtml.path);
+
+        const targetFolder = getParentFolder(bestHtml.path);
+        const targetFolderFiles = filterFolderScopeFiles(files, targetFolder);
+        const targetFolderMap = new Map(targetFolderFiles.map((f) => [normalizePath(f.path), f]));
+        targetFolderMap.set(normalizePath(activeFile.path), activeFile);
+
         const compiledHtml = bundleHtmlWithFolderAssets(
-          siblingHtml.file.path,
-          siblingHtml.file.content,
-          sameFolderMap,
+          bestHtml.path,
+          bestHtml.content,
+          targetFolderMap,
           activeFile,
           guardJs
         );
         showRunnableIframe({
           headerTitle: "Vista previa de JS",
-          badgeText: `${activeFile.path} (${siblingHtml.file.shortName})`,
+          badgeText: `${activeFile.path} (${bestHtml.shortName || bestHtml.path})`,
           compiledHtml,
-          siblingHtml: siblingHtml.file
+          siblingHtml: bestHtml
         });
         return;
       }
 
+      hideWebNavigationControls();
       const compiledJsHtml = buildStandaloneJsPreview(activeFile, guardJs);
       showRunnableIframe({
         headerTitle: "Vista previa de JS",
         badgeText: activeFile.path,
         compiledHtml: compiledJsHtml,
-        siblingHtml: siblingHtml ? siblingHtml.file : null
+        siblingHtml: bestHtml
       });
       return;
     }
 
-    // 3. Pestaña CSS: se previsualiza si forma conjunto con un .html en la misma carpeta
+    // 3. Pestaña CSS: se previsualiza resolviendo de forma inteligente el HTML principal del proyecto
     if (CSS_EXTENSIONS.has(ext)) {
-      const siblingHtml = findSiblingHtmlInSameFolder(sameFolderFiles, folder, activeFile);
-      if (siblingHtml) {
+      const bestHtml = findBestHtmlEntrypoint(files, activeFile);
+      if (bestHtml) {
+        currentPreviewPath = bestHtml.path;
+        historyStack = [bestHtml.path];
+        historyIndex = 0;
+        updateNavButtons();
+        syncPageSelect(files, bestHtml.path);
+
+        const targetFolder = getParentFolder(bestHtml.path);
+        const targetFolderFiles = filterFolderScopeFiles(files, targetFolder);
+        const targetFolderMap = new Map(targetFolderFiles.map((f) => [normalizePath(f.path), f]));
+        targetFolderMap.set(normalizePath(activeFile.path), activeFile);
+
         const compiledHtml = bundleHtmlWithFolderAssets(
-          siblingHtml.file.path,
-          siblingHtml.file.content,
-          sameFolderMap,
+          bestHtml.path,
+          bestHtml.content,
+          targetFolderMap,
           null,
-          guardJs
+          guardJs,
+          activeFile
         );
         showRunnableIframe({
           headerTitle: "Vista previa de CSS",
-          badgeText: `${activeFile.path} (${siblingHtml.file.shortName})`,
+          badgeText: `${activeFile.path} (${bestHtml.shortName || bestHtml.path})`,
           compiledHtml,
           siblingHtml: null
         });
       } else {
+        hideWebNavigationControls();
         showUnavailableState({
           headerTitle: "Vista previa de CSS",
           badgeText: activeFile.path,
-          messageTitle: `No hay un archivo .html en la misma carpeta para ${activeFile.shortName}`,
-          messageDesc: "Colocá un archivo .html en esta misma carpeta para ver estos estilos aplicados en conjunto."
+          messageTitle: `No hay ningún archivo .html en el proyecto para ${activeFile.shortName}`,
+          messageDesc: "Creá un archivo .html en el proyecto para ver estos estilos aplicados en vivo."
         });
       }
       return;
@@ -384,6 +492,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
 
     // 4. Pestaña Python: ejecuta Python 3 real en el navegador (Pyodide WebAssembly) con entrada inline sin popups
     if (PYTHON_EXTENSIONS.has(ext)) {
+      hideWebNavigationControls();
       const compiledPyHtml = buildStandalonePythonPreview(activeFile, sameFolderFiles, folder);
       showRunnableIframe({
         headerTitle: "Vista previa de Python",
@@ -398,6 +507,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
 
     // 5. Pestaña Markdown (.md / README.md): documento formateado limpio
     if (MARKDOWN_EXTENSIONS.has(ext)) {
+      hideWebNavigationControls();
       const compiledMdHtml = buildMarkdownPreview(activeFile);
       showRunnableIframe({
         headerTitle: "Vista previa de Markdown",
@@ -409,12 +519,44 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       return;
     }
 
-    // 6. Pestaña C, C++, SQL, etc.: no disponible en vista previa web
+    // 6. Pestaña SQL (.sql): base de datos SQLite interactiva en WebAssembly
+    if (SQL_EXTENSIONS.has(ext)) {
+      hideWebNavigationControls();
+      const compiledSqlHtml = buildSqlRunnerPreview(activeFile, sameFolderFiles);
+      showRunnableIframe({
+        headerTitle: "Vista previa de SQL (SQLite)",
+        badgeText: activeFile.path,
+        compiledHtml: compiledSqlHtml,
+        siblingHtml: null,
+        consoleTitle: "Consola SQL",
+        hasConsole: true
+      });
+      return;
+    }
+
+    // 7. Pestaña C / C++ (.c, .cpp, .cxx, .cc, .h, .hpp): compilador y ejecutor interactivo Wandbox
+    if (C_EXTENSIONS.has(ext) || CPP_EXTENSIONS.has(ext)) {
+      hideWebNavigationControls();
+      const isC = C_EXTENSIONS.has(ext);
+      const compiledCHtml = buildCRunnerPreview(activeFile, sameFolderFiles);
+      showRunnableIframe({
+        headerTitle: isC ? "Compilador C (GCC)" : "Compilador C++ (G++)",
+        badgeText: activeFile.path,
+        compiledHtml: compiledCHtml,
+        siblingHtml: null,
+        consoleTitle: isC ? "Consola C" : "Consola C++",
+        hasConsole: true
+      });
+      return;
+    }
+
+    // 8. Extensiones no soportadas
+    hideWebNavigationControls();
     showUnavailableState({
       headerTitle: "Vista previa",
       badgeText: activeFile.path,
       messageTitle: `La vista previa no está disponible para este archivo ${extLabel}`,
-      messageDesc: "La vista previa en vivo ejecuta archivos .html, .js, .css (en conjunto con su carpeta), scripts .py de Python y documentos .md."
+      messageDesc: "La vista previa en vivo ejecuta archivos .html, .js, .css (en conjunto con el proyecto web), scripts .py de Python, bases de datos .sql de SQLite, código C/C++ y documentos .md."
     });
   }
 
@@ -450,6 +592,132 @@ function filterFolderScopeFiles(allFiles, baseFolder) {
   });
 }
 
+/**
+ * Resuelve de forma inteligente el mejor archivo HTML de entrada para previsualizar
+ * cuando la pestaña activa es un archivo .js o .css.
+ * Prioridades:
+ * 1. HTML que importe o referencie explícitamente ese archivo (<script src="..."> o <link href="...">).
+ * 2. index.html en la misma carpeta o en la raíz del proyecto.
+ * 3. Cualquier index.html o archivo .html disponible en el workspace.
+ * @param {Array<{ path: string, shortName?: string, content: string }>} allFiles
+ * @param {{ path: string, shortName?: string, content?: string }} activeFile
+ * @returns {{ path: string, shortName: string, content: string } | null}
+ */
+export function findBestHtmlEntrypoint(allFiles, activeFile) {
+  const htmlFiles = (allFiles || []).filter((f) => {
+    const ext = getFileExtension(f.path);
+    return HTML_EXTENSIONS.has(ext);
+  });
+  if (htmlFiles.length === 0) return null;
+
+  const activePath = normalizePath(activeFile.path);
+  const activeShort = activeFile.shortName || activePath.split("/").pop();
+  const activeFolder = getParentFolder(activePath);
+  const escapedName = activeShort.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // 1. Prioridad: HTML que lo referencie explícitamente (<script src="..."> o <link href="...">)
+  const scriptRegex = new RegExp(`<script[^>]+src=["'][^"']*${escapedName}["']`, "i");
+  const linkRegex = new RegExp(`<link[^>]+href=["'][^"']*${escapedName}["']`, "i");
+
+  const directRefs = htmlFiles.filter((f) => {
+    const content = f.content || "";
+    return scriptRegex.test(content) || linkRegex.test(content);
+  });
+
+  if (directRefs.length > 0) {
+    const sameFolder = directRefs.find((f) => getParentFolder(f.path) === activeFolder);
+    if (sameFolder) return sameFolder;
+    const index = directRefs.find((f) => (f.shortName || "").toLowerCase() === "index.html");
+    if (index) return index;
+    return directRefs[0];
+  }
+
+  // 2. Prioridad: index.html en la misma carpeta
+  const indexInSameFolder = htmlFiles.find(
+    (f) => getParentFolder(f.path) === activeFolder && (f.shortName || "").toLowerCase() === "index.html"
+  );
+  if (indexInSameFolder) return indexInSameFolder;
+
+  // 2b. Prioridad: index.html en la raíz del proyecto
+  const indexInRoot = htmlFiles.find(
+    (f) => !getParentFolder(f.path) && (f.shortName || "").toLowerCase() === "index.html"
+  );
+  if (indexInRoot) return indexInRoot;
+
+  // 2c. Prioridad: Cualquier index.html en el workspace
+  const anyIndex = htmlFiles.find((f) => (f.shortName || "").toLowerCase() === "index.html");
+  if (anyIndex) return anyIndex;
+
+  // 2d. Prioridad: Cualquier HTML en la misma carpeta
+  const anyInSameFolder = htmlFiles.find((f) => getParentFolder(f.path) === activeFolder);
+  if (anyInSameFolder) return anyInSameFolder;
+
+  // 2e. El primer HTML disponible en el workspace
+  return htmlFiles[0];
+}
+
+/**
+ * Resuelve de forma tolerante el archivo HTML de destino al navegar dentro de la vista previa.
+ * Admite enlaces relativos ('contacto.html', './contacto.html', '../contacto.html'),
+ * absolutos ('/contacto.html') y sin extensión ('contacto').
+ * @param {Array<{ path: string, shortName?: string, content: string }>} allFiles
+ * @param {string} currentPreviewPath
+ * @param {string} requestedHref
+ * @returns {{ path: string, shortName: string, content: string } | null}
+ */
+export function findTargetHtmlFile(allFiles, currentPreviewPath, requestedHref) {
+  if (!requestedHref || typeof requestedHref !== "string") return null;
+
+  let clean = requestedHref.trim().split("?")[0].split("#")[0];
+  if (!clean) return null;
+
+  const htmlFiles = (allFiles || []).filter((f) => {
+    const ext = getFileExtension(f.path);
+    return HTML_EXTENSIONS.has(ext);
+  });
+  if (htmlFiles.length === 0) return null;
+
+  const currentFolder = currentPreviewPath ? getParentFolder(currentPreviewPath) : "";
+
+  // 1. Ruta relativa directa desde la carpeta actual
+  const relResolved = resolveRelativePath(currentFolder, clean);
+  const match1 = htmlFiles.find((f) => normalizePath(f.path) === normalizePath(relResolved));
+  if (match1) return match1;
+
+  // 2. Ruta relativa añadiendo .html si no tenía extensión
+  if (!clean.includes(".")) {
+    const relHtml = resolveRelativePath(currentFolder, `${clean}.html`);
+    const match2 = htmlFiles.find((f) => normalizePath(f.path) === normalizePath(relHtml));
+    if (match2) return match2;
+  }
+
+  // 3. Ruta absoluta en el workspace
+  const rootClean = clean.replace(/^\/+/, "");
+  const match3 = htmlFiles.find((f) => normalizePath(f.path) === normalizePath(rootClean));
+  if (match3) return match3;
+
+  if (!rootClean.includes(".")) {
+    const match4 = htmlFiles.find((f) => normalizePath(f.path) === normalizePath(`${rootClean}.html`));
+    if (match4) return match4;
+  }
+
+  // 4. Búsqueda por nombre de archivo base (shortName) en todo el workspace
+  const targetBase = rootClean.split("/").pop();
+  const match5 = htmlFiles.find(
+    (f) => (f.shortName || f.path.split("/").pop()).toLowerCase() === targetBase.toLowerCase()
+  );
+  if (match5) return match5;
+
+  if (!targetBase.includes(".")) {
+    const match6 = htmlFiles.find(
+      (f) => (f.shortName || f.path.split("/").pop()).toLowerCase() === `${targetBase.toLowerCase()}.html`
+    );
+    if (match6) return match6;
+  }
+
+  return null;
+}
+
 export function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   const htmlInSameDir = scopeFiles.filter((f) => {
     const ext = getFileExtension(f.path);
@@ -472,7 +740,7 @@ export function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   };
 }
 
-export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null, transformJs = (code) => code) {
+export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null, transformJs = (code) => code, ensureCssFile = null) {
   const dir = getParentFolder(entryPath);
 
   const resolveAsset = (rawHref) => {
@@ -488,6 +756,7 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
   };
 
   let inlinedActiveJs = false;
+  let inlinedActiveCss = false;
   const deferredScripts = [];
 
   // Incrustar hojas CSS locales de la misma carpeta
@@ -496,9 +765,23 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
     if (!hrefMatch) return tag;
     const asset = resolveAsset(hrefMatch[1]);
     if (!asset) return tag;
+    if (ensureCssFile && normalizePath(asset.path) === normalizePath(ensureCssFile.path)) {
+      inlinedActiveCss = true;
+    }
     const safeCss = asset.content.replace(/<\/style>/gi, "<\\/style>");
     return `<style data-source="${escapeAttr(asset.path)}">\n${safeCss}\n</style>`;
   });
+
+  // Si se especificó un archivo CSS activo y no estaba enlazado en el HTML, inyectarlo
+  if (ensureCssFile && !inlinedActiveCss) {
+    const safeExtraCss = ensureCssFile.content.replace(/<\/style>/gi, "<\\/style>");
+    const styleTag = `<style data-source="${escapeAttr(ensureCssFile.path)}">\n${safeExtraCss}\n</style>`;
+    if (/<head\b[^>]*>/i.test(html)) {
+      html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${styleTag}`);
+    } else {
+      html = `${styleTag}\n${html}`;
+    }
+  }
 
   // Incrustar scripts JS locales respetando type="module" y defer
   html = html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullTag, attrs, inlineCode) => {
@@ -733,8 +1016,9 @@ ${buildLoopGuardRuntime()}
   window.addEventListener("unhandledrejection", function (e) {
     send("error", ["Promesa rechazada: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason))]);
   });
+  // Interceptor total de navegación local en enlaces
   document.addEventListener("click", function (e) {
-    var a = e.target && e.target.closest ? e.target.closest("a") : null;
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
     if (!a) return;
     var href = a.getAttribute("href");
     if (!href) return;
@@ -745,12 +1029,49 @@ ${buildLoopGuardRuntime()}
       return;
     }
     e.preventDefault();
+    e.stopPropagation();
     parent.postMessage({
       source: "studio-ide-preview",
       action: "navigate",
       href: href
     }, "*");
   }, true);
+
+  // Interceptor de envíos de formularios locales
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.getAttribute) return;
+    var action = form.getAttribute("action");
+    if (!action || action.startsWith("#") || action.startsWith("javascript:") || /^(https?:|mailto:|tel:)/i.test(action)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    parent.postMessage({
+      source: "studio-ide-preview",
+      action: "navigate",
+      href: action
+    }, "*");
+  }, true);
+
+  // Interceptor de llamadas programáticas de navegación
+  try {
+    var triggerNav = function (targetUrl) {
+      if (!targetUrl || typeof targetUrl !== "string") return;
+      if (targetUrl.startsWith("#") || targetUrl.startsWith("javascript:") || /^(https?:|mailto:|tel:)/i.test(targetUrl)) {
+        window.open(targetUrl, "_blank");
+        return;
+      }
+      parent.postMessage({
+        source: "studio-ide-preview",
+        action: "navigate",
+        href: targetUrl
+      }, "*");
+    };
+    window.navigate = triggerNav;
+    if (window.location) {
+      window.location.assign = triggerNav;
+      window.location.replace = triggerNav;
+    }
+  } catch (_) {}
 })();
 </script>`;
 }

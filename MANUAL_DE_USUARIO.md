@@ -9,7 +9,7 @@ Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad
 1. [Instalación en iPad (PWA a pantalla completa) y PC](#1-instalación-en-ipad-pwa-a-pantalla-completa-y-pc)
 2. [Recorrido por la interfaz, atajos y gestos táctiles](#2-recorrido-por-la-interfaz-atajos-y-gestos-táctiles)
 3. [Gestión de proyectos, exportación `.zip` y almacenamiento](#3-gestión-de-proyectos-exportación-zip-y-almacenamiento)
-4. [Vista previa web multi-página, medidas responsivas y Python 3](#4-vista-previa-web-multi-página-medidas-responsivas-y-python-3)
+4. [Vista previa web, Multi-Página, SQLite, C/C++ y Python 3](#4-vista-previa-web-multi-página-sqlite-cc-y-python-3)
 5. [Configurar el Asistente de IA gratuito y pasar claves](#5-configurar-el-asistente-de-ia-gratuito-y-pasar-claves)
 6. [Trabajar con el Asistente IA sobre tu código](#6-trabajar-con-el-asistente-ia-sobre-tu-código)
 7. [GitHub avanzado: Ramas, Diff visual y Commit + Push](#7-github-avanzado-ramas-diff-visual-y-commit--push)
@@ -90,19 +90,40 @@ La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
 
 ---
 
-## 4. Vista previa web multi-página, medidas responsivas y Python 3
+## 4. Vista previa web, Multi-Página, SQLite, C/C++ y Python 3
 
 Al presionar el botón **Vista previa** en la barra superior:
 
-### Navegación Multi-Página en vivo
-- Si tu proyecto tiene múltiples páginas HTML (por ejemplo `index.html` y `contacto.html`), podés hacer clic libremente en enlaces relativos (`<a href="contacto.html">` o `<a href="../blog/post.html">`).
-- El visor capturará la navegación de forma interna, buscará el archivo correspondiente en el proyecto y lo cargará de inmediato con sus hojas CSS y scripts, sin cerrar el modal ni reiniciar la sesión.
+### Resolución Inteligente del Punto de Entrada (desde `.js` o `.css`)
+- Si estás editando un archivo `.js` o una hoja de estilos `.css`, no necesitás cambiar manualmente a la pestaña HTML para probarlo.
+- Al tocar **Vista previa**, el motor busca automáticamente qué archivo `.html` en tu proyecto lo importa explícitamente (`<script src="...">` o `<link href="...">`) o toma el `index.html` del proyecto para compilar y mostrar la aplicación completa en contexto.
+- En la barra superior del visor verás qué documento HTML se está renderizando (por ejemplo `index.html`) y contás con un botón para alternar a ejecución aislada si querés probar el script JS en solitario.
+
+### Navegación Multi-Página e Historial Web
+- Si tu proyecto tiene múltiples páginas (`index.html`, `catalogo.html`, `contacto.html`), podés hacer clic libremente en cualquier enlace relativo (`<a href="catalogo.html">`, `<a href="./nosotros.html">` o `<a href="../blog/post.html">`) o enviar formularios (`<form action="...">`).
+- El visor intercepta la navegación sin recargas molestas y resuelve de forma inteligente el archivo destino en tu workspace.
+- **Botones de historial (Atrás / Adelante):** navegá entre las páginas visitadas exactamente igual que en un navegador real.
+- **Selector desplegable de páginas HTML:** en la cabecera del visor podés cambiar directamente entre cualquier archivo `.html` existente en el proyecto en un toque.
 
 ### Emulador de medidas responsivas
 En la barra superior del modal de vista previa podés alternar el tamaño de pantalla:
 - **390px (Móvil):** simula la visualización en teléfonos modernos.
 - **820px (Tablet / iPad):** ajusta el contenedor al ancho clásico de tablets.
 - **100% (Escritorio):** aprovecha todo el ancho disponible del diálogo.
+
+### Base de Datos SQLite Interactiva en Vivo (`.sql`)
+- Al abrir una pestaña con un archivo `.sql` y tocar **Vista previa**, se inicia una base de datos SQLite completa en memoria vía WebAssembly (`sql.js`).
+- Ejecuta tus sentencias DDL y DML (`CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`) mostrando el conteo de filas afectadas y los tiempos de ejecución.
+- Si tu script contiene consultas `SELECT`, las presenta en **tablas HTML formateadas y responsivas** con scroll horizontal cómodo al tacto.
+- **Consola interactiva de consultas:** podés escribir sentencias SQL adicionales en la caja inferior y ejecutarlas con el botón **Ejecutar Consulta** o el atajo `Ctrl + Enter`.
+- **Exportación de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`.
+
+### Compilador y Ejecutor de C y C++ (`.c`, `.cpp`, `.h`)
+- Soporte para programar en C (estándar C17) y C++ (estándar C++20) con compilación en la nube mediante la API de Wandbox y GCC.
+- **Soporte multi-archivo automático:** si tu proyecto incluye archivos de cabecera (`.h`, `.hpp`) o archivos fuente complementarios (`.c`, `.cpp`) en la misma carpeta o proyecto, se empaquetan y compilan juntos automáticamente sin configuraciones engorrosas.
+- **Entrada estándar (`stdin`):** contás con un área de texto dedicada para ingresar los datos que tu programa solicitará mediante `scanf` o `cin`.
+- **Compilación en un toque (`Ctrl + Enter`):** botón **Compilar y Ejecutar** con atajo de teclado.
+- **Terminal de ejecución:** muestra el estado de compilación, advertencias (`-Wall`), errores en rojo, salida estándar (`stdout`), salida de error (`stderr`) y código de salida con tiempo de ejecución en milisegundos.
 
 ### Protección contra bucles infinitos (Loop Guard)
 - **JavaScript / HTML:** si un script contiene un `while(true)` o bucle bloqueante, el sistema de protección analiza el código y corta la ejecución a los 2,5 segundos avisando en la consola el número exacto de línea donde se originó el bucle, evitando que Safari se cuelgue.

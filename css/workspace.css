@@ -604,6 +604,35 @@
   display: none;
 }
 
+.preview-nav-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+}
+
+.preview-nav-controls .btn-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.preview-page-select {
+  max-width: 170px;
+  min-height: var(--control-height-sm);
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-xs);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-2);
+  border: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-ink);
+}
+
+.preview-page-select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -1px;
+}
+
 .preview-device-switcher {
   display: inline-flex;
   align-items: center;

@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v17";
+const SHELL_CACHE = "studio-ide-shell-v18";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 const ACORN_CDN_URL = "https://esm.sh/acorn@8.14.0";
 
@@ -34,6 +34,8 @@ const APP_SHELL_URLS = [
   "./js/storage/zipExporter.js",
   "./js/net/networkErrors.js",
   "./js/preview/loopGuard.js",
+  "./js/preview/cRunner.js",
+  "./js/preview/sqlRunner.js",
   "./js/github/githubService.js",
   "./js/github/githubController.js"
 ];
@@ -41,6 +43,7 @@ const APP_SHELL_URLS = [
 const CACHEABLE_CDN_HOSTS = new Set([
   "esm.sh",
   "cdn.jsdelivr.net",
+  "cdnjs.cloudflare.com",
   "fonts.googleapis.com",
   "fonts.gstatic.com"
 ]);

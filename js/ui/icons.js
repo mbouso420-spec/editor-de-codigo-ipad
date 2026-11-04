@@ -44,6 +44,7 @@ const ICONS = {
   gitCompare: '<circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><path d="M11 18H8a2 2 0 0 1-2-2V9"></path>',
   terminal: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line>',
   chevronDown: '<path d="m6 9 6 6 6-6"></path>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"></path>',
   chevronRight: '<path d="m9 18 6-6-6-6"></path>'
 };
 

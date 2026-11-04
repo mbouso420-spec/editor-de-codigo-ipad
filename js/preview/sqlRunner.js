@@ -1,0 +1,565 @@
+/**
+ * Motor interactivo de SQLite en memoria para archivos .sql en la Vista Previa.
+ * Utiliza sql.js (compilado a WebAssembly) cargado desde CDN autorizado por CSP.
+ * Permite ejecutar DDL/DML, tablas formateadas para SELECT, consultas interactivas y exportación a CSV/JSON.
+ */
+
+/**
+ * Convierte un conjunto de resultados de sql.js a formato CSV estándar.
+ * @param {Array<{ columns: string[], values: any[][] }>} results
+ * @returns {string}
+ */
+export function convertResultsToCsv(results) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return "";
+  }
+
+  const sections = [];
+  for (const res of results) {
+    if (!res || !Array.isArray(res.columns)) continue;
+    const lines = [];
+
+    // Cabeceras
+    lines.push(res.columns.map(escapeCsvField).join(","));
+
+    // Filas
+    if (Array.isArray(res.values)) {
+      for (const row of res.values) {
+        if (!Array.isArray(row)) continue;
+        lines.push(row.map(escapeCsvField).join(","));
+      }
+    }
+
+    sections.push(lines.join("\r\n"));
+  }
+
+  return sections.join("\r\n\r\n");
+}
+
+function escapeCsvField(val) {
+  if (val === null || val === undefined) return "";
+  const str = String(val);
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Convierte los resultados de sql.js a una estructura JSON limpia con nombres de columna como claves.
+ * @param {Array<{ columns: string[], values: any[][] }>} results
+ * @returns {Array<Record<string, any>>}
+ */
+export function convertResultsToJson(results) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return [];
+  }
+
+  const out = [];
+  for (const res of results) {
+    if (!res || !Array.isArray(res.columns) || !Array.isArray(res.values)) continue;
+    const cols = res.columns;
+    for (const row of res.values) {
+      if (!Array.isArray(row)) continue;
+      const obj = {};
+      for (let i = 0; i < cols.length; i += 1) {
+        obj[cols[i]] = row[i] !== undefined ? row[i] : null;
+      }
+      out.push(obj);
+    }
+  }
+
+  return out;
+}
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Construye el documento HTML completo del visor SQL interactivo para el iframe.
+ * @param {{ path: string, shortName: string, content: string }} sqlFile
+ * @param {Array<{ path: string, content: string }>} [sameFolderFiles=[]]
+ * @returns {string}
+ */
+export function buildSqlRunnerPreview(sqlFile, sameFolderFiles = []) {
+  const safeTitle = escapeHtml(sqlFile.shortName || "consulta.sql");
+  const safeContent = JSON.stringify(sqlFile.content || "").replace(/</g, "\\u003c");
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${safeTitle} — SQLite en Vivo</title>
+  <style>
+    :root {
+      --bg: oklch(15% 0.011 255);
+      --card: oklch(20.5% 0.014 255);
+      --card-alt: oklch(17.5% 0.012 255);
+      --border: oklch(33% 0.016 255 / 0.65);
+      --border-focus: oklch(72% 0.145 252);
+      --ink: oklch(94.5% 0.007 255);
+      --ink-dim: oklch(81% 0.012 255);
+      --muted: oklch(67% 0.014 255);
+      --accent: oklch(74% 0.13 252);
+      --accent-solid: oklch(52% 0.165 252);
+      --accent-hover: oklch(57% 0.165 252);
+      --accent-ink: oklch(98% 0.005 252);
+      --ok: oklch(66% 0.14 152);
+      --ok-soft: oklch(66% 0.14 152 / 0.18);
+      --warn: oklch(74% 0.14 75);
+      --err: oklch(62% 0.18 25);
+      --err-soft: oklch(62% 0.18 25 / 0.18);
+      --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .sql-shell {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .sql-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .sql-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sql-title {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sql-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .sql-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card-alt);
+      color: var(--ink);
+      transition: background 120ms ease;
+    }
+    .btn:hover { background: oklch(24% 0.015 255); }
+    .btn-primary {
+      background: var(--accent-solid);
+      color: var(--accent-ink);
+      border-color: transparent;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .sql-query-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sql-query-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .sql-textarea {
+      width: 100%;
+      height: 72px;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+    .sql-textarea:focus {
+      outline: 2px solid var(--border-focus);
+      outline-offset: -1px;
+    }
+    .sql-query-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sql-hint {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .sql-results-container {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .sql-result-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .sql-card-head {
+      padding: 8px 14px;
+      background: var(--card-alt);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .sql-card-query {
+      font-family: var(--font-mono);
+      color: var(--ink-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 75%;
+    }
+    .sql-card-count {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .sql-table-wrap {
+      overflow-x: auto;
+      max-height: 380px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+      font-family: var(--font-mono);
+    }
+    th {
+      background: oklch(18% 0.013 255);
+      color: var(--accent);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td {
+      padding: 7px 12px;
+      border-bottom: 1px solid oklch(27% 0.015 255 / 0.5);
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: oklch(22% 0.014 255); }
+    .status-banner {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-ok {
+      background: var(--ok-soft);
+      border: 1px solid var(--ok);
+      color: var(--ok);
+    }
+    .status-err {
+      background: var(--err-soft);
+      border: 1px solid var(--err);
+      color: var(--err);
+      font-family: var(--font-mono);
+      white-space: pre-wrap;
+    }
+    .status-loading {
+      color: var(--warn);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js"></script>
+</head>
+<body>
+  <div class="sql-shell">
+    <div class="sql-header">
+      <div class="sql-title-group">
+        <span class="sql-title">SQLite 3 (En Vivo)</span>
+        <span class="sql-badge">${safeTitle}</span>
+        <span id="engine-status" class="sql-hint status-loading">Iniciando motor SQLite...</span>
+      </div>
+      <div class="sql-actions">
+        <button type="button" id="btn-export-csv" class="btn" title="Descargar resultados en CSV">Exportar CSV</button>
+        <button type="button" id="btn-export-json" class="btn" title="Descargar resultados en JSON">Exportar JSON</button>
+        <button type="button" id="btn-reset-db" class="btn" title="Reiniciar base de datos">Reiniciar DB</button>
+      </div>
+    </div>
+
+    <div class="sql-query-box">
+      <label for="interactive-sql" class="sql-query-label">Consulta SQL adicional sobre la base de datos en memoria:</label>
+      <textarea id="interactive-sql" class="sql-textarea" placeholder="SELECT * FROM tabla WHERE ...;" spellcheck="false"></textarea>
+      <div class="sql-query-footer">
+        <span class="sql-hint">Presioná Ctrl + Enter para ejecutar la consulta</span>
+        <button type="button" id="btn-run-query" class="btn btn-primary">Ejecutar consulta</button>
+      </div>
+    </div>
+
+    <div id="results-area" class="sql-results-container"></div>
+  </div>
+
+  <script>
+    (function () {
+      var initialScript = ${safeContent};
+      var db = null;
+      var lastResults = [];
+      var resultsArea = document.getElementById("results-area");
+      var statusEl = document.getElementById("engine-status");
+      var queryInput = document.getElementById("interactive-sql");
+      var btnRun = document.getElementById("btn-run-query");
+      var btnReset = document.getElementById("btn-reset-db");
+      var btnCsv = document.getElementById("btn-export-csv");
+      var btnJson = document.getElementById("btn-export-json");
+
+      function sendLog(level, text) {
+        try {
+          parent.postMessage({
+            source: "studio-ide-preview",
+            level: level,
+            text: text
+          }, "*");
+        } catch (_) {}
+      }
+
+      function initDatabase() {
+        if (!window.initSqlJs) {
+          statusEl.textContent = "Error: no se pudo cargar sql.js desde CDN.";
+          statusEl.style.color = "var(--err)";
+          return;
+        }
+
+        statusEl.textContent = "Cargando WebAssembly...";
+        window.initSqlJs({
+          locateFile: function (file) {
+            return "https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/" + file;
+          }
+        }).then(function (SQL) {
+          db = new SQL.Database();
+          statusEl.textContent = "Listo para consultas";
+          statusEl.style.color = "var(--ok)";
+          runFullScript(initialScript);
+        }).catch(function (err) {
+          statusEl.textContent = "Error al iniciar SQLite: " + err.message;
+          statusEl.style.color = "var(--err)";
+          sendLog("error", "Error SQLite: " + err.message);
+        });
+      }
+
+      function renderResults(results, queryContext) {
+        if (!results || results.length === 0) {
+          var note = document.createElement("div");
+          note.className = "status-banner status-ok";
+          note.textContent = "✓ Sentencia ejecutada con éxito (sin filas devueltas).";
+          resultsArea.appendChild(note);
+          return;
+        }
+
+        results.forEach(function (res, idx) {
+          var card = document.createElement("div");
+          card.className = "sql-result-card";
+
+          var head = document.createElement("div");
+          head.className = "sql-card-head";
+
+          var querySpan = document.createElement("span");
+          querySpan.className = "sql-card-query";
+          querySpan.textContent = queryContext || ("Resultado #" + (idx + 1));
+
+          var countSpan = document.createElement("span");
+          countSpan.className = "sql-card-count";
+          countSpan.textContent = res.values.length + " fila(s) / " + res.columns.length + " columna(s)";
+
+          head.appendChild(querySpan);
+          head.appendChild(countSpan);
+          card.appendChild(head);
+
+          var tableWrap = document.createElement("div");
+          tableWrap.className = "sql-table-wrap";
+
+          var table = document.createElement("table");
+          var thead = document.createElement("thead");
+          var headerRow = document.createElement("tr");
+
+          res.columns.forEach(function (col) {
+            var th = document.createElement("th");
+            th.textContent = col;
+            headerRow.appendChild(th);
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          var tbody = document.createElement("tbody");
+          res.values.forEach(function (row) {
+            var tr = document.createElement("tr");
+            row.forEach(function (cell) {
+              var td = document.createElement("td");
+              td.textContent = cell !== null && cell !== undefined ? cell : "NULL";
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          tableWrap.appendChild(table);
+          card.appendChild(tableWrap);
+
+          resultsArea.appendChild(card);
+        });
+      }
+
+      function runFullScript(code) {
+        if (!db) return;
+        resultsArea.innerHTML = "";
+        try {
+          var res = db.exec(code);
+          lastResults = res;
+          renderResults(res, "Script inicial (" + ${JSON.stringify(safeTitle)} + ")");
+          sendLog("log", "SQL ejecutado: " + (res.length > 0 ? res.length + " consulta(s) con datos" : "Sentencias DDL/DML exitosas"));
+        } catch (e) {
+          var errDiv = document.createElement("div");
+          errDiv.className = "status-banner status-err";
+          errDiv.textContent = "Error de SQLite: " + e.message;
+          resultsArea.appendChild(errDiv);
+          sendLog("error", "Error SQLite: " + e.message);
+        }
+      }
+
+      function runCustomQuery() {
+        var query = (queryInput.value || "").trim();
+        if (!query || !db) return;
+        try {
+          var res = db.exec(query);
+          if (res && res.length > 0) {
+            lastResults = res;
+          }
+          renderResults(res, query);
+          sendLog("log", "Consulta SQL: " + query + " (" + (res && res[0] ? res[0].values.length : 0) + " filas)");
+          queryInput.value = "";
+        } catch (e) {
+          var errDiv = document.createElement("div");
+          errDiv.className = "status-banner status-err";
+          errDiv.textContent = "Error en consulta: " + e.message;
+          resultsArea.appendChild(errDiv);
+          sendLog("error", "Error SQL: " + e.message);
+        }
+      }
+
+      function downloadBlob(filename, text, mime) {
+        var blob = new Blob([text], { type: mime });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      btnRun.addEventListener("click", runCustomQuery);
+      queryInput.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          runCustomQuery();
+        }
+      });
+
+      btnReset.addEventListener("click", function () {
+        if (window.SQL && window.SQL.Database) {
+          db = new window.SQL.Database();
+          runFullScript(initialScript);
+        }
+      });
+
+      btnCsv.addEventListener("click", function () {
+        if (!lastResults || lastResults.length === 0) {
+          alert("No hay resultados de consultas SELECT para exportar.");
+          return;
+        }
+        var lines = [];
+        lastResults.forEach(function (res) {
+          lines.push(res.columns.join(","));
+          res.values.forEach(function (row) {
+            lines.push(row.map(function (v) {
+              if (v === null || v === undefined) return "";
+              var s = String(v);
+              return s.indexOf(",") !== -1 || s.indexOf('"') !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }).join(","));
+          });
+        });
+        downloadBlob("resultados_sql.csv", lines.join("\\r\\n"), "text/csv;charset=utf-8");
+      });
+
+      btnJson.addEventListener("click", function () {
+        if (!lastResults || lastResults.length === 0) {
+          alert("No hay resultados de consultas SELECT para exportar.");
+          return;
+        }
+        var out = [];
+        lastResults.forEach(function (res) {
+          res.values.forEach(function (row) {
+            var obj = {};
+            res.columns.forEach(function (col, i) {
+              obj[col] = row[i];
+            });
+            out.push(obj);
+          });
+        });
+        downloadBlob("resultados_sql.json", JSON.stringify(out, null, 2), "application/json;charset=utf-8");
+      });
+
+      initDatabase();
+    })();
+  </script>
+</body>
+</html>`;
+}

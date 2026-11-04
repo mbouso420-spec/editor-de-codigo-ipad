@@ -4,7 +4,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 244 tests unitarios pasando al 100% (42 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 264 tests unitarios pasando al 100% (47 suites, 0 fallos).
 
 ---
 
@@ -38,8 +38,11 @@
 - **Enlaces Markdown seguros:** renderizado sanitizado con `target="_blank"` y `rel="noopener noreferrer"`, bloqueando esquemas no seguros (`javascript:`, `data:`).
 - **Acciones directas en bloques de código:** *En cursor*, *Reemplazar selección*, *Copiar* y *Aplicar archivo* con apertura previa del **Visor de Diferencias (Diff)** visual en verde y rojo.
 
-### 3. Vista previa en vivo contextual, Consola y Navegación Multi-Página
-- **Navegación multi-página interna:** enlaces relativos (`<a href="contacto.html">`, `../index.html`) interceptados mediante bridge seguro para navegar fluidamente entre documentos sin recargas de página.
+### 3. Vista previa contextual en vivo, Consola, Multi-Página, SQLite y C/C++
+- **Resolución inteligente de punto de entrada:** al presionar *Vista previa* estando parado en un `.js` o `.css`, el motor busca en el workspace el `.html` que lo referencia directamente o el `index.html` principal, ensayando la aplicación web completa en lugar de correr scripts aislados.
+- **Navegación multi-página e Historial web:** Total Interceptor en el iframe que captura enlaces locales relativos (`<a href="contacto.html">`), envíos de `<form>` y llamadas de navegación programática (`location.assign`), ofreciendo botones de **Atrás / Adelante** y un selector desplegable de páginas HTML en la barra superior.
+- **Bases de datos SQLite en vivo (.sql):** ejecución directa de scripts DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
+- **Compilador y Ejecutor interactivo de C y C++ (.c, .cpp, .h):** compilación con GCC C17 y GCC C++20 vía Wandbox API con soporte multi-archivo automático (enlace de cabeceras `.h`/`.hpp` y fuentes adicionales), entrada interactiva `stdin` para `cin`/`scanf`, atajo `Ctrl + Enter` y terminal de ejecución con `stdout`, `stderr` y códigos de salida.
 - **Selector de medidas responsivas (Device Switcher):** botones de alternancia en la cabecera del visor para probar el diseño en **Móvil (390px)**, **Tablet / iPad (820px)** y **Escritorio (100%)** con transiciones suaves.
 - **Protección contra bucles infinitos (Loop Guard):**
   - **JavaScript / HTML:** instrumentación de bucles vía AST (Acorn) que interrumpe bucles infinitos a los 2,5 s indicando el número de línea exacto para proteger la memoria del iPad.
@@ -60,10 +63,10 @@
 ## Seguridad y Arquitectura Offline
 
 1. **Content Security Policy (CSP) Estricta:**
-   `index.html` declara una directiva CSP restrictiva que autoriza únicamente las APIs oficiales de GitHub y proveedores de IA (`api.github.com`, `generativelanguage.googleapis.com`, `api.groq.com`, `openrouter.ai`, `api.mistral.ai`), CDNs certificados para ESM (`esm.sh`, `cdn.jsdelivr.net`) y orígenes de fuentes seguros (`fonts.googleapis.com`, `fonts.gstatic.com`).
-2. **Service Worker (`studio-ide-shell-v17`):**
+   `index.html` declara una directiva CSP restrictiva que autoriza únicamente las APIs oficiales de GitHub y proveedores de IA (`api.github.com`, `generativelanguage.googleapis.com`, `api.groq.com`, `openrouter.ai`, `api.mistral.ai`), el compilador seguro de C/C++ (`https://wandbox.org`), CDNs certificados para ESM y librerías WebAssembly (`esm.sh`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`) y orígenes de fuentes seguros (`fonts.googleapis.com`, `fonts.gstatic.com`).
+2. **Service Worker (`studio-ide-shell-v18`):**
    - Estrategia **Network-First** para el App Shell propio garantizando la versión más fresca con internet y fallback offline automático.
-   - Pre-cacheo de módulos críticos (incluyendo el analizador sintáctico Acorn) en `RUNTIME_CACHE` durante el evento `install`.
+   - Pre-cacheo de módulos críticos (incluyendo el analizador sintáctico Acorn y los motores de ejecución de C/C++ y SQL) en `RUNTIME_CACHE` durante el evento `install`.
 3. **Privacidad de credenciales:**
    Las API Keys y tokens personales (PAT) de GitHub nunca se envían a servidores intermedios; residen exclusivamente en `localStorage` o `sessionStorage` según la preferencia del usuario.
 4. **Empaquetador ZIP Nativo:**
@@ -77,7 +80,7 @@
 .
 ├── index.html                  # Shell principal, CSP, diálogos modales accesibles y maquetación
 ├── manifest.json               # Manifiesto Web App (PWA standalone para iPadOS y escritorio)
-├── sw.js                       # Service Worker v17 (App Shell + Runtime Cache de Acorn/CDNs)
+├── sw.js                       # Service Worker v18 (App Shell + Runtime Cache de Acorn/CDNs)
 ├── .nojekyll                   # Desactiva el procesamiento de Jekyll en GitHub Pages
 ├── README.md                   # Documentación técnica y arquitectura de la solución
 ├── MANUAL_DE_USUARIO.md        # Manual exhaustivo para el usuario final (iPad y PC)
@@ -91,7 +94,7 @@
 │   ├── layout.css              # 3 islas, drawers para Stage Manager y gestión de visualViewport
 │   ├── editor.css              # Estilos de pestañas, CodeMirror 6 y scrollbars
 │   ├── chat.css                # Panel de IA, medidor de tokens y Markdown con enlaces seguros
-│   ├── workspace.css           # Árbol de archivos, menú contextual, modal de ramas, Diff y visor responsivo
+│   ├── workspace.css           # Árbol de archivos, menú contextual, modal de ramas, Diff, visor y terminal
 │   └── app.css                 # Importador central y utilidades globales
 ├── js/
 │   ├── app.js                  # Orquestador central de estado, atajos globales y diálogos
@@ -112,16 +115,18 @@
 │   ├── net/
 │   │   └── networkErrors.js    # Manejo amigable y categorización de fallas de red
 │   ├── preview/
-│   │   └── loopGuard.js        # Protección contra bucles infinitos en JS/HTML vía AST
+│   │   ├── loopGuard.js        # Protección contra bucles infinitos en JS/HTML vía AST
+│   │   ├── sqlRunner.js        # Motor de bases de datos SQLite interactivo con sql.js (WebAssembly)
+│   │   └── cRunner.js          # Compilador y ejecutor interactivo multi-archivo de C y C++ (Wandbox)
 │   └── ui/
 │       ├── layout.js           # Re-clamp de paneles, rotación y Stage Manager
 │       ├── explorerController.js # Árbol del explorador, long-press, duplicación y scroll
 │       ├── symbolBar.js        # Barra de símbolos dinámicos según el lenguaje
 │       ├── quickOpenModal.js   # Paleta Cmd+P con soporte de salto a línea (:num)
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
-│       ├── livePreviewModal.js # Previsualización multi-página y switcher de medidas
+│       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 244 pruebas unitarias
+└── tests/                      # Suite automatizada con 264 pruebas unitarias
 ```
 
 ---
@@ -135,10 +140,10 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **244 pruebas unitarias ejecutadas.**
-- **42 suites completadas.**
+- **264 pruebas unitarias ejecutadas.**
+- **47 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
-- Tiempo de ejecución: **~2.2 segundos.**
+- Tiempo de ejecución: **~2.7 segundos.**
 
 ---
 

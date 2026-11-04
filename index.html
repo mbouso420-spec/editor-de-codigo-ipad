@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://esm.sh https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://generativelanguage.googleapis.com https://api.groq.com https://openrouter.ai https://api.mistral.ai https://cdn.jsdelivr.net https://esm.sh; img-src 'self' data: https: blob:; frame-src 'self' blob: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://esm.sh https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://generativelanguage.googleapis.com https://api.groq.com https://openrouter.ai https://api.mistral.ai https://cdn.jsdelivr.net https://esm.sh https://wandbox.org https://cdnjs.cloudflare.com; img-src 'self' data: https: blob:; frame-src 'self' blob: data:;">
   <meta name="theme-color" content="#10131a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -632,6 +632,15 @@
         </div>
 
         <div class="preview-toolbar-controls">
+          <div class="preview-nav-controls" role="group" aria-label="Navegación de páginas">
+            <button type="button" id="btn-preview-back" class="btn btn-ghost btn-sm btn-icon" title="Página anterior" disabled>
+              <span data-icon="chevronLeft"></span>
+            </button>
+            <button type="button" id="btn-preview-forward" class="btn btn-ghost btn-sm btn-icon" title="Página siguiente" disabled>
+              <span data-icon="chevronRight"></span>
+            </button>
+          </div>
+          <select id="preview-page-select" class="field-control code-font preview-page-select" aria-label="Página HTML activa" hidden></select>
           <div class="preview-device-switcher" role="radiogroup" aria-label="Tamaño de emulación de pantalla">
             <button type="button" class="btn btn-ghost btn-sm preview-device-btn" data-device="mobile" title="Móvil (390px)">
               <span>390px</span>

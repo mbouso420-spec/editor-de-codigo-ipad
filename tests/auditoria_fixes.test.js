@@ -14,7 +14,9 @@ const { parseQuickOpenQuery } = await import("../js/ui/quickOpenModal.js");
 const { generateDuplicatePath } = await import("../js/ui/explorerController.js");
 const { buildZipArchive, computeCrc32, getDosDateTime } = await import("../js/storage/zipExporter.js");
 const { formatStorageBytes, getStorageQuotaEstimate } = await import("../js/storage/storageQuota.js");
-const { resolveRelativePath } = await import("../js/ui/livePreviewModal.js");
+const { resolveRelativePath, findBestHtmlEntrypoint, findTargetHtmlFile } = await import("../js/ui/livePreviewModal.js");
+const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
+const { buildWandboxPayload, compileAndRunWandbox } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
 describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
@@ -380,6 +382,211 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
       } finally {
         globalThis.fetch = originalFetch;
       }
+    });
+  });
+
+  describe("Fase 5: Motor de Vista Previa Evolucionado (Entrypoints, Multi-Página, C/C++ y SQL)", () => {
+    describe("Resolución Inteligente de Entrypoints (findBestHtmlEntrypoint)", () => {
+      const allFiles = [
+        { path: "index.html", shortName: "index.html", content: '<!DOCTYPE html><html><head><script src="app.js"></script></head><body>Raíz</body></html>' },
+        { path: "app.js", shortName: "app.js", content: "console.log('root app');" },
+        { path: "admin/index.html", shortName: "index.html", content: '<!DOCTYPE html><html><head><link rel="stylesheet" href="admin.css"></head><body>Admin</body></html>' },
+        { path: "admin/admin.css", shortName: "admin.css", content: "body { background: black; }" },
+        { path: "admin/custom.js", shortName: "custom.js", content: "console.log('admin custom');" },
+        { path: "landing/promo.html", shortName: "promo.html", content: '<!DOCTYPE html><html><head><script src="../shared/util.js"></script></head><body>Promo</body></html>' },
+        { path: "shared/util.js", shortName: "util.js", content: "export const pi = 3.14;" }
+      ];
+
+      test("prioriza HTML que enlaza explícitamente el script JS mediante <script src=...>", () => {
+        const bestForUtil = findBestHtmlEntrypoint(allFiles, { path: "shared/util.js", shortName: "util.js" });
+        assert.ok(bestForUtil);
+        assert.equal(bestForUtil.path, "landing/promo.html");
+      });
+
+      test("prioriza HTML que enlaza explícitamente el stylesheet CSS mediante <link href=...>", () => {
+        const bestForCss = findBestHtmlEntrypoint(allFiles, { path: "admin/admin.css", shortName: "admin.css" });
+        assert.ok(bestForCss);
+        assert.equal(bestForCss.path, "admin/index.html");
+      });
+
+      test("si no hay referencia directa, toma index.html en la misma carpeta", () => {
+        const bestForCustom = findBestHtmlEntrypoint(allFiles, { path: "admin/custom.js", shortName: "custom.js" });
+        assert.ok(bestForCustom);
+        assert.equal(bestForCustom.path, "admin/index.html");
+      });
+
+      test("si no hay index.html en la misma carpeta, toma index.html en la raíz del proyecto", () => {
+        const otherFiles = [
+          { path: "index.html", shortName: "index.html", content: "<html><body>Raíz</body></html>" },
+          { path: "sub/modulo.js", shortName: "modulo.js", content: "console.log(1);" }
+        ];
+        const best = findBestHtmlEntrypoint(otherFiles, { path: "sub/modulo.js", shortName: "modulo.js" });
+        assert.ok(best);
+        assert.equal(best.path, "index.html");
+      });
+
+      test("si no hay index.html, toma el primer HTML disponible en el workspace", () => {
+        const otherFiles = [
+          { path: "vistas/home.html", shortName: "home.html", content: "<html><body>Home</body></html>" },
+          { path: "scripts/main.js", shortName: "main.js", content: "console.log(1);" }
+        ];
+        const best = findBestHtmlEntrypoint(otherFiles, { path: "scripts/main.js", shortName: "main.js" });
+        assert.ok(best);
+        assert.equal(best.path, "vistas/home.html");
+      });
+
+      test("devuelve null si no existe ningún archivo HTML en todo el workspace", () => {
+        const jsOnlyFiles = [
+          { path: "scripts/main.js", shortName: "main.js", content: "console.log(1);" },
+          { path: "scripts/util.js", shortName: "util.js", content: "console.log(2);" }
+        ];
+        const best = findBestHtmlEntrypoint(jsOnlyFiles, { path: "scripts/main.js", shortName: "main.js" });
+        assert.equal(best, null);
+      });
+    });
+
+    describe("Navegación Multi-Página Tolerante (findTargetHtmlFile)", () => {
+      const workspaceFiles = [
+        { path: "index.html", shortName: "index.html", content: "<html><body>Home</body></html>" },
+        { path: "catalogo.html", shortName: "catalogo.html", content: "<html><body>Catálogo</body></html>" },
+        { path: "vistas/contacto.html", shortName: "contacto.html", content: "<html><body>Contacto</body></html>" },
+        { path: "vistas/sub/detalle.html", shortName: "detalle.html", content: "<html><body>Detalle</body></html>" }
+      ];
+
+      test("resuelve enlaces relativos simples (catalogo.html)", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "catalogo.html");
+        assert.ok(target);
+        assert.equal(target.path, "catalogo.html");
+      });
+
+      test("resuelve enlaces con ./ y ../ respetando la carpeta del HTML activo", () => {
+        const fromSub = findTargetHtmlFile(workspaceFiles, "vistas/sub/detalle.html", "../contacto.html");
+        assert.ok(fromSub);
+        assert.equal(fromSub.path, "vistas/contacto.html");
+
+        const fromVistas = findTargetHtmlFile(workspaceFiles, "vistas/contacto.html", "../index.html");
+        assert.ok(fromVistas);
+        assert.equal(fromVistas.path, "index.html");
+      });
+
+      test("resuelve enlaces absolutos (/vistas/contacto.html)", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "/vistas/contacto.html");
+        assert.ok(target);
+        assert.equal(target.path, "vistas/contacto.html");
+      });
+
+      test("resuelve enlaces sin extensión (.html implícito)", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "catalogo");
+        assert.ok(target);
+        assert.equal(target.path, "catalogo.html");
+      });
+
+      test("resuelve archivos HTML por coincidencia de nombre base si se movieron de carpeta", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "contacto.html");
+        assert.ok(target);
+        assert.equal(target.path, "vistas/contacto.html");
+      });
+
+      test("limpia querystrings (?id=1) y fragmentos (#seccion)", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "catalogo.html?categoria=libros#top");
+        assert.ok(target);
+        assert.equal(target.path, "catalogo.html");
+      });
+
+      test("devuelve null si el HTML solicitado no existe en el workspace", () => {
+        const target = findTargetHtmlFile(workspaceFiles, "index.html", "inexistente.html");
+        assert.equal(target, null);
+      });
+    });
+
+    describe("Exportadores de Resultados SQL (convertResultsToCsv / convertResultsToJson)", () => {
+      const sampleResults = [
+        {
+          columns: ["id", "nombre", "descripcion", "precio"],
+          values: [
+            [1, "Notebook Pro", "Con pantalla de 16\", alta gama", 1499.99],
+            [2, "Mouse USB", "Cable reforzado, 1.8m", 25.50]
+          ]
+        }
+      ];
+
+      test("convertResultsToCsv genera cabeceras y filas con escape de comillas y comas", () => {
+        const csv = convertResultsToCsv(sampleResults);
+        assert.ok(csv.includes("id,nombre,descripcion,precio"));
+        assert.ok(csv.includes('1,Notebook Pro,"Con pantalla de 16"", alta gama",1499.99'));
+        assert.ok(csv.includes('2,Mouse USB,"Cable reforzado, 1.8m",25.5'));
+      });
+
+      test("convertResultsToCsv devuelve cadena vacía para resultados vacíos", () => {
+        assert.equal(convertResultsToCsv([]), "");
+        assert.equal(convertResultsToCsv(null), "");
+      });
+
+      test("convertResultsToJson transforma resultados tabulares en array de objetos clave-valor", () => {
+        const json = convertResultsToJson(sampleResults);
+        assert.equal(json.length, 2);
+        assert.equal(json[0].id, 1);
+        assert.equal(json[0].nombre, "Notebook Pro");
+        assert.equal(json[0].precio, 1499.99);
+        assert.equal(json[1].id, 2);
+        assert.equal(json[1].nombre, "Mouse USB");
+      });
+    });
+
+    describe("Compilador y Ejecutor C/C++ (buildWandboxPayload / compileAndRunWandbox)", () => {
+      test("buildWandboxPayload selecciona gcc-head-c y c17 para archivos .c", () => {
+        const payload = buildWandboxPayload({
+          activeFile: { path: "main.c", content: '#include <stdio.h>\nint main(){ printf("hola"); return 0; }' }
+        });
+        assert.equal(payload.compiler, "gcc-head-c");
+        assert.ok(payload.options.includes("c17"));
+        assert.equal(payload.codes.length, 0);
+      });
+
+      test("buildWandboxPayload selecciona gcc-head y c++20 para archivos .cpp/.hpp", () => {
+        const payload = buildWandboxPayload({
+          activeFile: { path: "main.cpp", content: '#include <iostream>\nint main(){ std::cout << "hola"; }' }
+        });
+        assert.equal(payload.compiler, "gcc-head");
+        assert.ok(payload.options.includes("c++20"));
+      });
+
+      test("buildWandboxPayload empaqueta headers compañeros en codes y fuentes .c/.cpp en compiler-option-raw", () => {
+        const payload = buildWandboxPayload({
+          activeFile: { path: "src/main.cpp", content: '#include "math.hpp"\nint main(){ return add(1,2); }' },
+          companionFiles: [
+            { path: "src/math.hpp", content: "int add(int a, int b);" },
+            { path: "src/math.cpp", content: '#include "math.hpp"\nint add(int a, int b){ return a + b; }' }
+          ],
+          stdin: "42\n"
+        });
+
+        assert.equal(payload.stdin, "42\n");
+        assert.equal(payload.codes.length, 2);
+        const headerCode = payload.codes.find((c) => c.file === "math.hpp");
+        assert.ok(headerCode, "Debe incluir el header math.hpp en codes");
+
+        const rawOpt = payload["compiler-option-raw"];
+        assert.ok(rawOpt.includes("math.cpp"), "Debe incluir el archivo fuente companion en compiler-option-raw para compilación conjunta");
+      });
+
+      test("compileAndRunWandbox procesa salida estándar y códigos de estado", async () => {
+        const mockFetch = async () => {
+          return new Response(
+            JSON.stringify({
+              status: "0",
+              program_output: "Resultado: 42\n",
+              program_error: ""
+            }),
+            { status: 200 }
+          );
+        };
+
+        const res = await compileAndRunWandbox({ compiler: "gcc-head", code: "..." }, mockFetch);
+        assert.equal(res.status, 0);
+        assert.equal(res.success, true);
+        assert.equal(res.stdout, "Resultado: 42\n");
+      });
     });
   });
 });
