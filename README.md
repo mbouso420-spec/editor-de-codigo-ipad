@@ -33,9 +33,12 @@
   - En archivos **`.css`**: previsualiza los estilos aplicados sobre el `.html` de su misma carpeta.
   - En lenguajes compilados de escritorio (**`.c`**, **`.cpp`**, **`.sql`**, etc.): informa claramente que la vista previa en vivo no aplica a esa extensión.
 
-### 4. Persistencia offline (`IndexedDB`) y Sincronización con GitHub
+### 4. Persistencia offline (`IndexedDB`) y Sincronización instantánea con GitHub
 - Autoguardado continuo en **`IndexedDB`** con solicitud de almacenamiento persistente (`navigator.storage.persist()`) para proteger tus proyectos en Safari iPadOS incluso trabajando sin conexión.
-- Integración directa con la API oficial de **GitHub (`Octokit` / REST v3)**: descarga repositorios completos al iPad, detecta archivos nuevos, editados o eliminados, permite inspeccionar el **Diff** de cada cambio y publica **Commits + Push atómicos** directamente a tu rama.
+- Integración directa con la API oficial de **GitHub (`Octokit` / REST v3)**:
+  - **Apertura instantánea sin descargar todo:** una vez conectado tu token, tus repositorios aparecen directamente en el selector superior del **Explorador** (`Mis repos de GitHub`). Al elegir cualquiera, el árbol completo de carpetas y archivos carga al instante y cada archivo se trae bajo demanda recién cuando lo tocás.
+  - **Copia offline opcional:** si vas a viajar o quedarte sin Wi-Fi, podés tocar el icono de nube en el Explorador (**Guardar copia offline**) para descargar el repositorio entero al iPad (`[Offline]`).
+  - **Diff y Commit atómico:** detecta archivos nuevos, editados o eliminados, permite inspeccionar el **Diff** en verde/rojo y publica **Commits + Push** directamente a tu rama (incluso en repositorios recién creados vacíos).
 
 ---
 

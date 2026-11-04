@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v9";
+const SHELL_CACHE = "studio-ide-shell-v10";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 
 const APP_SHELL_URLS = [

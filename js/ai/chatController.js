@@ -26,7 +26,8 @@ export function initChatController({
   onInsertAtCursor,
   onReplaceSelection,
   onApplyWholeFile,
-  onConversationChange
+  onConversationChange,
+  onKeysImported
 }) {
   const settingsBtn = document.getElementById("btn-ai-settings");
   const clearChatBtn = document.getElementById("btn-ai-clear-chat");
@@ -245,6 +246,7 @@ export function initChatController({
         const count = importKeysBundle(input.value.trim());
         close();
         syncSettingsForm();
+        onKeysImported?.();
         if (providerHelpEl) {
           providerHelpEl.textContent = `Se importaron ${count} clave(s) en este dispositivo.`;
         }

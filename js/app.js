@@ -8,6 +8,13 @@ import { createEditorManager } from "./editor/editorManager.js";
 import { initChatController } from "./ai/chatController.js";
 import { initGithubController } from "./github/githubController.js";
 import {
+  downloadBatchBlobs,
+  fetchRepoTreeIndex,
+  fetchSingleRepoBlob,
+  getGithubToken
+} from "./github/githubService.js";
+import {
+  cacheSingleGithubFileContent,
   createLocalProject,
   deleteProject,
   deleteProjectEntry,
@@ -15,8 +22,10 @@ import {
   getProject,
   getProjectEntries,
   getSavedActiveProjectId,
+  hydrateLazyGithubProject,
   inferFileMeta,
   listProjects,
+  markProjectOfflineCached,
   renameProjectEntry,
   requestPersistentStorage,
   saveProjectChatHistory,
@@ -116,6 +125,15 @@ async function initApp() {
     },
     async onRenameEntry(oldPath, newPath, isFolder) {
       await flushPendingSaves();
+      const affectedUnloaded = filesOnly.filter(
+        (f) =>
+          f.contentLoaded === false &&
+          (f.id === oldPath || (isFolder && f.id.startsWith(`${oldPath}/`)))
+      );
+      if (affectedUnloaded.length > 0) {
+        await ensureFilesLoaded(affectedUnloaded);
+      }
+
       await renameProjectEntry(activeProject.id, oldPath, newPath, isFolder);
 
       // Actualizar pestañas abiertas afectadas por el renombrado
@@ -161,9 +179,45 @@ async function initApp() {
       renderWorkspaceView();
       await github.refreshTopbarBadge();
     },
-    async onSwitchProject(nextProjectId) {
+    async onSwitchProject(selectedValue) {
       await flushPendingSaves();
-      await switchProject(nextProjectId);
+      if (selectedValue.startsWith("ghlive::")) {
+        const parts = selectedValue.split("::");
+        const fullName = parts[1] || "";
+        const defaultBranch = parts[2] || "main";
+        const [owner, repo] = fullName.split("/");
+        if (!owner || !repo) return;
+
+        explorer.setAutosaveStatus(`Abriendo ${fullName}…`);
+        try {
+          const index = await fetchRepoTreeIndex({
+            token: getGithubToken(),
+            owner,
+            repo,
+            branch: defaultBranch
+          });
+          const createdProj = await hydrateLazyGithubProject({
+            owner,
+            repo,
+            branch: index.branch || defaultBranch,
+            commitSha: index.commitSha,
+            entries: index.entries
+          });
+          projects = await listProjects();
+          await switchProject(createdProj.id, true);
+          explorer.setAutosaveStatus(
+            `Árbol de ${repo} listo (${index.entries.length} archivos bajo demanda)`
+          );
+        } catch (error) {
+          explorer.renderProjects(projects, activeProject.id);
+          explorer.setAutosaveStatus(
+            error instanceof Error ? error.message : "No se pudo conectar con GitHub"
+          );
+        }
+        return;
+      }
+
+      await switchProject(selectedValue);
     },
     async onCreateProject(name) {
       await flushPendingSaves();
@@ -197,9 +251,17 @@ async function initApp() {
       }
       await github.refreshTopbarBadge();
     },
-    onDownloadActiveFile() {
+    async onDownloadActiveFile() {
       const current = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
       if (!current) return;
+      try {
+        await ensureFileContentLoaded(current);
+      } catch (error) {
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "No se pudo descargar el archivo desde GitHub"
+        );
+        return;
+      }
       const filename = current.path.split("/").pop() || "archivo.txt";
       const blob = new Blob([current.content], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -210,8 +272,50 @@ async function initApp() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+    },
+    async onSaveRepoOffline() {
+      if (activeProject.kind !== "github" || !activeProject.github) return;
+      await flushPendingSaves();
+
+      const pending = filesOnly.filter((f) => f.contentLoaded === false && f.blobSha);
+      if (pending.length === 0) {
+        await markProjectOfflineCached(activeProject.id, true);
+        activeProject.offlineCached = true;
+        projects = await listProjects();
+        explorer.renderProjects(projects, activeProject.id);
+        syncOfflineButtonState();
+        explorer.setAutosaveStatus("Copia offline completa en el iPad");
+        return;
+      }
+
+      explorer.setOfflineRepoState({
+        visible: true,
+        isOfflineReady: false,
+        pendingCount: pending.length,
+        busy: true
+      });
+      explorer.setAutosaveStatus(`Guardando copia offline (0/${pending.length})…`);
+
+      try {
+        await ensureFilesLoaded(pending, (done, total) => {
+          explorer.setAutosaveStatus(`Guardando copia offline (${done}/${total})…`);
+        });
+        await markProjectOfflineCached(activeProject.id, true);
+        activeProject.offlineCached = true;
+        projects = await listProjects();
+        explorer.renderProjects(projects, activeProject.id);
+        syncOfflineButtonState();
+        explorer.setAutosaveStatus("Copia offline guardada en el iPad");
+      } catch (error) {
+        syncOfflineButtonState();
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "No se pudo completar la copia offline"
+        );
+      }
     }
   });
+
+  const PREVIEWABLE_LANGS = new Set(["html", "javascript", "css", "python"]);
 
   initLivePreviewModal({
     getWorkspaceSnapshot() {
@@ -219,6 +323,39 @@ async function initApp() {
         files: filesOnly,
         activeFileId
       };
+    },
+    async onBeforePreview() {
+      await flushPendingSaves();
+      if (activeProject.kind !== "github" || !activeFileId) return;
+      const activeFile = filesOnly.find((f) => f.id === activeFileId);
+      if (!activeFile || !PREVIEWABLE_LANGS.has(activeFile.lang)) return;
+
+      const lastSlash = activeFile.path.lastIndexOf("/");
+      const folderPrefix = lastSlash === -1 ? "" : `${activeFile.path.slice(0, lastSlash + 1)}`;
+
+      const needed = filesOnly.filter((f) => {
+        if (f.contentLoaded !== false || !f.blobSha) return false;
+        if (folderPrefix && !f.path.startsWith(folderPrefix)) return false;
+        if (activeFile.lang === "python") {
+          return f.lang === "python";
+        }
+        return (
+          f.lang === "html" ||
+          f.lang === "javascript" ||
+          f.lang === "css" ||
+          f.path.endsWith(".json")
+        );
+      });
+
+      if (needed.length > 0) {
+        explorer.setAutosaveStatus(`Cargando ${needed.length} archivo(s) para la vista previa…`);
+        try {
+          await ensureFilesLoaded(needed);
+          explorer.setAutosaveStatus("Vista previa lista");
+        } catch {
+          // Si falla la red, abre con los archivos ya disponibles en memoria
+        }
+      }
     }
   });
 
@@ -234,7 +371,7 @@ async function initApp() {
       const otherOpenFiles = openTabIds
         .filter((id) => id !== activeFileId)
         .map((id) => filesOnly.find((f) => f.id === id))
-        .filter(Boolean);
+        .filter((f) => Boolean(f) && f.contentLoaded !== false);
 
       return {
         activeFile,
@@ -266,6 +403,9 @@ async function initApp() {
     onConversationChange(history) {
       activeProject.chatHistory = history;
       void saveProjectChatHistory(activeProject.id, history);
+    },
+    onKeysImported() {
+      void github.syncExplorerReposInBackground();
     }
   });
 
@@ -274,6 +414,9 @@ async function initApp() {
     onFlushPendingSaves: flushPendingSaves,
     onOpenDiff({ title, oldCode, newCode }) {
       diffModal.openReadOnlyDiff({ title, oldCode, newCode });
+    },
+    onReposListChanged(remoteRepos) {
+      explorer.renderProjects(projects, activeProject.id, remoteRepos);
     },
     async onProjectClonedOrSynced(projectId) {
       await flushPendingSaves();
@@ -355,18 +498,12 @@ async function initApp() {
     explorer.setAutosaveStatus("Autoguardado en IndexedDB");
   }
 
-  async function switchProject(projectId, forceClearCache = false) {
+  async function switchProject(projectId, _forceClearCache = false) {
     const nextProj = await getProject(projectId);
     if (!nextProj) return;
 
-    if (forceClearCache) {
-      for (const f of filesOnly) {
-        editor.dropFileState(f.id);
-      }
-    } else {
-      for (const f of filesOnly) {
-        editor.dropFileState(f.id);
-      }
+    for (const f of filesOnly) {
+      editor.dropFileState(f.id);
     }
 
     activeProject = nextProj;
@@ -377,13 +514,29 @@ async function initApp() {
 
     const validPaths = new Set(filesOnly.map((f) => f.id));
     openTabIds = (activeProject.openTabIds || []).filter((id) => validPaths.has(id));
-    if (openTabIds.length === 0 && filesOnly.length > 0) {
+    const shouldAutoOpenFirst =
+      openTabIds.length === 0 &&
+      filesOnly.length > 0 &&
+      (activeProject.kind !== "github" || Boolean(activeProject.offlineCached));
+    if (shouldAutoOpenFirst) {
       openTabIds = [filesOnly[0].id];
     }
     activeFileId =
       activeProject.activeFileId && openTabIds.includes(activeProject.activeFileId)
         ? activeProject.activeFileId
         : openTabIds[0] || null;
+
+    if (activeFileId) {
+      const activeTarget = filesOnly.find((f) => f.id === activeFileId);
+      if (activeTarget && activeTarget.contentLoaded === false) {
+        try {
+          await ensureFileContentLoaded(activeTarget);
+        } catch {
+          openTabIds = openTabIds.filter((id) => id !== activeFileId);
+          activeFileId = openTabIds[0] || null;
+        }
+      }
+    }
 
     explorer.renderProjects(projects, activeProject.id);
     chat.setConversation(activeProject.chatHistory || []);
@@ -408,9 +561,92 @@ async function initApp() {
           icon: meta.icon,
           content: e.content,
           baseContent: e.baseContent,
+          blobSha: e.blobSha || null,
+          contentLoaded: e.contentLoaded !== false,
           trackedInGithub: Boolean(e.trackedInGithub)
         };
       });
+  }
+
+  function syncOfflineButtonState() {
+    if (!activeProject || activeProject.kind !== "github") {
+      explorer.setOfflineRepoState({ visible: false });
+      return;
+    }
+    const pendingCount = filesOnly.filter((f) => f.contentLoaded === false && f.blobSha).length;
+    explorer.setOfflineRepoState({
+      visible: true,
+      isOfflineReady: pendingCount === 0,
+      pendingCount,
+      busy: false
+    });
+  }
+
+  async function ensureFileContentLoaded(fileObj) {
+    if (
+      !fileObj ||
+      fileObj.contentLoaded !== false ||
+      activeProject.kind !== "github" ||
+      !activeProject.github ||
+      !fileObj.blobSha
+    ) {
+      return;
+    }
+
+    const content = await fetchSingleRepoBlob({
+      token: getGithubToken(),
+      owner: activeProject.github.owner,
+      repo: activeProject.github.repo,
+      blobSha: fileObj.blobSha
+    });
+
+    await cacheSingleGithubFileContent(activeProject.id, fileObj.path, content, fileObj.blobSha);
+    fileObj.content = content;
+    fileObj.baseContent = content;
+    fileObj.contentLoaded = true;
+    editor.dropFileState(fileObj.id);
+
+    if (filesOnly.length > 0 && filesOnly.every((f) => f.contentLoaded !== false)) {
+      activeProject.offlineCached = true;
+      await markProjectOfflineCached(activeProject.id, true);
+      projects = await listProjects();
+      explorer.renderProjects(projects, activeProject.id);
+    }
+    syncOfflineButtonState();
+  }
+
+  async function ensureFilesLoaded(fileList, onProgress) {
+    const unloaded = fileList.filter((f) => f && f.contentLoaded === false && f.blobSha);
+    if (unloaded.length === 0 || activeProject.kind !== "github" || !activeProject.github) {
+      return;
+    }
+
+    const loadedItems = await downloadBatchBlobs({
+      token: getGithubToken(),
+      owner: activeProject.github.owner,
+      repo: activeProject.github.repo,
+      entries: unloaded.map((f) => ({ path: f.path, sha: f.blobSha })),
+      onProgress
+    });
+
+    const byPath = new Map(loadedItems.map((item) => [item.path, item]));
+    for (const fileObj of unloaded) {
+      const hit = byPath.get(fileObj.path);
+      if (!hit) continue;
+      await cacheSingleGithubFileContent(activeProject.id, fileObj.path, hit.content, hit.sha);
+      fileObj.content = hit.content;
+      fileObj.baseContent = hit.content;
+      fileObj.contentLoaded = true;
+      editor.dropFileState(fileObj.id);
+    }
+
+    if (filesOnly.length > 0 && filesOnly.every((f) => f.contentLoaded !== false)) {
+      activeProject.offlineCached = true;
+      await markProjectOfflineCached(activeProject.id, true);
+      projects = await listProjects();
+      explorer.renderProjects(projects, activeProject.id);
+    }
+    syncOfflineButtonState();
   }
 
   async function persistTabsState() {
@@ -422,6 +658,19 @@ async function initApp() {
   async function openOrFocusFile(filePath) {
     const target = filesOnly.find((f) => f.id === filePath);
     if (!target) return;
+
+    if (target.contentLoaded === false) {
+      explorer.setAutosaveStatus(`Abriendo ${target.shortName}…`);
+      try {
+        await ensureFileContentLoaded(target);
+        explorer.setAutosaveStatus("Archivo cargado desde GitHub");
+      } catch (error) {
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "Sin conexión para abrir este archivo de GitHub"
+        );
+        return;
+      }
+    }
 
     if (!openTabIds.includes(target.id)) {
       openTabIds.push(target.id);
@@ -447,6 +696,7 @@ async function initApp() {
   function renderWorkspaceView() {
     explorer.renderProjects(projects, activeProject.id);
     explorer.renderTree(entries, activeFileId);
+    syncOfflineButtonState();
     renderTabs();
 
     const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
@@ -525,6 +775,9 @@ async function initApp() {
   }
 
   function isFileDirtyForProject(file) {
+    if (file.contentLoaded === false) {
+      return false;
+    }
     if (activeProject.kind === "github") {
       return !file.trackedInGithub || file.content !== file.baseContent;
     }
@@ -570,6 +823,7 @@ async function initApp() {
   }
 
   await switchProject(activeProject.id);
+  void github.syncExplorerReposInBackground();
 }
 
 function defaultStarterTemplate(path) {

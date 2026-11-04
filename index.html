@@ -138,6 +138,16 @@
           <div class="explorer-io-row">
             <span id="explorer-autosave-status" class="explorer-autosave-note">Autoguardado en IndexedDB</span>
             <div class="panel-actions">
+              <button
+                type="button"
+                id="btn-offline-repo"
+                class="btn btn-ghost btn-sm btn-icon"
+                aria-label="Guardar copia completa del repositorio para usar sin internet"
+                title="Guardar copia offline en el iPad"
+                hidden
+              >
+                <span data-icon="cloudDownload"></span>
+              </button>
               <input type="file" id="explorer-import-input" multiple hidden>
               <button type="button" id="btn-import-files" class="btn btn-ghost btn-sm btn-icon" aria-label="Importar archivos desde el iPad" title="Importar archivos">
                 <span data-icon="upload"></span>
@@ -418,7 +428,7 @@
 
         <section class="gh-section" aria-labelledby="gh-clone-heading">
           <div class="gh-section-head">
-            <h3 id="gh-clone-heading" class="gh-section-title">2. Abrir repositorio en el iPad (IndexedDB)</h3>
+            <h3 id="gh-clone-heading" class="gh-section-title">2. Abrir repositorio o guardar copia sin internet</h3>
           </div>
 
           <div class="field-group">
@@ -449,13 +459,17 @@
             </div>
           </div>
 
-          <div class="field-row">
+          <div class="field-row gh-open-actions">
+            <button type="button" id="btn-gh-open-live" class="btn">
+              <span data-icon="folderOpen"></span>
+              <span>Abrir sin descargar</span>
+            </button>
             <button type="button" id="btn-gh-clone" class="btn">
               <span data-icon="cloudDownload"></span>
-              <span>Descargar archivos al iPad</span>
+              <span>Guardar copia offline</span>
             </button>
           </div>
-          <p id="gh-clone-status" class="gh-status-msg">Descarga los archivos a IndexedDB para editar rápido e incluso sin conexión.</p>
+          <p id="gh-clone-status" class="gh-status-msg">También podés elegir tus repositorios directo en el selector del Explorador sin descargarlos.</p>
         </section>
 
         <section id="gh-sync-section" class="gh-section" aria-labelledby="gh-sync-heading" hidden>

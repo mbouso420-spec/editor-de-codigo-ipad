@@ -319,7 +319,15 @@ export async function entryExists(projectId, rawPath) {
 export async function upsertEntry(
   projectId,
   path,
-  { isFolder = false, content = "", baseContent = null, fromGithub = false, allowOverwrite = true } = {}
+  {
+    isFolder = false,
+    content = "",
+    baseContent = null,
+    fromGithub = false,
+    allowOverwrite = true,
+    blobSha = null,
+    contentLoaded = true
+  } = {}
 ) {
   const cleanPath = normalizePath(path);
   if (!cleanPath) {
@@ -351,6 +359,7 @@ export async function upsertEntry(
           isFolder: true,
           content: "",
           baseContent: "",
+          contentLoaded: true,
           deleted: false,
           updatedAt: Date.now()
         });
@@ -374,6 +383,8 @@ export async function upsertEntry(
     isFolder,
     content: isFolder ? "" : content,
     baseContent: isFolder ? "" : resolvedBase,
+    blobSha: isFolder ? null : blobSha ?? existing?.blobSha ?? null,
+    contentLoaded: isFolder ? true : Boolean(contentLoaded),
     trackedInGithub: Boolean(fromGithub || existing?.trackedInGithub),
     deleted: false,
     updatedAt: Date.now()
@@ -391,6 +402,7 @@ export async function updateFileContent(projectId, path, newContent) {
     return upsertEntry(projectId, cleanPath, { isFolder: false, content: newContent });
   }
   existing.content = newContent;
+  existing.contentLoaded = true;
   existing.deleted = false;
   existing.updatedAt = Date.now();
   await putRecord(STORE_FILES, existing);
@@ -468,11 +480,123 @@ async function removeOrSoftDeleteRecord(item) {
   }
 }
 
+export function makeGithubProjectId(owner, repo, branch) {
+  return `gh-${owner}-${repo}-${branch}`.toLowerCase().replace(/[^a-z0-9-_]/g, "-");
+}
+
 /**
- * Reemplaza o sincroniza un proyecto completo proveniente de un repositorio de GitHub.
+ * Hidrata el árbol de carpetas y archivos de un repositorio de GitHub bajo demanda (sin descargar los archivos),
+ * conservando en caché los archivos que ya hubieran sido abiertos antes si su SHA remoto no cambió.
+ */
+export async function hydrateLazyGithubProject({ owner, repo, branch, commitSha, entries }) {
+  const projectId = makeGithubProjectId(owner, repo, branch);
+  const existingProject = await getProject(projectId);
+
+  const oldEntries = await getAllRawProjectEntries(projectId);
+  const reusableByPath = new Map();
+  for (const old of oldEntries) {
+    if (!old.isFolder && !old.deleted && old.contentLoaded !== false && old.blobSha) {
+      reusableByPath.set(old.path, old);
+    }
+  }
+
+  if (oldEntries.length > 0) {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_FILES, "readwrite");
+      const store = tx.objectStore(STORE_FILES);
+      for (const old of oldEntries) {
+        store.delete(old.key);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  let allLoaded = true;
+  for (const item of entries) {
+    const clean = normalizePath(item.path);
+    const prev = reusableByPath.get(clean);
+    const canReuse = Boolean(prev && prev.blobSha === item.blobSha && prev.content === prev.baseContent);
+
+    if (!canReuse) {
+      allLoaded = false;
+    }
+
+    await upsertEntry(projectId, clean, {
+      isFolder: false,
+      content: canReuse ? prev.content : "",
+      baseContent: canReuse ? prev.baseContent : "",
+      fromGithub: true,
+      allowOverwrite: true,
+      blobSha: item.blobSha,
+      contentLoaded: canReuse
+    });
+  }
+
+  const validPaths = new Set(entries.map((e) => normalizePath(e.path)));
+  const keptTabs = (existingProject?.openTabIds || []).filter((p) => validPaths.has(p));
+
+  const project = {
+    id: projectId,
+    name: `${owner}/${repo} (${branch})`,
+    kind: "github",
+    github: { owner, repo, branch, commitSha },
+    offlineCached: entries.length === 0 || allLoaded,
+    openTabIds: keptTabs,
+    activeFileId:
+      existingProject?.activeFileId && keptTabs.includes(existingProject.activeFileId)
+        ? existingProject.activeFileId
+        : keptTabs[0] || null,
+    chatHistory: Array.isArray(existingProject?.chatHistory) ? existingProject.chatHistory : [],
+    updatedAt: Date.now()
+  };
+
+  await putRecord(STORE_PROJECTS, project);
+  return project;
+}
+
+/**
+ * Guarda en IndexedDB el contenido recién descargado de un único archivo bajo demanda (sin marcarlo como editado).
+ */
+export async function cacheSingleGithubFileContent(projectId, path, content, blobSha = null) {
+  const cleanPath = normalizePath(path);
+  const key = makeFileKey(projectId, cleanPath);
+  const existing = await getRecord(STORE_FILES, key);
+  if (!existing) {
+    return upsertEntry(projectId, cleanPath, {
+      isFolder: false,
+      content,
+      baseContent: content,
+      fromGithub: true,
+      blobSha,
+      contentLoaded: true
+    });
+  }
+  existing.content = content;
+  existing.baseContent = content;
+  existing.contentLoaded = true;
+  if (blobSha) {
+    existing.blobSha = blobSha;
+  }
+  existing.updatedAt = Date.now();
+  await putRecord(STORE_FILES, existing);
+  return existing;
+}
+
+export async function markProjectOfflineCached(projectId, isCached = true) {
+  const project = await getProject(projectId);
+  if (!project) return;
+  project.offlineCached = Boolean(isCached);
+  project.updatedAt = Date.now();
+  await putRecord(STORE_PROJECTS, project);
+}
+
+/**
+ * Reemplaza o sincroniza un proyecto completo proveniente de un repositorio de GitHub (modo copia offline completa).
  */
 export async function hydrateGithubProject({ owner, repo, branch, commitSha, files }) {
-  const projectId = `gh-${owner}-${repo}-${branch}`.toLowerCase().replace(/[^a-z0-9-_]/g, "-");
+  const projectId = makeGithubProjectId(owner, repo, branch);
   const existingProject = await getProject(projectId);
 
   const oldEntries = await getAllRawProjectEntries(projectId);
@@ -495,7 +619,9 @@ export async function hydrateGithubProject({ owner, repo, branch, commitSha, fil
       content: file.content,
       baseContent: file.content,
       fromGithub: true,
-      allowOverwrite: true
+      allowOverwrite: true,
+      blobSha: file.blobSha || null,
+      contentLoaded: true
     });
   }
 
@@ -505,6 +631,7 @@ export async function hydrateGithubProject({ owner, repo, branch, commitSha, fil
     name: `${owner}/${repo} (${branch})`,
     kind: "github",
     github: { owner, repo, branch, commitSha },
+    offlineCached: true,
     openTabIds: existingProject?.openTabIds?.filter((p) => files.some((f) => normalizePath(f.path) === p)) || firstPaths,
     activeFileId: firstPaths[0] || null,
     chatHistory: Array.isArray(existingProject?.chatHistory) ? existingProject.chatHistory : [],
@@ -529,6 +656,7 @@ export async function getPendingGithubChanges(projectId) {
 
   for (const item of all) {
     if (item.isFolder) continue;
+    if (item.contentLoaded === false && !item.deleted) continue;
 
     if (item.deleted && item.trackedInGithub) {
       changes.push({
@@ -576,9 +704,10 @@ export async function markProjectSynced(projectId, newCommitSha) {
     for (const item of all) {
       if (item.deleted) {
         store.delete(item.key);
-      } else if (!item.isFolder) {
+      } else if (!item.isFolder && item.contentLoaded !== false) {
         item.baseContent = item.content;
         item.trackedInGithub = true;
+        item.contentLoaded = true;
         item.updatedAt = Date.now();
         store.put(item);
       }

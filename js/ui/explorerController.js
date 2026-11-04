@@ -14,13 +14,15 @@ export function initExplorerController({
   onCreateProject,
   onDeleteCurrentProject,
   onImportFiles,
-  onDownloadActiveFile
+  onDownloadActiveFile,
+  onSaveRepoOffline
 }) {
   const projectSelect = document.getElementById("explorer-project-select");
   const btnNewProject = document.getElementById("btn-new-project");
   const btnDeleteProject = document.getElementById("btn-delete-project");
   const btnNewFile = document.getElementById("btn-new-file");
   const btnNewFolder = document.getElementById("btn-new-folder");
+  const btnOfflineRepo = document.getElementById("btn-offline-repo");
   const btnImport = document.getElementById("btn-import-files");
   const importInput = document.getElementById("explorer-import-input");
   const btnExport = document.getElementById("btn-export-file");
@@ -139,6 +141,10 @@ export function initExplorerController({
     onDownloadActiveFile();
   });
 
+  btnOfflineRepo?.addEventListener("click", () => {
+    onSaveRepoOffline?.();
+  });
+
   function openInlineCreator({ placeholder, initialValue, ariaLabel, onSubmit }) {
     if (!inlineSlot) return;
     inlineSlot.hidden = false;
@@ -205,15 +211,56 @@ export function initExplorerController({
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  function renderProjects(projects, activeProjectId) {
+  let lastRemoteRepos = [];
+
+  function renderProjects(projects, activeProjectId, remoteGithubRepos = null) {
+    if (Array.isArray(remoteGithubRepos)) {
+      lastRemoteRepos = remoteGithubRepos;
+    }
     if (!projectSelect) return;
     projectSelect.innerHTML = "";
-    for (const proj of projects) {
+
+    const localProjects = projects.filter((p) => p.kind !== "github");
+    const githubProjects = projects.filter((p) => p.kind === "github");
+
+    const localGroup = document.createElement("optgroup");
+    localGroup.label = "En este iPad";
+    for (const proj of localProjects) {
       const opt = document.createElement("option");
       opt.value = proj.id;
-      opt.textContent = proj.kind === "github" ? `GitHub: ${proj.name}` : proj.name;
-      projectSelect.appendChild(opt);
+      opt.textContent = proj.name;
+      localGroup.appendChild(opt);
     }
+    projectSelect.appendChild(localGroup);
+
+    if (githubProjects.length > 0 || lastRemoteRepos.length > 0) {
+      const ghGroup = document.createElement("optgroup");
+      ghGroup.label = "Mis repos de GitHub";
+
+      const seenRepos = new Set();
+      for (const proj of githubProjects) {
+        const opt = document.createElement("option");
+        opt.value = proj.id;
+        opt.textContent = proj.offlineCached ? `${proj.name} [Offline]` : proj.name;
+        ghGroup.appendChild(opt);
+        if (proj.github?.owner && proj.github?.repo) {
+          seenRepos.add(`${proj.github.owner}/${proj.github.repo}`.toLowerCase());
+        }
+      }
+
+      for (const remote of lastRemoteRepos) {
+        if (!remote?.full_name) continue;
+        if (seenRepos.has(remote.full_name.toLowerCase())) continue;
+        const branch = remote.default_branch || "main";
+        const opt = document.createElement("option");
+        opt.value = `ghlive::${remote.full_name}::${branch}`;
+        opt.textContent = remote.full_name;
+        ghGroup.appendChild(opt);
+      }
+
+      projectSelect.appendChild(ghGroup);
+    }
+
     projectSelect.value = activeProjectId;
 
     if (btnDeleteProject) {
@@ -437,10 +484,25 @@ export function initExplorerController({
     }
   }
 
+  function setOfflineRepoState({ visible, isOfflineReady = false, pendingCount = 0, busy = false }) {
+    if (!btnOfflineRepo) return;
+    btnOfflineRepo.hidden = !visible;
+    if (!visible) return;
+
+    btnOfflineRepo.disabled = busy;
+    btnOfflineRepo.classList.toggle("is-offline-ready", Boolean(isOfflineReady));
+    btnOfflineRepo.title = isOfflineReady
+      ? "Copia completa guardada en el iPad (disponible sin internet)"
+      : pendingCount > 0
+        ? `Guardar copia offline en el iPad (${pendingCount} archivos restantes)`
+        : "Guardar copia offline en el iPad";
+  }
+
   return {
     renderProjects,
     renderTree,
-    setAutosaveStatus
+    setAutosaveStatus,
+    setOfflineRepoState
   };
 }
 

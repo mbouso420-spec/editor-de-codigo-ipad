@@ -3,8 +3,10 @@ import {
   clearGithubToken,
   downloadRepoFiles,
   fetchGithubUser,
+  fetchRepoTreeIndex,
   fetchRepositoryBranches,
   fetchUserRepositories,
+  getCachedUserRepositories,
   getGithubToken,
   pushAtomicCommit,
   saveGithubToken
@@ -12,18 +14,20 @@ import {
 import {
   getPendingGithubChanges,
   hydrateGithubProject,
+  hydrateLazyGithubProject,
   markProjectSynced
 } from "../storage/workspaceDb.js";
 
 /**
  * Controlador del flujo de conexión con GitHub (PAT local + Octokit),
- * descarga completa de repositorios a IndexedDB para edición offline en iPad,
+ * apertura instantánea bajo demanda sin descargar todo, copia offline opcional para iPad,
  * previsualización de Diff por archivo y Commit + Push atómico.
  */
 export function initGithubController({
   getActiveProject,
   onFlushPendingSaves,
   onProjectClonedOrSynced,
+  onReposListChanged,
   onOpenDiff
 }) {
   const openDialogBtn = document.getElementById("btn-open-github");
@@ -40,6 +44,7 @@ export function initGithubController({
   const repoSelect = document.getElementById("gh-repo-select");
   const manualRepoInput = document.getElementById("gh-manual-repo");
   const branchSelect = document.getElementById("gh-branch-select");
+  const openLiveBtn = document.getElementById("btn-gh-open-live");
   const cloneBtn = document.getElementById("btn-gh-clone");
   const cloneStatusEl = document.getElementById("gh-clone-status");
 
@@ -104,6 +109,7 @@ export function initGithubController({
   clearTokenBtn?.addEventListener("click", () => {
     clearGithubToken();
     reposCache = [];
+    onReposListChanged?.([]);
     if (tokenInput) tokenInput.value = "";
     if (userStatusEl) userStatusEl.textContent = "Sin sesión";
     if (repoSelect) repoSelect.innerHTML = '<option value="">Conectá tu token para listar repositorios</option>';
@@ -124,6 +130,46 @@ export function initGithubController({
     const fullName = manualRepoInput.value.trim();
     if (fullName.includes("/")) {
       await loadBranchesForRepo(fullName);
+    }
+  });
+
+  openLiveBtn?.addEventListener("click", async () => {
+    await onFlushPendingSaves?.();
+    const token = getGithubToken();
+    const targetFullName = (manualRepoInput?.value || repoSelect?.value || "").trim();
+    const [owner, repo] = targetFullName.split("/");
+    const branch = (branchSelect?.value || "main").trim();
+
+    if (!owner || !repo) {
+      setStatus(cloneStatusEl, "Elegí un repositorio o escribí usuario/repositorio.", "error");
+      return;
+    }
+
+    openLiveBtn.disabled = true;
+    setStatus(cloneStatusEl, `Cargando árbol de ${owner}/${repo} (${branch})…`, "neutral");
+
+    try {
+      const index = await fetchRepoTreeIndex({ token, owner, repo, branch });
+      const project = await hydrateLazyGithubProject({
+        owner,
+        repo,
+        branch: index.branch || branch,
+        commitSha: index.commitSha,
+        entries: index.entries
+      });
+
+      setStatus(
+        cloneStatusEl,
+        `Árbol cargado al instante (${index.entries.length} archivos en el Explorador, sin descargar todo).`,
+        "ok"
+      );
+      await onProjectClonedOrSynced(project.id);
+      await refreshSyncPanel();
+      dialog?.close();
+    } catch (error) {
+      setStatus(cloneStatusEl, error instanceof Error ? error.message : "No se pudo abrir el repositorio.", "error");
+    } finally {
+      openLiveBtn.disabled = false;
     }
   });
 
@@ -201,16 +247,23 @@ export function initGithubController({
     setStatus(pushStatusEl, `Actualizando ${owner}/${repo} (${branch}) desde GitHub…`, "neutral");
 
     try {
-      const { commitSha, files } = await downloadRepoFiles({
-        token,
-        owner,
-        repo,
-        branch
-      });
-      const updated = await hydrateGithubProject({ owner, repo, branch, commitSha, files });
+      let updated;
+      if (project.offlineCached) {
+        const { commitSha, files } = await downloadRepoFiles({ token, owner, repo, branch });
+        updated = await hydrateGithubProject({ owner, repo, branch, commitSha, files });
+      } else {
+        const index = await fetchRepoTreeIndex({ token, owner, repo, branch });
+        updated = await hydrateLazyGithubProject({
+          owner,
+          repo,
+          branch: index.branch || branch,
+          commitSha: index.commitSha,
+          entries: index.entries
+        });
+      }
       await onProjectClonedOrSynced(updated.id);
       await refreshSyncPanel();
-      setStatus(pushStatusEl, "Archivos sincronizados con la última versión remota.", "ok");
+      setStatus(pushStatusEl, "Árbol y archivos sincronizados con la última versión remota.", "ok");
     } catch (error) {
       setStatus(pushStatusEl, error instanceof Error ? error.message : "Error al actualizar.", "error");
     } finally {
@@ -277,6 +330,7 @@ export function initGithubController({
         fetchUserRepositories(token)
       ]);
       reposCache = Array.isArray(repos) ? repos : [];
+      onReposListChanged?.(reposCache);
 
       if (userStatusEl) {
         userStatusEl.textContent = `@${user.login}`;
@@ -410,8 +464,33 @@ export function initGithubController({
     topbarRepoLabel.textContent = count > 0 ? `Commit (${count})` : "Repositorio";
   }
 
+  async function syncExplorerReposInBackground() {
+    const token = getGithubToken();
+    if (!token) {
+      onReposListChanged?.([]);
+      return;
+    }
+
+    const cached = getCachedUserRepositories();
+    if (cached.length > 0) {
+      reposCache = cached;
+      onReposListChanged?.(cached);
+    }
+
+    try {
+      const liveRepos = await fetchUserRepositories(token);
+      if (Array.isArray(liveRepos)) {
+        reposCache = liveRepos;
+        onReposListChanged?.(liveRepos);
+      }
+    } catch {
+      // Silencioso en modo sin conexión: mantiene los repositorios cacheados localmente
+    }
+  }
+
   return {
-    refreshTopbarBadge
+    refreshTopbarBadge,
+    syncExplorerReposInBackground
   };
 }
 

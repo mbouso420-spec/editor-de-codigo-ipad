@@ -15,7 +15,7 @@ const PYTHON_EXTENSIONS = new Set(["py", "pyw"]);
  * - Si la pestaña es .css  -> "Vista previa de CSS" (aplica sobre el HTML de su misma carpeta si existe).
  * - Cualquier otro archivo (.c, .cpp, .sql, etc.) -> informa claramente que la vista previa no está disponible.
  */
-export function initLivePreviewModal({ getWorkspaceSnapshot }) {
+export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) {
   const openBtn = document.getElementById("btn-live-preview");
   const dialog = document.getElementById("preview-dialog");
   const titleEl = document.getElementById("preview-dialog-title");
@@ -37,8 +37,11 @@ export function initLivePreviewModal({ getWorkspaceSnapshot }) {
   /** @type {"auto" | "standalone" | "folder"} */
   let jsRunOverride = "auto";
 
-  openBtn?.addEventListener("click", () => {
+  openBtn?.addEventListener("click", async () => {
     jsRunOverride = "auto";
+    if (typeof onBeforePreview === "function") {
+      await onBeforePreview();
+    }
     openPreview();
   });
 

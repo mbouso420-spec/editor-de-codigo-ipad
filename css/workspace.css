@@ -45,6 +45,14 @@
   text-overflow: ellipsis;
 }
 
+#btn-offline-repo.is-offline-ready {
+  color: var(--color-success);
+}
+
+.gh-open-actions {
+  flex-wrap: wrap;
+}
+
 /* Fila inline editable para crear o renombrar archivos, carpetas y proyectos sin popups de Safari */
 .inline-edit-form {
   display: flex;

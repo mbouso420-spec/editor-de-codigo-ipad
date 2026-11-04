@@ -141,13 +141,13 @@ Usá un repositorio de GitHub cada vez que quieras **respaldar un proyecto en la
    * **Permissions:** desplegá **Repository permissions**, buscá **Contents** y elegí **Read and write** *(obligatorio para poder subir commits)*.
 4. Tocá **Generate token** y copiá el código que empieza con `github_pat_...`.
 
-### Paso 2: Abrir un repositorio en Studio IDE
-*(Importante: cuando crees un repositorio nuevo en GitHub.com para trabajar acá, marcá siempre la casilla **"Add a README file"** así ya nace con la rama `main` creada).*
-
-1. Tocá el botón azul **Repositorio** arriba a la derecha.
-2. En **1. Cuenta y Personal Access Token**, pegá tu token `github_pat_...` y tocá **Conectar** (aparecerá tu `@usuario` en verde).
-3. En **2. Abrir repositorio en el iPad (IndexedDB)**, elegí tu repositorio de la lista, verificá la rama (`main`) y tocá **Descargar archivos al iPad**.
-4. Cerrá la ventana con la **X**. Ya estás editando sobre ese repositorio (incluso si después cortás internet).
+### Paso 2: Elegir tu repositorio directo en el Explorador (sin necesidad de descargarlo)
+1. Si todavía no conectaste tu cuenta, tocá una sola vez el botón azul **Repositorio** arriba a la derecha, pegá tu token `github_pat_...` y tocá **Conectar** (aparecerá tu `@usuario` en verde).
+2. A partir de ese momento, andá directamente al **menú desplegable arriba a la izquierda en el Explorador**: vas a ver dos secciones:
+   * **`En este iPad`:** tus proyectos locales.
+   * **`Mis repos de GitHub`:** todos los repositorios de tu cuenta listos para elegir con un toque.
+3. Elegí el repositorio que quieras usar: el árbol completo de carpetas y archivos aparece **al instante sin descargar todo el repositorio**, y cada archivo se abre bajo demanda recién cuando lo tocás (y queda guardado en caché en tu iPad).
+4. **¿Querés tenerlo completo para trabajar sin internet?** Tocá el **icono de la nube con flecha** en la barra del Explorador (*Guardar copia offline en el iPad*) o el botón **Guardar copia offline** dentro de **Repositorio**. Cuando termina, el icono se pone en verde y el proyecto muestra la etiqueta **`[Offline]`**.
 
 ### Paso 3: Subir tus avances a GitHub (`Commit y Push`)
 1. Mientras editás, creás o borrás archivos, todo se autoguarda localmente en tu dispositivo y el botón superior pasa a mostrar cuántos archivos cambiaron: **`Commit (1)`**, **`Commit (2)`**, etc.
