@@ -356,7 +356,7 @@ function filterFolderScopeFiles(allFiles, baseFolder) {
   });
 }
 
-function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
+export function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   const htmlInSameDir = scopeFiles.filter((f) => {
     const ext = getFileExtension(f.path);
     return HTML_EXTENSIONS.has(ext) && getParentFolder(f.path) === folder;
@@ -378,7 +378,7 @@ function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   };
 }
 
-function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null) {
+export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null) {
   const dir = getParentFolder(entryPath);
 
   const resolveAsset = (rawHref) => {
@@ -634,7 +634,7 @@ function buildConsoleBridgeScript(mirrorOnScreen) {
 </script>`;
 }
 
-function resolveRelativePath(baseDir, relPath) {
+export function resolveRelativePath(baseDir, relPath) {
   if (relPath.startsWith("/")) {
     return normalizePath(relPath);
   }
@@ -663,7 +663,7 @@ function escapeHtmlText(str) {
     .replace(/"/g, "&quot;");
 }
 
-function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
+export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
   const prefix = baseFolder ? `${baseFolder}/` : "";
   const modules = [];
   const modPrefixes = new Set();
@@ -1162,7 +1162,7 @@ function buildMarkdownPreview(mdFile) {
 </html>`;
 }
 
-function renderMarkdownDocumentHtml(rawMd) {
+export function renderMarkdownDocumentHtml(rawMd) {
   const blocks = [];
   const fenceRe = /```([^\r\n]*)\r?\n?([\s\S]*?)```/g;
   let cursor = 0;
@@ -1301,7 +1301,7 @@ function renderMarkdownProseBlock(text) {
   return out.join("\n");
 }
 
-function formatMdInline(str) {
+export function formatMdInline(str) {
   const codes = [];
   const masked = String(str).replace(/`([^`]+)`/g, (_, c) => {
     const i = codes.length;

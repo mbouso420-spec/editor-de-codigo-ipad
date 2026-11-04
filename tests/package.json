@@ -1,0 +1,14 @@
+{
+  "name": "studio-ide-tests",
+  "private": true,
+  "type": "module",
+  "description": "Suite de QA automatizada de Studio IDE (no forma parte de la app publicada).",
+  "scripts": {
+    "test": "node --test --test-reporter=spec ./*.test.js"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "fake-indexeddb": "^6.0.0",
+    "globals": "^15.15.0"
+  }
+}

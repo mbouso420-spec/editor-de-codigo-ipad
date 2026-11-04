@@ -3,4 +3,5 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+.claude/
 node_modules/

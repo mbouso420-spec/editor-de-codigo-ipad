@@ -379,7 +379,8 @@ export async function upsertEntry(
     fromGithub = false,
     allowOverwrite = true,
     blobSha = null,
-    contentLoaded = true
+    contentLoaded = true,
+    mode = null
   } = {}
 ) {
   const cleanPath = normalizePath(path);
@@ -461,6 +462,7 @@ export async function upsertEntry(
     content: isFolder ? "" : content,
     baseContent: isFolder ? "" : resolvedBase,
     blobSha: isFolder ? null : blobSha ?? existing?.blobSha ?? null,
+    mode: isFolder ? null : mode ?? existing?.mode ?? null,
     contentLoaded: isFolder ? true : Boolean(contentLoaded),
     trackedInGithub: Boolean(fromGithub || existing?.trackedInGithub),
     forceModified: recreatedOverUnloaded || Boolean(!fromGithub && existing?.forceModified),
@@ -527,7 +529,8 @@ export async function renameProjectEntry(projectId, oldPath, newPath, isFolder) 
       content: item.content,
       baseContent: preserveTargetBase,
       fromGithub: false,
-      allowOverwrite: true
+      allowOverwrite: true,
+      mode: item.mode ?? null
     });
 
     await removeOrSoftDeleteRecord(item);
@@ -567,6 +570,71 @@ export function makeGithubProjectId(owner, repo, branch) {
 }
 
 /**
+ * Reemplaza TODAS las entradas de un proyecto en una única transacción de IndexedDB
+ * (atómica: si algo falla no queda el proyecto a medio borrar) y en O(n) en lugar de O(n²).
+ * @param {string} projectId
+ * @param {Array<{path: string, content: string, baseContent: string, blobSha: string|null, contentLoaded: boolean, mode?: string|null}>} files
+ */
+async function replaceAllProjectFilesFromGithub(projectId, files) {
+  const oldEntries = await getAllRawProjectEntries(projectId);
+  const now = Date.now();
+  const records = new Map();
+
+  for (const file of files) {
+    const cleanPath = normalizePath(file.path);
+    if (!cleanPath) continue;
+    const parts = cleanPath.split("/");
+    let prefix = "";
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      prefix = prefix ? `${prefix}/${parts[i]}` : parts[i];
+      if (!records.has(prefix)) {
+        records.set(prefix, {
+          key: makeFileKey(projectId, prefix),
+          projectId,
+          path: prefix,
+          isFolder: true,
+          content: "",
+          baseContent: "",
+          contentLoaded: true,
+          deleted: false,
+          updatedAt: now
+        });
+      }
+    }
+    records.set(cleanPath, {
+      key: makeFileKey(projectId, cleanPath),
+      projectId,
+      path: cleanPath,
+      isFolder: false,
+      content: file.content,
+      baseContent: file.baseContent,
+      blobSha: file.blobSha || null,
+      mode: file.mode || null,
+      contentLoaded: Boolean(file.contentLoaded),
+      trackedInGithub: true,
+      forceModified: false,
+      deleted: false,
+      updatedAt: now
+    });
+  }
+
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_FILES, "readwrite");
+    const store = tx.objectStore(STORE_FILES);
+    for (const old of oldEntries) {
+      store.delete(old.key);
+    }
+    for (const record of records.values()) {
+      store.put(record);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("La transacción de IndexedDB se canceló."));
+  });
+}
+
+/**
  * Hidrata el árbol de carpetas y archivos de un repositorio de GitHub bajo demanda (sin descargar los archivos),
  * conservando en caché los archivos que ya hubieran sido abiertos antes si su SHA remoto no cambió.
  */
@@ -582,39 +650,25 @@ export async function hydrateLazyGithubProject({ owner, repo, branch, commitSha,
     }
   }
 
-  if (oldEntries.length > 0) {
-    const db = await openDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_FILES, "readwrite");
-      const store = tx.objectStore(STORE_FILES);
-      for (const old of oldEntries) {
-        store.delete(old.key);
-      }
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
   let allLoaded = true;
-  for (const item of entries) {
+  const files = entries.map((item) => {
     const clean = normalizePath(item.path);
     const prev = reusableByPath.get(clean);
     const canReuse = Boolean(prev && prev.blobSha === item.blobSha && prev.content === prev.baseContent);
-
     if (!canReuse) {
       allLoaded = false;
     }
-
-    await upsertEntry(projectId, clean, {
-      isFolder: false,
+    return {
+      path: clean,
       content: canReuse ? prev.content : "",
       baseContent: canReuse ? prev.baseContent : "",
-      fromGithub: true,
-      allowOverwrite: true,
       blobSha: item.blobSha,
+      mode: item.mode || null,
       contentLoaded: canReuse
-    });
-  }
+    };
+  });
+
+  await replaceAllProjectFilesFromGithub(projectId, files);
 
   const validPaths = new Set(entries.map((e) => normalizePath(e.path)));
   const keptTabs = (existingProject?.openTabIds || []).filter((p) => validPaths.has(p));
@@ -655,6 +709,11 @@ export async function cacheSingleGithubFileContent(projectId, path, content, blo
       contentLoaded: true
     });
   }
+  if (existing.contentLoaded !== false && !existing.deleted) {
+    // Ya tiene contenido local (descargado antes o recreado/editado mientras esta descarga viajaba):
+    // nunca pisar el trabajo del usuario con la versión remota.
+    return existing;
+  }
   existing.content = content;
   existing.baseContent = content;
   existing.contentLoaded = true;
@@ -681,31 +740,17 @@ export async function hydrateGithubProject({ owner, repo, branch, commitSha, fil
   const projectId = makeGithubProjectId(owner, repo, branch);
   const existingProject = await getProject(projectId);
 
-  const oldEntries = await getAllRawProjectEntries(projectId);
-  if (oldEntries.length > 0) {
-    const db = await openDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_FILES, "readwrite");
-      const store = tx.objectStore(STORE_FILES);
-      for (const old of oldEntries) {
-        store.delete(old.key);
-      }
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  for (const file of files) {
-    await upsertEntry(projectId, file.path, {
-      isFolder: false,
+  await replaceAllProjectFilesFromGithub(
+    projectId,
+    files.map((file) => ({
+      path: file.path,
       content: file.content,
       baseContent: file.content,
-      fromGithub: true,
-      allowOverwrite: true,
       blobSha: file.blobSha || null,
+      mode: file.mode || null,
       contentLoaded: true
-    });
-  }
+    }))
+  );
 
   const firstPaths = files.slice(0, 3).map((f) => normalizePath(f.path));
   const project = {
@@ -752,14 +797,16 @@ export async function getPendingGithubChanges(projectId) {
         path: item.path,
         status: "added",
         content: item.content,
-        baseContent: ""
+        baseContent: "",
+        mode: item.mode || null
       });
     } else if (!item.deleted && (item.forceModified || item.content !== item.baseContent)) {
       changes.push({
         path: item.path,
         status: "modified",
         content: item.content,
-        baseContent: item.baseContent || ""
+        baseContent: item.baseContent || "",
+        mode: item.mode || null
       });
     }
   }
@@ -768,7 +815,15 @@ export async function getPendingGithubChanges(projectId) {
   return changes;
 }
 
-export async function markProjectSynced(projectId, newCommitSha) {
+/**
+ * Marca como sincronizado el proyecto tras un push exitoso.
+ * Si se indica pushedChanges (la instantánea exacta enviada en el commit), solo se consolidan esas
+ * versiones: cualquier edición, alta o borrado hecho mientras el push viajaba sigue pendiente.
+ * @param {string} projectId
+ * @param {string} newCommitSha
+ * @param {Array<{path: string, status: string, content: string}> | null} [pushedChanges]
+ */
+export async function markProjectSynced(projectId, newCommitSha, pushedChanges = null) {
   const project = await getProject(projectId);
   if (project && project.github) {
     project.github.commitSha = newCommitSha;
@@ -778,21 +833,82 @@ export async function markProjectSynced(projectId, newCommitSha) {
 
   const all = await getAllRawProjectEntries(projectId);
   const db = await openDb();
+  const pushedByPath = Array.isArray(pushedChanges)
+    ? new Map(pushedChanges.map((c) => [normalizePath(c.path), c]))
+    : null;
 
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_FILES, "readwrite");
     const store = tx.objectStore(STORE_FILES);
+    const now = Date.now();
 
     for (const item of all) {
-      if (item.deleted) {
-        store.delete(item.key);
-      } else if (!item.isFolder && item.contentLoaded !== false) {
-        item.baseContent = item.content;
-        item.trackedInGithub = true;
-        item.forceModified = false;
+      if (item.isFolder) continue;
+
+      if (!pushedByPath) {
+        if (item.deleted) {
+          store.delete(item.key);
+        } else if (item.contentLoaded !== false) {
+          item.baseContent = item.content;
+          item.trackedInGithub = true;
+          item.forceModified = false;
+          item.contentLoaded = true;
+          item.updatedAt = now;
+          store.put(item);
+        }
+        continue;
+      }
+
+      const pushed = pushedByPath.get(item.path);
+      if (!pushed) continue;
+
+      if (pushed.status === "deleted") {
+        if (item.deleted) {
+          store.delete(item.key);
+        } else {
+          // Se volvió a crear durante el push: en GitHub ya no existe, así que ahora es un archivo nuevo.
+          item.trackedInGithub = false;
+          item.baseContent = "";
+          item.blobSha = null;
+          item.forceModified = false;
+          item.updatedAt = now;
+          store.put(item);
+        }
+        continue;
+      }
+
+      // Alta o modificación: la versión remota pasa a ser exactamente la que se envió.
+      item.baseContent = typeof pushed.content === "string" ? pushed.content : "";
+      item.trackedInGithub = true;
+      item.forceModified = false;
+      if (!item.deleted) {
         item.contentLoaded = true;
-        item.updatedAt = Date.now();
-        store.put(item);
+      }
+      item.updatedAt = now;
+      store.put(item);
+    }
+
+    if (pushedByPath) {
+      // Lo publicado que ya no existe localmente (p. ej. un archivo nuevo borrado o renombrado mientras viajaba
+      // el push) ahora sí existe en GitHub: se registra como borrado pendiente para no divergir en silencio.
+      const presentPaths = new Set(all.map((e) => e.path));
+      for (const [path, pushed] of pushedByPath) {
+        if (pushed.status === "deleted" || presentPaths.has(path)) continue;
+        store.put({
+          key: makeFileKey(projectId, path),
+          projectId,
+          path,
+          isFolder: false,
+          content: "",
+          baseContent: typeof pushed.content === "string" ? pushed.content : "",
+          blobSha: null,
+          mode: pushed.mode || null,
+          contentLoaded: true,
+          trackedInGithub: true,
+          forceModified: false,
+          deleted: true,
+          updatedAt: now
+        });
       }
     }
 

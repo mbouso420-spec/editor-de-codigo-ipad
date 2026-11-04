@@ -147,8 +147,13 @@ async function initApp() {
           f.contentLoaded === false &&
           (f.id === oldPath || (isFolder && f.id.startsWith(`${oldPath}/`)))
       );
+      const sourceProjectId = activeProject.id;
       if (affectedUnloaded.length > 0) {
         await ensureFilesLoaded(affectedUnloaded);
+      }
+      if (activeProject.id !== sourceProjectId) {
+        // El usuario cambió de proyecto mientras se descargaban los archivos: no renombrar en el proyecto equivocado.
+        return;
       }
 
       await renameProjectEntry(activeProject.id, oldPath, newPath, isFolder);
@@ -327,10 +332,15 @@ async function initApp() {
       });
       explorer.setAutosaveStatus(`Guardando copia offline (0/${pending.length})…`);
 
+      const sourceProjectId = activeProject.id;
       try {
         await ensureFilesLoaded(pending, (done, total) => {
           explorer.setAutosaveStatus(`Guardando copia offline (${done}/${total})…`);
         });
+        if (activeProject.id !== sourceProjectId) {
+          // ensureFilesLoaded ya guardó cada archivo en su repositorio de origen; no marcar otro proyecto.
+          return;
+        }
         await markProjectOfflineCached(activeProject.id, true);
         activeProject.offlineCached = true;
         projects = await listProjects();
@@ -689,6 +699,9 @@ async function initApp() {
       return;
     }
 
+    // Fijar el proyecto ANTES de esperar a la red: si el usuario cambia de proyecto mientras se descarga,
+    // el contenido debe guardarse en el repositorio de origen y nunca en el proyecto que quedó activo.
+    const sourceProjectId = activeProject.id;
     const content = await fetchSingleRepoBlob({
       token: getGithubToken(),
       owner: activeProject.github.owner,
@@ -696,10 +709,14 @@ async function initApp() {
       blobSha: fileObj.blobSha
     });
 
-    await cacheSingleGithubFileContent(activeProject.id, fileObj.path, content, fileObj.blobSha);
-    fileObj.content = content;
-    fileObj.baseContent = content;
+    const saved = await cacheSingleGithubFileContent(sourceProjectId, fileObj.path, content, fileObj.blobSha);
+    // Usar lo que efectivamente quedó guardado (si hubo contenido local, se respeta en vez del remoto).
+    fileObj.content = saved?.content ?? content;
+    fileObj.baseContent = saved?.baseContent ?? content;
     fileObj.contentLoaded = true;
+    if (activeProject.id !== sourceProjectId) {
+      return;
+    }
     editor.dropFileState(fileObj.id);
 
     if (filesOnly.length > 0 && filesOnly.every((f) => f.contentLoaded !== false)) {
@@ -717,6 +734,7 @@ async function initApp() {
       return;
     }
 
+    const sourceProjectId = activeProject.id;
     const loadedItems = await downloadBatchBlobs({
       token: getGithubToken(),
       owner: activeProject.github.owner,
@@ -729,18 +747,23 @@ async function initApp() {
     for (const fileObj of unloaded) {
       const hit = byPath.get(fileObj.path);
       if (!hit) continue;
-      await cacheSingleGithubFileContent(
-        activeProject.id,
+      const saved = await cacheSingleGithubFileContent(
+        sourceProjectId,
         fileObj.path,
         hit.content,
         hit.blobSha || fileObj.blobSha
       );
-      fileObj.content = hit.content;
-      fileObj.baseContent = hit.content;
+      fileObj.content = saved?.content ?? hit.content;
+      fileObj.baseContent = saved?.baseContent ?? hit.content;
       fileObj.contentLoaded = true;
-      editor.dropFileState(fileObj.id);
+      if (activeProject.id === sourceProjectId) {
+        editor.dropFileState(fileObj.id);
+      }
     }
 
+    if (activeProject.id !== sourceProjectId) {
+      return;
+    }
     if (filesOnly.length > 0 && filesOnly.every((f) => f.contentLoaded !== false)) {
       activeProject.offlineCached = true;
       await markProjectOfflineCached(activeProject.id, true);

@@ -392,7 +392,8 @@ export function initGithubController({
       });
 
       hideConflictBox();
-      await markProjectSynced(project.id, commitSha);
+      // Solo se consolida lo que viajó en este commit: lo editado mientras tanto sigue pendiente.
+      await markProjectSynced(project.id, commitSha, changes);
       if (commitMsgInput) commitMsgInput.value = "";
       await onProjectClonedOrSynced(project.id);
       await refreshSyncPanel();

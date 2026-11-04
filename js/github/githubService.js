@@ -232,6 +232,8 @@ export async function fetchRepoTreeIndex({ token, owner, repo, branch }) {
   const entries = rawTree
     .filter((node) => {
       if (node.type !== "blob" || !node.path || !node.sha) return false;
+      // Los enlaces simbólicos (120000) no son archivos de texto editables: editarlos los convertiría en archivos comunes.
+      if (node.mode === "120000") return false;
       if (typeof node.size === "number" && node.size > MAX_TEXT_FILE_BYTES) return false;
       if (node.path.startsWith("node_modules/") || node.path.startsWith(".git/")) return false;
       const ext = node.path.includes(".") ? node.path.split(".").pop().toLowerCase() : "";
@@ -240,7 +242,8 @@ export async function fetchRepoTreeIndex({ token, owner, repo, branch }) {
     .map((node) => ({
       path: node.path,
       blobSha: node.sha,
-      size: node.size || 0
+      size: node.size || 0,
+      mode: node.mode === "100755" ? "100755" : "100644"
     }));
 
   return {
@@ -291,6 +294,7 @@ export async function downloadBatchBlobs({ token, owner, repo, items, onProgress
         return {
           path: item.path,
           blobSha: item.blobSha,
+          mode: item.mode || null,
           content
         };
       })
@@ -453,7 +457,8 @@ export async function pushAtomicCommit({
     }
     return {
       path: change.path,
-      mode: "100644",
+      // Conserva el bit de ejecución (100755) de scripts existentes; el resto se publica como archivo normal.
+      mode: change.mode === "100755" ? "100755" : "100644",
       type: "blob",
       content: change.content
     };

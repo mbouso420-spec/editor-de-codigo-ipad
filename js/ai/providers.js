@@ -305,8 +305,9 @@ export async function fetchLiveFreeModels(providerId, apiKey, signal) {
     if (!apiKey) {
       throw new Error("Pegá primero tu API Key de Google AI Studio.");
     }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { signal });
+    // La clave viaja en cabecera (no en la URL) para que no quede en historiales, logs ni cachés intermedias.
+    const url = "https://generativelanguage.googleapis.com/v1beta/models";
+    const res = await fetch(url, { signal, headers: { "x-goog-api-key": apiKey } });
     if (!res.ok) {
       throw new Error(`Error al consultar Gemini (${res.status}).`);
     }
@@ -523,6 +524,11 @@ async function streamGeminiWithFallback({
   );
 
   let lastError = null;
+  let emittedAnyChunk = false;
+  const trackedOnChunk = (text) => {
+    emittedAnyChunk = true;
+    onChunk(text);
+  };
 
   for (let i = 0; i < candidates.length; i += 1) {
     const candidateModel = candidates[i];
@@ -547,12 +553,16 @@ async function streamGeminiWithFallback({
           apiKey,
           systemPrompt,
           history,
-          onChunk,
+          onChunk: trackedOnChunk,
           signal
         });
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
+          throw error;
+        }
+        if (emittedAnyChunk) {
+          // La respuesta ya empezó a mostrarse: reintentar duplicaría el texto en el chat.
           throw error;
         }
         lastError = error;
@@ -624,6 +634,11 @@ async function streamOpenAiWithFallback({
 
   const candidates = fallbackPool.filter((m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx);
   let lastError = null;
+  let emittedAnyChunk = false;
+  const trackedOnChunk = (text) => {
+    emittedAnyChunk = true;
+    onChunk(text);
+  };
 
   for (let i = 0; i < candidates.length; i += 1) {
     const candidateModel = candidates[i];
@@ -638,12 +653,16 @@ async function streamOpenAiWithFallback({
         apiKey,
         systemPrompt,
         history,
-        onChunk,
+        onChunk: trackedOnChunk,
         signal
       });
       return;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      if (emittedAnyChunk) {
+        // La respuesta ya empezó a mostrarse: reintentar duplicaría el texto en el chat.
         throw error;
       }
       lastError = error;
@@ -686,7 +705,7 @@ function waitAbortable(ms, signal) {
 
 async function runSingleGeminiStream({ cleanModel, apiKey, systemPrompt, history, onChunk, signal }) {
   const isGemma = cleanModel.toLowerCase().startsWith("gemma-");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:streamGenerateContent?alt=sse`;
 
   const contents = history.map((msg, idx) => {
     const text =
@@ -709,7 +728,7 @@ async function runSingleGeminiStream({ cleanModel, apiKey, systemPrompt, history
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(bodyPayload),
     signal
   });

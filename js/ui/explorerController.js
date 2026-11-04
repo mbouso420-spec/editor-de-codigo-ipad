@@ -238,7 +238,7 @@ export function initExplorerController({
         inlineSlot.hidden = true;
         inlineSlot.innerHTML = "";
       }
-      updateProjectDeleteBtn();
+      syncProjectDeleteButton();
     }
     if (!projectSelect) return;
     projectSelect.innerHTML = "";
@@ -537,7 +537,7 @@ export function initExplorerController({
   };
 }
 
-function buildHierarchy(entries) {
+export function buildHierarchy(entries) {
   const root = { children: new Map() };
 
   for (const item of entries) {
@@ -569,7 +569,7 @@ function buildHierarchy(entries) {
   return root;
 }
 
-function flattenVisibleTree(node, depth, collapsedFolders) {
+export function flattenVisibleTree(node, depth, collapsedFolders) {
   const items = [...node.children.values()];
   items.sort((a, b) => {
     if (a.isFolder !== b.isFolder) {

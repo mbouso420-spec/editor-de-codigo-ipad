@@ -132,7 +132,7 @@ export function initDiffModal() {
   };
 }
 
-function computeLineDiff(oldStr, newStr) {
+export function computeLineDiff(oldStr, newStr) {
   const lineEndingsOnly =
     oldStr !== newStr &&
     oldStr.replace(/\r\n/g, "\n") === newStr.replace(/\r\n/g, "\n");
@@ -157,11 +157,28 @@ function computeLineDiff(oldStr, newStr) {
   const n = midA.length;
   const m = midB.length;
 
-  let rawOps = [];
+  // Zona central: LCS exacto si es chica; Myers (mínimo, O((N+M)·D)) si es grande;
+  // y solo si ni eso entra en el presupuesto, marcar la zona central como reemplazada.
+  let midOps = null;
   if (n * m <= 900000) {
-    rawOps = lcsDiff(a, b, start, endA, endB, midA, midB);
+    midOps = lcsMiddleOps(midA, midB, start);
   } else {
-    rawOps = fastLargeDiff(a, b);
+    midOps = myersMiddleOps(midA, midB, start, Math.max(64, Math.floor(20000000 / (n + m))));
+    if (!midOps) {
+      midOps = replaceMiddleOps(midA, midB, start);
+    }
+  }
+
+  const rawOps = [];
+  for (let k = 0; k < start; k += 1) {
+    rawOps.push({ type: "eq", lineNo: k + 1, text: a[k] });
+  }
+  for (const op of midOps) {
+    rawOps.push(op);
+  }
+  const tailCount = a.length - 1 - endA;
+  for (let k = 0; k < tailCount; k += 1) {
+    rawOps.push({ type: "eq", lineNo: endB + 2 + k, text: a[endA + 1 + k] });
   }
 
   let addedCount = 0;
@@ -204,7 +221,7 @@ function computeLineDiff(oldStr, newStr) {
   return { rows, addedCount, removedCount, lineEndingsOnly };
 }
 
-function lcsDiff(a, b, start, endA, endB, midA, midB) {
+function lcsMiddleOps(midA, midB, start) {
   const n = midA.length;
   const m = midB.length;
 
@@ -221,10 +238,6 @@ function lcsDiff(a, b, start, endA, endB, midA, midB) {
   }
 
   const ops = [];
-  for (let k = 0; k < start; k += 1) {
-    ops.push({ type: "eq", lineNo: k + 1, text: a[k] });
-  }
-
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
@@ -248,22 +261,115 @@ function lcsDiff(a, b, start, endA, endB, midA, midB) {
     ops.push({ type: "add", lineNo: start + j + 1, text: midB[j] });
     j += 1;
   }
-
-  const tailCount = a.length - 1 - endA;
-  for (let k = 0; k < tailCount; k += 1) {
-    ops.push({ type: "eq", lineNo: endB + 2 + k, text: a[endA + 1 + k] });
-  }
-
   return ops;
 }
 
-function fastLargeDiff(a, b) {
-  const ops = [];
-  for (let i = 0; i < a.length; i += 1) {
-    ops.push({ type: "del", lineNo: i + 1, text: a[i] });
+/**
+ * Diff de Myers (script de edición mínimo) para zonas grandes con pocos cambios.
+ * Devuelve null si la cantidad de ediciones supera maxD (para acotar tiempo y memoria).
+ */
+function myersMiddleOps(midA, midB, start, maxD) {
+  const n = midA.length;
+  const m = midB.length;
+  const max = n + m;
+  const limit = Math.min(max, maxD);
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  /** @type {Int32Array[]} */
+  const trace = [];
+
+  let found = -1;
+  for (let d = 0; d <= limit; d += 1) {
+    const snapshot = new Int32Array(2 * d + 3);
+    for (let k = -d - 1; k <= d + 1; k += 1) {
+      snapshot[k + d + 1] = v[k + offset];
+    }
+    trace.push(snapshot);
+
+    for (let k = -d; k <= d; k += 2) {
+      let x;
+      if (k === -d || (k !== d && v[k - 1 + offset] < v[k + 1 + offset])) {
+        x = v[k + 1 + offset];
+      } else {
+        x = v[k - 1 + offset] + 1;
+      }
+      let y = x - k;
+      while (x < n && y < m && midA[x] === midB[y]) {
+        x += 1;
+        y += 1;
+      }
+      v[k + offset] = x;
+      if (x >= n && y >= m) {
+        found = d;
+        break;
+      }
+    }
+    if (found !== -1) break;
   }
-  for (let j = 0; j < b.length; j += 1) {
-    ops.push({ type: "add", lineNo: j + 1, text: b[j] });
+
+  if (found === -1) {
+    return null;
+  }
+
+  const reversed = [];
+  let x = n;
+  let y = m;
+  for (let d = found; d > 0; d -= 1) {
+    const prev = trace[d];
+    const getPrev = (k) => prev[k + d + 1];
+    const k = x - y;
+    let prevK;
+    if (k === -d || (k !== d && getPrev(k - 1) < getPrev(k + 1))) {
+      prevK = k + 1;
+    } else {
+      prevK = k - 1;
+    }
+    const prevX = getPrev(prevK);
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) {
+      x -= 1;
+      y -= 1;
+      reversed.push({ type: "eq", lineNo: start + y + 1, text: midB[y] });
+    }
+    if (x === prevX) {
+      y -= 1;
+      reversed.push({ type: "add", lineNo: start + y + 1, text: midB[y] });
+    } else {
+      x -= 1;
+      reversed.push({ type: "del", lineNo: start + x + 1, text: midA[x] });
+    }
+  }
+  while (x > 0 && y > 0) {
+    x -= 1;
+    y -= 1;
+    reversed.push({ type: "eq", lineNo: start + y + 1, text: midB[y] });
+  }
+  reversed.reverse();
+
+  // Presentación estilo unificado: dentro de cada bloque de cambios, primero las líneas borradas.
+  const ops = [];
+  let pendingAdds = [];
+  for (const op of reversed) {
+    if (op.type === "add") {
+      pendingAdds.push(op);
+    } else if (op.type === "del") {
+      ops.push(op);
+    } else {
+      ops.push(...pendingAdds, op);
+      pendingAdds = [];
+    }
+  }
+  ops.push(...pendingAdds);
+  return ops;
+}
+
+function replaceMiddleOps(midA, midB, start) {
+  const ops = [];
+  for (let i = 0; i < midA.length; i += 1) {
+    ops.push({ type: "del", lineNo: start + i + 1, text: midA[i] });
+  }
+  for (let j = 0; j < midB.length; j += 1) {
+    ops.push({ type: "add", lineNo: start + j + 1, text: midB[j] });
   }
   return ops;
 }

@@ -786,7 +786,7 @@ export function initChatController({
   };
 }
 
-function parseMarkdownSegments(raw) {
+export function parseMarkdownSegments(raw) {
   const segments = [];
   const fenceRegex = /```([^\r\n]*)\r?\n?([\s\S]*?)(?:```|$)/g;
   let lastIndex = 0;
@@ -822,7 +822,7 @@ function parseMarkdownSegments(raw) {
   return segments;
 }
 
-function formatProseHtml(text) {
+export function formatProseHtml(text) {
   const lines = String(text || "").split("\n");
   const out = [];
   let paragraphLines = [];
@@ -907,7 +907,7 @@ function formatProseHtml(text) {
   return out.join("");
 }
 
-function formatInlineMarkdown(str) {
+export function formatInlineMarkdown(str) {
   const codeTokens = [];
   const withPlaceholders = String(str).replace(/`([^`]+)`/g, (_, code) => {
     const idx = codeTokens.length;
