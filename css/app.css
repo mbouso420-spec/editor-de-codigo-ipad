@@ -275,3 +275,30 @@
   overflow-x: auto;
   color: var(--color-ink);
 }
+
+@media (max-width: 48rem) {
+  .ide-topbar {
+    gap: var(--space-xs);
+    padding-inline: max(var(--space-xs), var(--safe-left)) max(var(--space-xs), var(--safe-right));
+  }
+
+  .ide-topbar-left,
+  .ide-topbar-right {
+    gap: var(--space-2xs);
+  }
+
+  .ide-topbar .btn {
+    padding-inline: var(--space-xs);
+    min-width: var(--control-height);
+  }
+}
+
+@media (max-width: 26rem) {
+  .ide-brand {
+    padding-right: 0;
+  }
+
+  .ide-brand-text {
+    display: none;
+  }
+}

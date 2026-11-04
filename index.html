@@ -30,6 +30,7 @@
         "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.2.1?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python@6.1.6?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.2.5?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.6.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
         "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.0?deps=@lezer/common@1.2.1",
         "@octokit/core": "https://esm.sh/@octokit/core@6.1.2"
@@ -55,7 +56,7 @@
 
         <div class="ide-brand">
           <span class="ide-brand-mark" data-icon="code"></span>
-          <span>Studio IDE</span>
+          <span class="ide-brand-text">Studio IDE</span>
         </div>
       </div>
 
@@ -111,6 +112,9 @@
             <h2 class="panel-title">Explorador</h2>
           </div>
           <div class="panel-actions">
+            <button type="button" id="btn-quick-open" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar archivo en el proyecto" title="Buscar archivo rápido (Cmd/Ctrl + P)">
+              <span data-icon="search"></span>
+            </button>
             <button type="button" id="btn-new-file" class="btn btn-ghost btn-sm btn-icon" aria-label="Nuevo archivo" title="Nuevo archivo">
               <span data-icon="plus"></span>
             </button>
@@ -227,6 +231,17 @@
           <span id="symbol-lang-pill" class="symbol-lang-pill">C / C++</span>
           <div id="symbol-keys-track" class="symbol-keys-track"></div>
         </div>
+
+        <footer id="editor-status-bar" class="editor-status-bar" aria-label="Estado del editor y conexión">
+          <div class="status-bar-group">
+            <span id="status-file-path" class="status-bar-path code-font">src/main.cpp</span>
+            <span id="status-file-lang" class="status-bar-tag">C++</span>
+          </div>
+          <div class="status-bar-group">
+            <span id="status-cursor-pos" class="status-bar-cursor num">Línea 1, Col 1</span>
+            <span id="status-network-state" class="status-bar-net" aria-live="polite">En línea</span>
+          </div>
+        </footer>
       </main>
 
       <div
@@ -580,6 +595,33 @@
           </div>
           <div id="preview-console-list" class="preview-console-list code-font"></div>
         </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Apertura Rápida de Archivos (Cmd/Ctrl + P) -->
+  <dialog id="quick-open-dialog" class="ide-dialog" aria-labelledby="quick-open-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="search"></span>
+          <h2 id="quick-open-title" class="dialog-title">Ir al archivo</h2>
+        </div>
+        <button type="button" id="btn-close-quick-open" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar buscador de archivos">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+      <div class="dialog-body quick-open-body">
+        <label for="quick-open-input" class="visually-hidden">Nombre o ruta del archivo</label>
+        <input
+          type="search"
+          id="quick-open-input"
+          class="field-control"
+          placeholder="Escribí el nombre o carpeta del archivo…"
+          spellcheck="false"
+          autocomplete="off"
+        >
+        <ul id="quick-open-list" class="quick-open-list"></ul>
       </div>
     </div>
   </dialog>

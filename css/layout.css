@@ -7,6 +7,11 @@
   background: var(--color-paper);
   color: var(--color-ink);
   overflow: hidden;
+  transform: translateY(var(--vv-offset-top));
+}
+
+body[data-keyboard-open="true"] .ide-workspace {
+  padding-bottom: var(--space-2xs);
 }
 
 /* Espacio de trabajo de 3 islas flotantes */
@@ -169,6 +174,11 @@
     transform: translateX(0);
     opacity: 1;
     pointer-events: auto;
+  }
+
+  body[data-keyboard-open="true"] .ide-panel-left,
+  body[data-keyboard-open="true"] .ide-panel-right {
+    bottom: var(--space-2xs);
   }
 }
 
@@ -397,6 +407,66 @@ body[data-symbols-visible="false"] .symbol-bar {
   transform: scale(0.95);
   background: var(--color-accent);
   color: var(--color-accent-ink);
+}
+
+/* Barra de estado discreta (Ruta, Lenguaje, Línea/Columna y Red Online/Offline) */
+.editor-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-sm);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.status-bar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.status-bar-path {
+  font-size: var(--text-xs);
+  color: var(--color-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.status-bar-tag {
+  color: var(--color-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.status-bar-cursor {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-bar-net {
+  color: var(--color-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-bar-net.is-offline {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+@media (max-width: 28rem) {
+  .status-bar-tag {
+    display: none;
+  }
 }
 
 /* Panel de Chat IA estilo Antigravity (Derecha) */

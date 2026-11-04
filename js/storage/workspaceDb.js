@@ -75,6 +75,9 @@ export function inferFileMeta(path) {
     case "py":
     case "pyw":
       return { lang: "python", badge: "PY", icon: "fileCode" };
+    case "md":
+    case "markdown":
+      return { lang: "markdown", badge: "MD", icon: "fileText" };
     case "js":
     case "mjs":
     case "cjs":
@@ -151,7 +154,7 @@ export async function ensureInitialWorkspace() {
 
   await putRecord(STORE_PROJECTS, seedProject);
 
-  const folders = ["src", "web", "db"];
+  const folders = ["src", "web", "scripts", "db"];
   for (const folderPath of folders) {
     await putRecord(STORE_FILES, {
       key: makeFileKey(SEED_PROJECT_ID, folderPath),
@@ -339,6 +342,22 @@ export async function upsertEntry(
   if (!allowOverwrite && existing && !existing.deleted) {
     throw new Error(`Ya existe "${cleanPath}" en este proyecto.`);
   }
+  if (existing && !existing.deleted && Boolean(existing.isFolder) !== Boolean(isFolder)) {
+    throw new Error(
+      existing.isFolder
+        ? `Ya existe una carpeta llamada "${cleanPath}" en este proyecto.`
+        : `Ya existe un archivo llamado "${cleanPath}" en este proyecto.`
+    );
+  }
+  if (!isFolder) {
+    const allCurrent = await getAllRawProjectEntries(projectId);
+    const hasChildEntries = allCurrent.some(
+      (e) => !e.deleted && e.path.startsWith(`${cleanPath}/`)
+    );
+    if (hasChildEntries) {
+      throw new Error(`Ya existe una carpeta llamada "${cleanPath}" con contenido adentro.`);
+    }
+  }
 
   // Asegurar carpetas padre implícitas si se escribe p. ej. "src/utils/math.cpp"
   const parts = cleanPath.split("/");
@@ -376,6 +395,15 @@ export async function upsertEntry(
           ? existing.baseContent
           : "";
 
+  const recreatedOverUnloaded = Boolean(
+    !isFolder &&
+      !fromGithub &&
+      existing &&
+      existing.deleted &&
+      existing.trackedInGithub &&
+      existing.contentLoaded === false
+  );
+
   const record = {
     key,
     projectId,
@@ -386,6 +414,7 @@ export async function upsertEntry(
     blobSha: isFolder ? null : blobSha ?? existing?.blobSha ?? null,
     contentLoaded: isFolder ? true : Boolean(contentLoaded),
     trackedInGithub: Boolean(fromGithub || existing?.trackedInGithub),
+    forceModified: recreatedOverUnloaded || Boolean(!fromGithub && existing?.forceModified),
     deleted: false,
     updatedAt: Date.now()
   };
@@ -426,12 +455,13 @@ export async function renameProjectEntry(projectId, oldPath, newPath, isFolder) 
       !e.deleted &&
       e.path !== fromPath &&
       !(isFolder && e.path.startsWith(`${fromPath}/`)) &&
-      (e.path === toPath || (isFolder && e.path.startsWith(`${toPath}/`)))
+      (e.path === toPath || e.path.startsWith(`${toPath}/`) || (!e.isFolder && toPath.startsWith(`${e.path}/`)))
   );
   if (targetConflict) {
     throw new Error(`Ya existe "${targetConflict.path}" en esa ubicación.`);
   }
 
+  const rawByPath = new Map(all.map((e) => [e.path, e]));
   const affected = all.filter(
     (e) => !e.deleted && (e.path === fromPath || (isFolder && e.path.startsWith(`${fromPath}/`)))
   );
@@ -439,11 +469,14 @@ export async function renameProjectEntry(projectId, oldPath, newPath, isFolder) 
   for (const item of affected) {
     const suffix = item.path.slice(fromPath.length);
     const targetPath = `${toPath}${suffix}`;
+    const prevTarget = rawByPath.get(targetPath);
+    const preserveTargetBase =
+      prevTarget && prevTarget.trackedInGithub ? prevTarget.baseContent : item.trackedInGithub ? "" : item.baseContent;
 
     await upsertEntry(projectId, targetPath, {
       isFolder: item.isFolder,
       content: item.content,
-      baseContent: item.trackedInGithub ? "" : item.baseContent,
+      baseContent: preserveTargetBase,
       fromGithub: false,
       allowOverwrite: true
     });
@@ -672,7 +705,7 @@ export async function getPendingGithubChanges(projectId) {
         content: item.content,
         baseContent: ""
       });
-    } else if (!item.deleted && item.content !== item.baseContent) {
+    } else if (!item.deleted && (item.forceModified || item.content !== item.baseContent)) {
       changes.push({
         path: item.path,
         status: "modified",
@@ -707,6 +740,7 @@ export async function markProjectSynced(projectId, newCommitSha) {
       } else if (!item.isFolder && item.contentLoaded !== false) {
         item.baseContent = item.content;
         item.trackedInGithub = true;
+        item.forceModified = false;
         item.contentLoaded = true;
         item.updatedAt = Date.now();
         store.put(item);

@@ -4,6 +4,7 @@ const HTML_EXTENSIONS = new Set(["html", "htm"]);
 const JS_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
 const CSS_EXTENSIONS = new Set(["css"]);
 const PYTHON_EXTENSIONS = new Set(["py", "pyw"]);
+const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
 
 /**
  * Vista previa contextual según la pestaña activa:
@@ -34,6 +35,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   const iframe = document.getElementById("preview-iframe");
 
   let consoleVisible = true;
+  let previewRunSeq = 0;
   /** @type {"auto" | "standalone" | "folder"} */
   let jsRunOverride = "auto";
 
@@ -81,6 +83,10 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (!data || data.source !== "studio-ide-preview") {
+      return;
+    }
+    if (data.action === "clear") {
+      clearConsoleOutput();
       return;
     }
     appendConsoleLine(data.level || "log", data.text || "");
@@ -139,7 +145,14 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (unavailableBox) unavailableBox.hidden = false;
   }
 
-  function showRunnableIframe({ headerTitle, badgeText, compiledHtml, siblingHtml, consoleTitle = "Consola JS" }) {
+  function showRunnableIframe({
+    headerTitle,
+    badgeText,
+    compiledHtml,
+    siblingHtml,
+    consoleTitle = "Consola JS",
+    hasConsole = true
+  }) {
     clearConsoleOutput();
 
     if (titleEl) titleEl.textContent = headerTitle;
@@ -152,15 +165,16 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (unavailableBox) unavailableBox.hidden = true;
     if (reloadBtn) reloadBtn.hidden = false;
     if (toggleConsoleBtn) {
-      toggleConsoleBtn.hidden = false;
+      toggleConsoleBtn.hidden = !hasConsole;
       toggleConsoleBtn.setAttribute("aria-pressed", String(consoleVisible));
     }
     if (iframe) {
+      previewRunSeq += 1;
       iframe.hidden = false;
-      iframe.srcdoc = compiledHtml;
+      iframe.srcdoc = `${compiledHtml}\n<!-- studio-run:${previewRunSeq} -->`;
     }
     if (consolePanel) {
-      consolePanel.hidden = !consoleVisible;
+      consolePanel.hidden = !hasConsole || !consoleVisible;
     }
 
     if (jsModeBtn) {
@@ -271,7 +285,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
       return;
     }
 
-    // 4. Pestaña Python: ejecuta Python 3 real en el navegador (Pyodide WebAssembly) junto a módulos .py de su carpeta
+    // 4. Pestaña Python: ejecuta Python 3 real en el navegador (Pyodide WebAssembly) con entrada inline sin popups
     if (PYTHON_EXTENSIONS.has(ext)) {
       const compiledPyHtml = buildStandalonePythonPreview(activeFile, sameFolderFiles, folder);
       showRunnableIframe({
@@ -279,17 +293,31 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
         badgeText: activeFile.path,
         compiledHtml: compiledPyHtml,
         siblingHtml: null,
-        consoleTitle: "Consola Python"
+        consoleTitle: "Consola Python",
+        hasConsole: true
       });
       return;
     }
 
-    // 5. Pestaña C, C++, SQL, Markdown, etc.: no disponible en vista previa web
+    // 5. Pestaña Markdown (.md / README.md): documento formateado limpio
+    if (MARKDOWN_EXTENSIONS.has(ext)) {
+      const compiledMdHtml = buildMarkdownPreview(activeFile);
+      showRunnableIframe({
+        headerTitle: "Vista previa de Markdown",
+        badgeText: activeFile.path,
+        compiledHtml: compiledMdHtml,
+        siblingHtml: null,
+        hasConsole: false
+      });
+      return;
+    }
+
+    // 6. Pestaña C, C++, SQL, etc.: no disponible en vista previa web
     showUnavailableState({
       headerTitle: "Vista previa",
       badgeText: activeFile.path,
       messageTitle: `La vista previa no está disponible para este archivo ${extLabel}`,
-      messageDesc: "La vista previa en vivo solo ejecuta archivos .html, .js, .css (en conjunto con su carpeta) y scripts .py de Python."
+      messageDesc: "La vista previa en vivo ejecuta archivos .html, .js, .css (en conjunto con su carpeta), scripts .py de Python y documentos .md."
     });
   }
 
@@ -611,6 +639,7 @@ function escapeHtmlText(str) {
 function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
   const prefix = baseFolder ? `${baseFolder}/` : "";
   const modules = [];
+  const modPrefixes = new Set();
 
   for (const candidate of sameFolderFiles) {
     const ext = getFileExtension(candidate.path);
@@ -620,37 +649,57 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
     const relPath = prefix && cleanPath.startsWith(prefix) ? cleanPath.slice(prefix.length) : cleanPath;
     if (relPath && !relPath.startsWith("..")) {
       modules.push({ path: relPath, content: candidate.content });
+      const topMod = relPath.split("/")[0].replace(/\.(py|pyw)$/i, "");
+      if (topMod) modPrefixes.add(topMod);
     }
   }
 
   const pythonBootstrap = [
-    "import builtins, sys, traceback, js",
+    "import builtins, json, random, sys, traceback",
     "if '.' not in sys.path:",
     "    sys.path.insert(0, '.')",
+    "class _StudioPauseForInput(BaseException):",
+    "    def __init__(self, prompt_text):",
+    "        self.prompt_text = prompt_text",
+    "for _mod_prefix in json.loads(__studio_mod_prefixes_json):",
+    "    for _loaded in list(sys.modules.keys()):",
+    "        if _loaded == _mod_prefix or _loaded.startswith(_mod_prefix + '.'):",
+    "            sys.modules.pop(_loaded, None)",
+    "random.seed(int(__studio_seed))",
+    "_inputs = json.loads(__studio_inputs_json)",
+    "_idx = 0",
     "def __studio_input(prompt=''):",
+    "    global _idx",
     "    texto = str(prompt) if prompt is not None else ''",
-    "    resp = js.prompt(texto or 'Entrada de datos (Python):')",
-    "    if resp is None:",
-    "        raise EOFError('Entrada cancelada por el usuario.')",
-    "    print(f'{texto}{resp}')",
-    "    return str(resp)",
+    "    if _idx < len(_inputs):",
+    "        item = _inputs[_idx]",
+    "        _idx += 1",
+    "        if item.get('cancelled'):",
+    "            print(f'{texto}(cancelado)')",
+    "            raise EOFError('Entrada cancelada por el usuario.')",
+    "        val = str(item.get('value', ''))",
+    "        print(f'{texto}{val}')",
+    "        return val",
+    "    raise _StudioPauseForInput(texto)",
     "builtins.input = __studio_input",
-    "__had_err = False",
-    "__ns = {'__name__': '__main__', '__file__': __studio_entry_name}",
+    "_result = {'status': 'ok'}",
+    "_ns = {'__name__': '__main__', '__file__': __studio_entry_name}",
     "try:",
-    "    exec(compile(__studio_entry_code, __studio_entry_name, 'exec'), __ns)",
+    "    exec(compile(__studio_entry_code, __studio_entry_name, 'exec'), _ns)",
+    "except _StudioPauseForInput as _pause:",
+    "    _result = {'status': 'need_input', 'prompt': _pause.prompt_text}",
     "except SystemExit:",
     "    pass",
-    "except Exception as __exc:",
-    "    __had_err = True",
-    "    __tb = traceback.extract_tb(__exc.__traceback__)",
-    "    __clean = [f for f in __tb if f.filename == __studio_entry_name or not f.filename.startswith('<')]",
-    "    __lines = ['Traceback (most recent call last):']",
-    "    for __f in __clean:",
-    "        __lines.append(f'  Archivo \"{__f.filename}\", línea {__f.lineno}, en {__f.name}')",
-    "    __lines.extend([l.rstrip('\\n') for l in traceback.format_exception_only(type(__exc), __exc)])",
-    "    print('\\n'.join(__lines), file=sys.stderr)",
-    "__had_err"
+    "except Exception as _exc:",
+    "    _result = {'status': 'error'}",
+    "    _tb = traceback.extract_tb(_exc.__traceback__)",
+    "    _clean = [f for f in _tb if f.filename == __studio_entry_name or not f.filename.startswith('<')]",
+    "    _lines = ['Traceback (most recent call last):']",
+    "    for _f in _clean:",
+    "        _lines.append(f'  Archivo \"{_f.filename}\", línea {_f.lineno}, en {_f.name}')",
+    "    _lines.extend([l.rstrip('\\n') for l in traceback.format_exception_only(type(_exc), _exc)])",
+    "    print('\\n'.join(_lines), file=sys.stderr)",
+    "json.dumps(_result)"
   ].join("\n");
 
   const payloadJson = JSON.stringify({
@@ -658,6 +707,7 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
     entryPath: pyFile.path,
     code: pyFile.content,
     modules,
+    modPrefixes: [...modPrefixes],
     bootstrap: pythonBootstrap
   }).replace(/</g, "\\u003c");
 
@@ -671,10 +721,13 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
     :root {
       --bg: oklch(15% 0.011 255);
       --card: oklch(20.5% 0.014 255);
+      --surface-input: oklch(16.5% 0.012 255);
       --border: oklch(33% 0.016 255 / 0.65);
       --ink: oklch(94.5% 0.007 255);
       --muted: oklch(67% 0.014 255);
       --accent: oklch(74% 0.13 252);
+      --accent-solid: oklch(52% 0.165 252);
+      --accent-ink: oklch(98% 0.005 252);
       --ok: oklch(66% 0.14 152);
       --warn: oklch(74% 0.14 75);
       --err: oklch(62% 0.18 25);
@@ -727,10 +780,59 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
       word-break: break-word;
       padding: 4px 8px;
       border-radius: 4px;
-      background: oklch(16.5% 0.012 255);
+      background: var(--surface-input);
     }
     .py-line-error { color: var(--err); }
     .py-empty { color: var(--muted); font-style: italic; }
+    .py-input-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-input);
+    }
+    .py-input-bar[hidden] { display: none; }
+    .py-input-prompt {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .py-input-field {
+      flex: 1;
+      min-width: 160px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 16px;
+    }
+    .py-input-field:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .py-btn {
+      min-height: 36px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .py-btn-primary {
+      background: var(--accent-solid);
+      border-color: var(--accent-solid);
+      color: var(--accent-ink);
+    }
   </style>
 </head>
 <body>
@@ -740,6 +842,12 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
       <span id="__py_status" class="py-runner-status">Iniciando motor Python 3 (WebAssembly)…</span>
     </div>
     <div id="__py_screen_log" class="py-runner-output"></div>
+    <form id="__py_input_form" class="py-input-bar" hidden>
+      <label id="__py_input_prompt" for="__py_input_field" class="py-input-prompt">input():</label>
+      <input id="__py_input_field" type="text" class="py-input-field" autocomplete="off" spellcheck="false" placeholder="Escribí un valor y tocá Enviar…">
+      <button type="submit" class="py-btn py-btn-primary">Enviar</button>
+      <button type="button" id="__py_input_cancel" class="py-btn">Cancelar</button>
+    </form>
   </section>
 
   <script id="__py_payload" type="application/json">${payloadJson}</script>
@@ -747,7 +855,23 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
     (function () {
       var statusEl = document.getElementById("__py_status");
       var screenBox = document.getElementById("__py_screen_log");
+      var inputForm = document.getElementById("__py_input_form");
+      var inputPromptEl = document.getElementById("__py_input_prompt");
+      var inputField = document.getElementById("__py_input_field");
+      var cancelBtn = document.getElementById("__py_input_cancel");
       var payload = JSON.parse(document.getElementById("__py_payload").textContent);
+
+      var pyodideInstance = null;
+      var sessionSeed = Math.floor(Math.random() * 1000000000);
+      var submittedInputs = [];
+      var MAX_INPUT_STEPS = 200;
+
+      function clearOutputs() {
+        if (screenBox) screenBox.innerHTML = "";
+        try {
+          parent.postMessage({ source: "studio-ide-preview", action: "clear" }, "*");
+        } catch (_) {}
+      }
 
       function emit(level, text) {
         var msg = String(text ?? "");
@@ -778,43 +902,92 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
         }
       }
 
+      function writeFolderModules(pyodide) {
+        for (var i = 0; i < payload.modules.length; i += 1) {
+          var mod = payload.modules[i];
+          ensureParentDirs(pyodide.FS, mod.path);
+          pyodide.FS.writeFile(mod.path, mod.content, { encoding: "utf8" });
+        }
+      }
+
+      async function executePass() {
+        if (!pyodideInstance) return;
+        if (inputForm) inputForm.hidden = true;
+
+        if (submittedInputs.length > MAX_INPUT_STEPS) {
+          emit("error", "Se superó el límite de 200 lecturas input() consecutivas.");
+          setStatus("Detenido por límite de entradas", "var(--err)");
+          return;
+        }
+
+        clearOutputs();
+        writeFolderModules(pyodideInstance);
+        setStatus("Ejecutando script…", "var(--accent)");
+
+        pyodideInstance.globals.set("__studio_entry_name", payload.entryName);
+        pyodideInstance.globals.set("__studio_entry_code", payload.code);
+        pyodideInstance.globals.set("__studio_seed", sessionSeed);
+        pyodideInstance.globals.set("__studio_inputs_json", JSON.stringify(submittedInputs));
+        pyodideInstance.globals.set("__studio_mod_prefixes_json", JSON.stringify(payload.modPrefixes));
+
+        var rawJson = await pyodideInstance.runPythonAsync(payload.bootstrap);
+        var outcome = JSON.parse(String(rawJson || '{"status":"ok"}'));
+
+        if (outcome.status === "need_input") {
+          setStatus("Esperando entrada en consola…", "var(--warn)");
+          if (inputPromptEl) {
+            inputPromptEl.textContent = outcome.prompt || "Entrada (input):";
+          }
+          if (inputForm && inputField) {
+            inputField.value = "";
+            inputForm.hidden = false;
+            inputField.focus();
+          }
+          return;
+        }
+
+        if (outcome.status === "error") {
+          setStatus("Error en ejecución", "var(--err)");
+        } else {
+          setStatus("Ejecutado correctamente", "var(--ok)");
+          if (screenBox && screenBox.children.length === 0) {
+            var note = document.createElement("div");
+            note.className = "py-empty";
+            note.textContent = "El script Python finalizó sin errores. Usá print(...) para mostrar resultados acá.";
+            screenBox.appendChild(note);
+          }
+        }
+      }
+
+      if (inputForm) {
+        inputForm.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          submittedInputs.push({ value: inputField ? inputField.value : "" });
+          executePass();
+        });
+      }
+
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", function () {
+          submittedInputs.push({ cancelled: true });
+          executePass();
+        });
+      }
+
       async function bootAndRun() {
         try {
-          var pyodide = await window.loadPyodide({
+          pyodideInstance = await window.loadPyodide({
             indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/"
           });
 
-          pyodide.setStdout({
+          pyodideInstance.setStdout({
             batched: function (line) { emit("log", line); }
           });
-          pyodide.setStderr({
+          pyodideInstance.setStderr({
             batched: function (line) { emit("error", line); }
           });
 
-          for (var i = 0; i < payload.modules.length; i += 1) {
-            var mod = payload.modules[i];
-            ensureParentDirs(pyodide.FS, mod.path);
-            pyodide.FS.writeFile(mod.path, mod.content, { encoding: "utf8" });
-          }
-
-          setStatus("Ejecutando script…", "var(--accent)");
-
-          pyodide.globals.set("__studio_entry_name", payload.entryName);
-          pyodide.globals.set("__studio_entry_code", payload.code);
-
-          var hadErr = await pyodide.runPythonAsync(payload.bootstrap);
-
-          if (hadErr) {
-            setStatus("Error en ejecución", "var(--err)");
-          } else {
-            setStatus("Ejecutado correctamente", "var(--ok)");
-            if (screenBox && screenBox.children.length === 0) {
-              var note = document.createElement("div");
-              note.className = "py-empty";
-              note.textContent = "El script Python finalizó sin errores. Usá print(...) para mostrar resultados acá.";
-              screenBox.appendChild(note);
-            }
-          }
+          await executePass();
         } catch (err) {
           setStatus("Error al iniciar Python", "var(--err)");
           emit("error", err && err.message ? err.message : String(err));
@@ -833,4 +1006,272 @@ function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder) {
   </script>
 </body>
 </html>`;
+}
+
+function buildMarkdownPreview(mdFile) {
+  const renderedBody = renderMarkdownDocumentHtml(mdFile.content || "");
+  const safeTitle = escapeHtmlText(mdFile.shortName);
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${safeTitle}</title>
+  <style>
+    :root {
+      --bg: oklch(15% 0.011 255);
+      --card: oklch(20.5% 0.014 255);
+      --code-bg: oklch(18% 0.013 255);
+      --border: oklch(33% 0.016 255 / 0.65);
+      --ink: oklch(94.5% 0.007 255);
+      --ink-2: oklch(83% 0.011 255);
+      --muted: oklch(67% 0.014 255);
+      --accent: oklch(74% 0.13 252);
+      --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px 24px 48px;
+      background: var(--bg);
+      color: var(--ink-2);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.68;
+    }
+    .md-article {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--ink);
+      margin: 1.4em 0 0.55em;
+      line-height: 1.3;
+      overflow-wrap: break-word;
+    }
+    h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35em; margin-top: 0; }
+    h2 { font-size: 1.35rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
+    h3 { font-size: 1.12rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1em; }
+    ul, ol { padding-left: 1.5em; }
+    li + li { margin-top: 0.28em; }
+    a { color: var(--accent); text-underline-offset: 0.18em; }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      padding: 0.15em 0.4em;
+      border-radius: 5px;
+      background: var(--card);
+      color: var(--ink);
+    }
+    pre {
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--code-bg);
+      overflow-x: auto;
+    }
+    pre code {
+      padding: 0;
+      background: transparent;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    blockquote {
+      padding: 8px 14px;
+      border-left: 3px solid var(--accent);
+      background: var(--card);
+      border-radius: 0 6px 6px 0;
+      color: var(--ink-2);
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 1.6em 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background: var(--card);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .md-empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <article class="md-article">
+    ${renderedBody || '<p class="md-empty">Este archivo Markdown está vacío.</p>'}
+  </article>
+</body>
+</html>`;
+}
+
+function renderMarkdownDocumentHtml(rawMd) {
+  const blocks = [];
+  const fenceRe = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+  let cursor = 0;
+  let m;
+
+  while ((m = fenceRe.exec(rawMd)) !== null) {
+    if (m.index > cursor) {
+      blocks.push({ type: "prose", text: rawMd.slice(cursor, m.index) });
+    }
+    blocks.push({ type: "code", lang: m[1] || "", code: m[2].replace(/\n$/, "") });
+    cursor = fenceRe.lastIndex;
+  }
+  if (cursor < rawMd.length) {
+    blocks.push({ type: "prose", text: rawMd.slice(cursor) });
+  }
+
+  return blocks
+    .map((b) => {
+      if (b.type === "code") {
+        return `<pre><code>${escapeHtmlText(b.code)}</code></pre>`;
+      }
+      return renderMarkdownProseBlock(b.text);
+    })
+    .join("\n");
+}
+
+function renderMarkdownProseBlock(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let para = [];
+  let listTag = null;
+  let listItems = [];
+  let tableRows = [];
+
+  const flushPara = () => {
+    if (para.length > 0) {
+      out.push(`<p>${para.map(formatMdInline).join("<br>")}</p>`);
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (listTag && listItems.length > 0) {
+      out.push(`<${listTag}>${listItems.join("")}</${listTag}>`);
+      listTag = null;
+      listItems = [];
+    }
+  };
+  const flushTable = () => {
+    if (tableRows.length === 0) return;
+    const parsed = tableRows.map((r) =>
+      r
+        .replace(/^\||\|$/g, "")
+        .split("|")
+        .map((c) => c.trim())
+    );
+    const hasSep = parsed.length >= 2 && parsed[1].every((c) => /^:?-{2,}:?$/.test(c));
+    const head = parsed[0];
+    const body = hasSep ? parsed.slice(2) : parsed.slice(1);
+    const thead = `<thead><tr>${head.map((h) => `<th>${formatMdInline(h)}</th>`).join("")}</tr></thead>`;
+    const tbody =
+      body.length > 0
+        ? `<tbody>${body.map((row) => `<tr>${row.map((c) => `<td>${formatMdInline(c)}</td>`).join("")}</tr>`).join("")}</tbody>`
+        : "";
+    out.push(`<table>${thead}${tbody}</table>`);
+    tableRows = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushPara();
+      flushList();
+      flushTable();
+      continue;
+    }
+
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      flushPara();
+      flushList();
+      tableRows.push(trimmed);
+      continue;
+    }
+    flushTable();
+
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushPara();
+      flushList();
+      out.push("<hr>");
+      continue;
+    }
+
+    const hMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (hMatch) {
+      flushPara();
+      flushList();
+      const lvl = hMatch[1].length;
+      out.push(`<h${lvl}>${formatMdInline(hMatch[2])}</h${lvl}>`);
+      continue;
+    }
+
+    const qMatch = trimmed.match(/^>\s?(.*)$/);
+    if (qMatch) {
+      flushPara();
+      flushList();
+      out.push(`<blockquote>${formatMdInline(qMatch[1])}</blockquote>`);
+      continue;
+    }
+
+    const ulMatch = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (ulMatch) {
+      flushPara();
+      if (listTag && listTag !== "ul") flushList();
+      listTag = "ul";
+      listItems.push(`<li>${formatMdInline(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    const olMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+    if (olMatch) {
+      flushPara();
+      if (listTag && listTag !== "ol") flushList();
+      listTag = "ol";
+      listItems.push(`<li>${formatMdInline(olMatch[1])}</li>`);
+      continue;
+    }
+
+    flushList();
+    para.push(line);
+  }
+
+  flushPara();
+  flushList();
+  flushTable();
+  return out.join("\n");
+}
+
+function formatMdInline(str) {
+  const codes = [];
+  const masked = String(str).replace(/`([^`]+)`/g, (_, c) => {
+    const i = codes.length;
+    codes.push(`<code>${escapeHtmlText(c)}</code>`);
+    return `\u0000C${i}\u0000`;
+  });
+
+  let safe = escapeHtmlText(masked);
+  safe = safe.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+  safe = safe.replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+)\)/g, '<a href="$2">$1</a>');
+  safe = safe.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  safe = safe.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  safe = safe.replace(/\u0000C(\d+)\u0000/g, (_, i) => codes[Number(i)] || "");
+  return safe;
 }

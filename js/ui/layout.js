@@ -132,6 +132,11 @@ export function initLayoutController() {
       if (isCompact() && leftOpen) {
         setLeftOpen(false);
       }
+    },
+    closeRightOnCompactAction() {
+      if (isCompact() && rightOpen) {
+        setRightOpen(false);
+      }
     }
   };
 }
@@ -231,10 +236,26 @@ function bindVisualViewport() {
   }
 
   const syncViewport = () => {
-    document.documentElement.style.setProperty("--vvh", `${Math.round(vv.height)}px`);
-    document.documentElement.style.setProperty("--vv-offset-top", `${Math.max(0, Math.round(vv.offsetTop))}px`);
+    const vHeight = Math.round(vv.height);
+    const offsetTop = Math.max(0, Math.round(vv.offsetTop));
+    const keyboardOpen = window.innerHeight - vHeight > 110;
+
+    document.documentElement.style.setProperty("--vvh", `${vHeight}px`);
+    document.documentElement.style.setProperty("--vv-offset-top", `${offsetTop}px`);
+    document.body.dataset.keyboardOpen = String(keyboardOpen);
+
     if (window.scrollY !== 0 || window.scrollX !== 0) {
       window.scrollTo(0, 0);
+    }
+
+    if (keyboardOpen) {
+      const activeEl = document.activeElement;
+      if (
+        activeEl instanceof HTMLElement &&
+        (activeEl.matches("input, textarea") || activeEl.closest(".ide-dialog"))
+      ) {
+        activeEl.scrollIntoView({ block: "nearest" });
+      }
     }
   };
 

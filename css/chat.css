@@ -237,6 +237,23 @@
   min-width: 0;
 }
 
+.chat-md-quote {
+  margin: 0;
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-sm);
+  border-left: 2px solid var(--color-accent-text);
+  background: var(--color-paper-2);
+  color: var(--color-ink-2);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.chat-md-hr {
+  border: 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+  margin-block: var(--space-xs);
+  width: 100%;
+}
+
 .chat-ai-response ul,
 .chat-ai-response ol {
   margin: 0;

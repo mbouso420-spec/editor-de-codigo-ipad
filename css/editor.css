@@ -315,3 +315,10 @@
     display: none;
   }
 }
+
+@media (max-width: 30rem) {
+  .editor-toolbar-actions .btn-icon {
+    min-width: var(--control-height-sm);
+    padding-inline: var(--space-2xs);
+  }
+}

@@ -4,6 +4,7 @@ import { initSymbolBar } from "./ui/symbolBar.js";
 import { initExplorerController } from "./ui/explorerController.js";
 import { initDiffModal } from "./ui/diffModal.js";
 import { initLivePreviewModal } from "./ui/livePreviewModal.js";
+import { initQuickOpenModal } from "./ui/quickOpenModal.js";
 import { createEditorManager } from "./editor/editorManager.js";
 import { initChatController } from "./ai/chatController.js";
 import { initGithubController } from "./github/githubController.js";
@@ -56,7 +57,13 @@ async function initApp() {
   const btnWrap = document.getElementById("btn-editor-wrap");
   const btnFontDown = document.getElementById("btn-font-down");
   const btnFontUp = document.getElementById("btn-font-up");
+  const btnExportFile = document.getElementById("btn-export-file");
   const zoomReadoutEl = document.getElementById("editor-zoom-readout");
+
+  const statusFilePathEl = document.getElementById("status-file-path");
+  const statusFileLangEl = document.getElementById("status-file-lang");
+  const statusCursorPosEl = document.getElementById("status-cursor-pos");
+  const statusNetworkEl = document.getElementById("status-network-state");
 
   let projects = await ensureInitialWorkspace();
   let activeProject =
@@ -69,7 +76,8 @@ async function initApp() {
   let filesOnly = [];
   let openTabIds = [];
   let activeFileId = null;
-  let activeSelection = { text: "", lineCount: 0 };
+  let activeSelection = { text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 };
+  let chat = null;
 
   /** @type {Map<string, number>} */
   const saveTimers = new Map();
@@ -94,6 +102,15 @@ async function initApp() {
     onSelectionChange(selection) {
       activeSelection = selection;
       updateAssistantContextLabel();
+      updateStatusBar();
+      chat?.notifySelectionChanged();
+    }
+  });
+
+  initQuickOpenModal({
+    getFiles: () => filesOnly,
+    onSelectFile(path) {
+      void openOrFocusFile(path);
     }
   });
 
@@ -236,16 +253,30 @@ async function initApp() {
     async onImportFiles(importedList) {
       await flushPendingSaves();
       let lastPath = null;
-      for (const item of importedList) {
-        await upsertEntry(activeProject.id, item.path, {
-          isFolder: false,
-          content: item.content
-        });
-        lastPath = item.path;
+      let importedCount = 0;
+      try {
+        for (const item of importedList) {
+          await upsertEntry(activeProject.id, item.path, {
+            isFolder: false,
+            content: item.content
+          });
+          editor.dropFileState(item.path);
+          lastPath = item.path;
+          importedCount += 1;
+        }
+      } catch (error) {
+        explorer.setAutosaveStatus(
+          error instanceof Error ? error.message : "No se pudo importar el archivo"
+        );
       }
       await reloadProjectEntries();
       if (lastPath) {
         await openOrFocusFile(lastPath);
+        if (importedCount > 0) {
+          explorer.setAutosaveStatus(
+            importedCount === 1 ? "Archivo importado" : `${importedCount} archivos importados`
+          );
+        }
       } else {
         renderWorkspaceView();
       }
@@ -315,7 +346,7 @@ async function initApp() {
     }
   });
 
-  const PREVIEWABLE_LANGS = new Set(["html", "javascript", "css", "python"]);
+  const PREVIEWABLE_LANGS = new Set(["html", "js", "css", "python", "markdown"]);
 
   initLivePreviewModal({
     getWorkspaceSnapshot() {
@@ -330,6 +361,17 @@ async function initApp() {
       const activeFile = filesOnly.find((f) => f.id === activeFileId);
       if (!activeFile || !PREVIEWABLE_LANGS.has(activeFile.lang)) return;
 
+      if (activeFile.lang === "markdown") {
+        if (activeFile.contentLoaded === false && activeFile.blobSha) {
+          try {
+            await ensureFileContentLoaded(activeFile);
+          } catch {
+            // Se muestra con el estado actual en memoria
+          }
+        }
+        return;
+      }
+
       const lastSlash = activeFile.path.lastIndexOf("/");
       const folderPrefix = lastSlash === -1 ? "" : `${activeFile.path.slice(0, lastSlash + 1)}`;
 
@@ -341,7 +383,7 @@ async function initApp() {
         }
         return (
           f.lang === "html" ||
-          f.lang === "javascript" ||
+          f.lang === "js" ||
           f.lang === "css" ||
           f.path.endsWith(".json")
         );
@@ -359,13 +401,54 @@ async function initApp() {
     }
   });
 
-  async function ensureAnOpenFile() {
-    if (!activeFileId && filesOnly.length > 0) {
-      await openOrFocusFile(filesOnly[0].id);
+  function inferFallbackFilename(rawLang) {
+    const clean = String(rawLang || "").trim().toLowerCase();
+    switch (clean) {
+      case "py":
+      case "python":
+        return "main.py";
+      case "cpp":
+      case "c++":
+        return "main.cpp";
+      case "c":
+        return "main.c";
+      case "html":
+        return "index.html";
+      case "css":
+        return "styles.css";
+      case "js":
+      case "javascript":
+        return "app.js";
+      case "sql":
+        return "consulta.sql";
+      case "md":
+      case "markdown":
+        return "README.md";
+      case "json":
+        return "datos.json";
+      default:
+        return "archivo.txt";
     }
   }
 
-  const chat = initChatController({
+  async function ensureAnOpenFile(preferredLang = "") {
+    if (activeFileId) return;
+    if (filesOnly.length > 0) {
+      await openOrFocusFile(filesOnly[0].id);
+      return;
+    }
+    const fallbackPath = inferFallbackFilename(preferredLang);
+    await upsertEntry(activeProject.id, fallbackPath, {
+      isFolder: false,
+      content: "",
+      allowOverwrite: false
+    });
+    await reloadProjectEntries();
+    await openOrFocusFile(fallbackPath);
+    await github.refreshTopbarBadge();
+  }
+
+  chat = initChatController({
     getContextSnapshot() {
       const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) ?? null : null;
       const otherOpenFiles = openTabIds
@@ -379,16 +462,22 @@ async function initApp() {
         otherOpenFiles
       };
     },
-    async onInsertAtCursor(code) {
-      await ensureAnOpenFile();
+    async onInsertAtCursor(code, lang) {
+      await ensureAnOpenFile(lang);
       editor.insertAtCursor(code, 0);
+      layout.closeRightOnCompactAction();
     },
     async onReplaceSelection(code) {
+      if (!activeSelection.lineCount) {
+        return false;
+      }
       await ensureAnOpenFile();
       editor.replaceSelection(code);
+      layout.closeRightOnCompactAction();
+      return true;
     },
-    async onApplyWholeFile(code) {
-      await ensureAnOpenFile();
+    async onApplyWholeFile(code, lang) {
+      await ensureAnOpenFile(lang);
       const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
       if (!activeFile) return;
       diffModal.openConfirmApplyDiff({
@@ -397,6 +486,7 @@ async function initApp() {
         newCode: code,
         onConfirm() {
           editor.replaceEntireDocument(code);
+          layout.closeRightOnCompactAction();
         }
       });
     },
@@ -563,7 +653,8 @@ async function initApp() {
           baseContent: e.baseContent,
           blobSha: e.blobSha || null,
           contentLoaded: e.contentLoaded !== false,
-          trackedInGithub: Boolean(e.trackedInGithub)
+          trackedInGithub: Boolean(e.trackedInGithub),
+          forceModified: Boolean(e.forceModified)
         };
       });
   }
@@ -625,7 +716,7 @@ async function initApp() {
       token: getGithubToken(),
       owner: activeProject.github.owner,
       repo: activeProject.github.repo,
-      entries: unloaded.map((f) => ({ path: f.path, sha: f.blobSha })),
+      items: unloaded.map((f) => ({ path: f.path, blobSha: f.blobSha })),
       onProgress
     });
 
@@ -633,7 +724,12 @@ async function initApp() {
     for (const fileObj of unloaded) {
       const hit = byPath.get(fileObj.path);
       if (!hit) continue;
-      await cacheSingleGithubFileContent(activeProject.id, fileObj.path, hit.content, hit.sha);
+      await cacheSingleGithubFileContent(
+        activeProject.id,
+        fileObj.path,
+        hit.content,
+        hit.blobSha || fileObj.blobSha
+      );
       fileObj.content = hit.content;
       fileObj.baseContent = hit.content;
       fileObj.contentLoaded = true;
@@ -716,6 +812,7 @@ async function initApp() {
     }
 
     updateAssistantContextLabel();
+    updateStatusBar();
     chat.notifyWorkspaceChanged();
   }
 
@@ -779,7 +876,11 @@ async function initApp() {
       return false;
     }
     if (activeProject.kind === "github") {
-      return !file.trackedInGithub || file.content !== file.baseContent;
+      return (
+        Boolean(file.forceModified) ||
+        !file.trackedInGithub ||
+        file.content !== file.baseContent
+      );
     }
     return false;
   }
@@ -794,10 +895,40 @@ async function initApp() {
   }
 
   function setEditorToolbarDisabled(disabled) {
-    for (const el of [btnUndo, btnRedo, btnSearch]) {
+    for (const el of [btnUndo, btnRedo, btnSearch, btnExportFile]) {
       if (el) el.disabled = disabled;
     }
   }
+
+  function updateNetworkIndicator() {
+    if (!statusNetworkEl) return;
+    const isOnline = navigator.onLine !== false;
+    statusNetworkEl.textContent = isOnline ? "En línea" : "Sin conexión";
+    statusNetworkEl.classList.toggle("is-offline", !isOnline);
+  }
+
+  function updateStatusBar() {
+    const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
+    if (!activeFile) {
+      if (statusFilePathEl) statusFilePathEl.textContent = "Sin archivo abierto";
+      if (statusFileLangEl) statusFileLangEl.textContent = "—";
+      if (statusCursorPosEl) statusCursorPosEl.textContent = "—";
+    } else {
+      if (statusFilePathEl) statusFilePathEl.textContent = activeFile.path;
+      if (statusFileLangEl) statusFileLangEl.textContent = activeFile.badge;
+      const line = activeSelection.cursorLine || 1;
+      const col = activeSelection.cursorCol || 1;
+      const selSuffix =
+        activeSelection.lineCount > 0 ? ` (${activeSelection.lineCount} sel.)` : "";
+      if (statusCursorPosEl) {
+        statusCursorPosEl.textContent = `Línea ${line}, Col ${col}${selSuffix}`;
+      }
+    }
+    updateNetworkIndicator();
+  }
+
+  window.addEventListener("online", updateNetworkIndicator);
+  window.addEventListener("offline", updateNetworkIndicator);
 
   function updateAssistantContextLabel() {
     const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
@@ -837,6 +968,8 @@ function defaultStarterTemplate(path) {
       return `<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8" />\n  <title>Documento</title>\n</head>\n<body>\n\n</body>\n</html>\n`;
     case "python":
       return `def principal():\n    print("Hola desde Python en Studio IDE")\n\nif __name__ == "__main__":\n    principal()\n`;
+    case "markdown":
+      return `# Documento\n\n`;
     case "sql":
       return `SELECT 1;\n`;
     default:

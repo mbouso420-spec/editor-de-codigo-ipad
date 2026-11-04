@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v10";
+const SHELL_CACHE = "studio-ide-shell-v11";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 
 const APP_SHELL_URLS = [
@@ -20,6 +20,7 @@ const APP_SHELL_URLS = [
   "./js/ui/layout.js",
   "./js/ui/symbolBar.js",
   "./js/ui/explorerController.js",
+  "./js/ui/quickOpenModal.js",
   "./js/ui/diffModal.js",
   "./js/ui/livePreviewModal.js",
   "./js/editor/editorManager.js",

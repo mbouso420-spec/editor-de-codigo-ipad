@@ -191,15 +191,11 @@ export function initChatController({
 
   exportKeysBtn?.addEventListener("click", async () => {
     const bundle = exportKeysBundle();
-    try {
-      await navigator.clipboard.writeText(bundle);
-      if (providerHelpEl) {
-        providerHelpEl.textContent = "Pack de claves copiado al portapapeles. Podés mandártelo al iPad y tocar Importar pack.";
-      }
-    } catch {
-      if (providerHelpEl) {
-        providerHelpEl.textContent = "No se pudo acceder al portapapeles automáticamente.";
-      }
+    const ok = await copyToClipboardSafe(bundle);
+    if (providerHelpEl) {
+      providerHelpEl.textContent = ok
+        ? "Pack de claves copiado al portapapeles. Podés mandártelo al iPad y tocar Importar pack."
+        : "No se pudo acceder al portapapeles automáticamente.";
     }
   });
 
@@ -631,25 +627,43 @@ export function initChatController({
     const actions = document.createElement("div");
     actions.className = "chat-code-actions-wrap";
 
-    const btnInsert = createCodeActionButton("arrowDownLeft", "En cursor", "Insertar en la posición del cursor", () => {
-      onInsertAtCursor(code);
+    const btnInsert = createCodeActionButton("arrowDownLeft", "En cursor", "Insertar en la posición del cursor", async () => {
+      await onInsertAtCursor(code, lang);
+      btnInsert.innerHTML = `${icon("check")}<span>Insertado</span>`;
+      window.setTimeout(() => {
+        btnInsert.innerHTML = `${icon("arrowDownLeft")}<span>En cursor</span>`;
+      }, 1300);
     });
 
-    const btnReplace = createCodeActionButton("replace", "Reemplazar sel.", "Reemplazar las líneas seleccionadas", () => {
-      onReplaceSelection(code);
-    });
+    const hasSelNow = Boolean(getContextSnapshot().selection?.lineCount > 0);
+    const btnReplace = createCodeActionButton(
+      "replace",
+      "Reemplazar sel.",
+      hasSelNow
+        ? "Reemplazar las líneas seleccionadas"
+        : "Seleccioná líneas en el editor para habilitar el reemplazo",
+      async () => {
+        const applied = await onReplaceSelection(code);
+        if (applied !== false) {
+          btnReplace.innerHTML = `${icon("check")}<span>Reemplazado</span>`;
+          window.setTimeout(() => {
+            btnReplace.innerHTML = `${icon("replace")}<span>Reemplazar sel.</span>`;
+          }, 1300);
+        }
+      }
+    );
+    btnReplace.dataset.action = "replace-selection";
+    btnReplace.disabled = !hasSelNow;
 
     const btnApplyFile = createCodeActionButton("fileCheck", "Aplicar archivo", "Reemplazar contenido completo del archivo (reversible con Deshacer)", () => {
-      onApplyWholeFile(code);
+      onApplyWholeFile(code, lang);
     });
 
     const btnCopy = createCodeActionButton("copy", "Copiar", "Copiar bloque al portapapeles", async () => {
-      try {
-        await navigator.clipboard.writeText(code);
-      } catch {
-        // Sin permiso de portapapeles
-      }
-      btnCopy.innerHTML = `${icon("check")}<span>Copiado</span>`;
+      const copied = await copyToClipboardSafe(code);
+      btnCopy.innerHTML = copied
+        ? `${icon("check")}<span>Copiado</span>`
+        : `${icon("x")}<span>Sin acceso</span>`;
       window.setTimeout(() => {
         btnCopy.innerHTML = `${icon("copy")}<span>Copiar</span>`;
       }, 1400);
@@ -697,7 +711,7 @@ export function initChatController({
   function buildSystemPrompt(snapshot) {
     const parts = [
       "Sos el asistente de programación integrado en Studio IDE (estilo Antigravity).",
-      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```cpp, ```html, ```css, ```js, ```sql) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad."
+      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```python, ```cpp, ```html, ```css, ```js, ```sql, ```markdown) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad."
     ];
 
     if (snapshot.activeFile) {
@@ -722,9 +736,27 @@ export function initChatController({
     return parts.join("\n");
   }
 
+  function syncReplaceButtonsState() {
+    if (!streamContainer) return;
+    const hasSel = Boolean(getContextSnapshot().selection?.lineCount > 0);
+    const buttons = streamContainer.querySelectorAll('button[data-action="replace-selection"]');
+    for (const btn of buttons) {
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = !hasSel;
+        btn.title = hasSel
+          ? "Reemplazar las líneas seleccionadas"
+          : "Seleccioná líneas en el editor para habilitar el reemplazo";
+      }
+    }
+  }
+
   return {
     notifyWorkspaceChanged() {
       renderExtraTabChips();
+      syncReplaceButtonsState();
+    },
+    notifySelectionChanged() {
+      syncReplaceButtonsState();
     },
     setConversation(nextHistory) {
       if (abortController) {
@@ -811,11 +843,27 @@ function formatProseHtml(text) {
       continue;
     }
 
-    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    const hrMatch = trimmed.match(/^(-{3,}|\*{3,}|_{3,})$/);
+    if (hrMatch) {
+      flushParagraph();
+      flushList();
+      out.push('<hr class="chat-md-hr">');
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
       flushParagraph();
       flushList();
       out.push(`<h3 class="chat-md-heading">${formatInlineMarkdown(headingMatch[2])}</h3>`);
+      continue;
+    }
+
+    const quoteMatch = trimmed.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      out.push(`<blockquote class="chat-md-quote">${formatInlineMarkdown(quoteMatch[1])}</blockquote>`);
       continue;
     }
 
@@ -863,6 +911,32 @@ function formatInlineMarkdown(str) {
   safe = safe.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
   safe = safe.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeTokens[Number(idx)] || "");
   return safe;
+}
+
+async function copyToClipboardSafe(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Respaldo con textarea temporal
+    }
+  }
+  try {
+    const temp = document.createElement("textarea");
+    temp.value = text;
+    temp.setAttribute("readonly", "");
+    temp.style.position = "fixed";
+    temp.style.opacity = "0";
+    temp.style.pointerEvents = "none";
+    document.body.appendChild(temp);
+    temp.select();
+    const ok = document.execCommand("copy");
+    temp.remove();
+    return Boolean(ok);
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(str) {

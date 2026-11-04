@@ -287,7 +287,7 @@ export function initExplorerController({
         continue;
       }
 
-      const depthClass = `tree-depth-${Math.min(node.depth, 3)}`;
+      const depthClass = `tree-depth-${Math.min(node.depth, 6)}`;
       const isActiveFile = !node.isFolder && node.path === activeFileId;
       const isSelectedFolder = node.isFolder && node.path === selectedFolderPath;
 

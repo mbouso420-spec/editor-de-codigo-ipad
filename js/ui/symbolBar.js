@@ -102,6 +102,20 @@ const LANGUAGE_SYMBOLS = {
       { label: "*", insert: "*", cursorBack: 0 },
       { label: "_", insert: "_", cursorBack: 0 }
     ]
+  },
+  markdown: {
+    label: "Markdown",
+    keys: [
+      { label: "#", insert: "# ", cursorBack: 0 },
+      { label: "##", insert: "## ", cursorBack: 0 },
+      { label: "** **", insert: "****", cursorBack: 2 },
+      { label: "` `", insert: "``", cursorBack: 1 },
+      { label: "```", insert: "```\n\n```", cursorBack: 4 },
+      { label: "-", insert: "- ", cursorBack: 0 },
+      { label: "[ ]()", insert: "[]()", cursorBack: 3 },
+      { label: ">", insert: "> ", cursorBack: 0 },
+      { label: "---", insert: "\n---\n", cursorBack: 0 }
+    ]
   }
 };
 

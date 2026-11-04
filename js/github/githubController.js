@@ -15,6 +15,7 @@ import {
   getPendingGithubChanges,
   hydrateGithubProject,
   hydrateLazyGithubProject,
+  makeGithubProjectId,
   markProjectSynced
 } from "../storage/workspaceDb.js";
 
@@ -59,6 +60,9 @@ export function initGithubController({
   let reposCache = [];
   let pendingPullConfirm = false;
   let pullConfirmTimer = 0;
+  /** @type {"live" | "clone" | null} */
+  let pendingOpenConfirmKind = null;
+  let openConfirmTimer = 0;
 
   function resetPullConfirm() {
     pendingPullConfirm = false;
@@ -69,9 +73,23 @@ export function initGithubController({
     }
   }
 
+  function resetOpenConfirm() {
+    pendingOpenConfirmKind = null;
+    window.clearTimeout(openConfirmTimer);
+    if (openLiveBtn) {
+      openLiveBtn.className = "btn";
+      openLiveBtn.innerHTML = `${icon("folderOpen")}<span>Abrir sin descargar</span>`;
+    }
+    if (cloneBtn) {
+      cloneBtn.className = "btn";
+      cloneBtn.innerHTML = `${icon("cloudDownload")}<span>Guardar copia offline</span>`;
+    }
+  }
+
   openDialogBtn?.addEventListener("click", async () => {
     if (!dialog) return;
     resetPullConfirm();
+    resetOpenConfirm();
     await onFlushPendingSaves?.();
     const storedToken = getGithubToken();
     if (tokenInput) {
@@ -86,12 +104,14 @@ export function initGithubController({
 
   closeDialogBtn?.addEventListener("click", () => {
     resetPullConfirm();
+    resetOpenConfirm();
     dialog?.close();
   });
 
   dialog?.addEventListener("click", (event) => {
     if (event.target === dialog) {
       resetPullConfirm();
+      resetOpenConfirm();
       dialog.close();
     }
   });
@@ -117,6 +137,7 @@ export function initGithubController({
   });
 
   repoSelect?.addEventListener("change", async () => {
+    resetOpenConfirm();
     const fullName = repoSelect.value;
     if (manualRepoInput && fullName) {
       manualRepoInput.value = fullName;
@@ -127,11 +148,40 @@ export function initGithubController({
   });
 
   manualRepoInput?.addEventListener("change", async () => {
+    resetOpenConfirm();
     const fullName = manualRepoInput.value.trim();
     if (fullName.includes("/")) {
       await loadBranchesForRepo(fullName);
     }
   });
+
+  branchSelect?.addEventListener("change", () => {
+    resetOpenConfirm();
+  });
+
+  async function guardOverwritePendingChanges(owner, repo, branch, kind, triggerBtn) {
+    const targetId = makeGithubProjectId(owner, repo, branch);
+    const pendingChanges = await getPendingGithubChanges(targetId);
+    if (pendingChanges.length > 0 && pendingOpenConfirmKind !== kind) {
+      resetOpenConfirm();
+      pendingOpenConfirmKind = kind;
+      if (triggerBtn) {
+        triggerBtn.className = "tree-confirm-delete";
+        triggerBtn.textContent = "Confirmar descarte";
+      }
+      setStatus(
+        cloneStatusEl,
+        `Tenés ${pendingChanges.length} archivo(s) locales sin commitear en ${owner}/${repo} (${branch}). Tocá Confirmar descarte si querés sobrescribirlos.`,
+        "error"
+      );
+      openConfirmTimer = window.setTimeout(() => {
+        resetOpenConfirm();
+      }, 4500);
+      return false;
+    }
+    resetOpenConfirm();
+    return true;
+  }
 
   openLiveBtn?.addEventListener("click", async () => {
     await onFlushPendingSaves?.();
@@ -144,6 +194,9 @@ export function initGithubController({
       setStatus(cloneStatusEl, "Elegí un repositorio o escribí usuario/repositorio.", "error");
       return;
     }
+
+    const canProceed = await guardOverwritePendingChanges(owner, repo, branch, "live", openLiveBtn);
+    if (!canProceed) return;
 
     openLiveBtn.disabled = true;
     setStatus(cloneStatusEl, `Cargando árbol de ${owner}/${repo} (${branch})…`, "neutral");
@@ -184,6 +237,9 @@ export function initGithubController({
       setStatus(cloneStatusEl, "Elegí un repositorio o escribí usuario/repositorio.", "error");
       return;
     }
+
+    const canProceed = await guardOverwritePendingChanges(owner, repo, branch, "clone", cloneBtn);
+    if (!canProceed) return;
 
     cloneBtn.disabled = true;
     setStatus(cloneStatusEl, `Conectando con ${owner}/${repo} (${branch})…`, "neutral");

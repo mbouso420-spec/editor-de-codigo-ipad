@@ -3,6 +3,7 @@ const ACTIVE_PROVIDER_KEY = "ide.ai.provider";
 const CUSTOM_MODEL_PREFIX = "ide.ai.model.";
 const KEY_PREFIX = "ide.ai.key.";
 const GH_TOKEN_STORAGE_KEY = "ide.github.pat";
+const GH_REPOS_CACHE_KEY = "ide.github.reposCache";
 
 const liveSyncedByProvider = new Map();
 
@@ -152,10 +153,12 @@ export function setKeyStorageMode(nextMode) {
         fromStore.removeItem(k);
       }
     }
-    const ghVal = fromStore.getItem(GH_TOKEN_STORAGE_KEY);
-    if (ghVal) {
-      toStore.setItem(GH_TOKEN_STORAGE_KEY, ghVal);
-      fromStore.removeItem(GH_TOKEN_STORAGE_KEY);
+    for (const extraKey of [GH_TOKEN_STORAGE_KEY, GH_REPOS_CACHE_KEY]) {
+      const val = fromStore.getItem(extraKey);
+      if (val) {
+        toStore.setItem(extraKey, val);
+        fromStore.removeItem(extraKey);
+      }
     }
   } catch {
     // Entorno restringido
@@ -786,9 +789,29 @@ async function consumeSseStream(body, onDataPacket) {
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
 
+  const processLine = (rawLine) => {
+    if (!rawLine || !rawLine.startsWith("data:")) {
+      return;
+    }
+    const dataStr = rawLine.slice(5).trim();
+    if (!dataStr || dataStr === "[DONE]") {
+      return;
+    }
+
+    try {
+      onDataPacket(dataStr);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        return;
+      }
+      throw err;
+    }
+  };
+
   while (true) {
     const { value, done } = await reader.read();
     if (done) {
+      buffer += decoder.decode();
       break;
     }
     buffer += decoder.decode(value, { stream: true });
@@ -798,24 +821,13 @@ async function consumeSseStream(body, onDataPacket) {
       const rawLine = buffer.slice(0, newlineIdx).trim();
       buffer = buffer.slice(newlineIdx + 1);
       newlineIdx = buffer.indexOf("\n");
-
-      if (!rawLine || !rawLine.startsWith("data:")) {
-        continue;
-      }
-      const dataStr = rawLine.slice(5).trim();
-      if (!dataStr || dataStr === "[DONE]") {
-        continue;
-      }
-
-      try {
-        onDataPacket(dataStr);
-      } catch (err) {
-        if (err instanceof SyntaxError) {
-          continue;
-        }
-        throw err;
-      }
+      processLine(rawLine);
     }
+  }
+
+  const remainingLines = buffer.split("\n");
+  for (const tail of remainingLines) {
+    processLine(tail.trim());
   }
 }
 

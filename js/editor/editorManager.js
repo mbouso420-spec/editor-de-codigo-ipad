@@ -90,7 +90,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
   const statesByFile = new Map();
 
   // Tema sintáctico acoplado 100% a nuestros tokens CSS (:root)
-  const studioHighlightStyle = HighlightStyle.define([
+  const highlightRules = [
     { tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword, tags.moduleKeyword], color: "var(--syn-keyword)", fontWeight: "500" },
     { tag: [tags.typeName, tags.className, tags.namespace], color: "var(--syn-type)" },
     { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--syn-fn)" },
@@ -100,7 +100,23 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     { tag: [tags.tagName], color: "var(--syn-tag)" },
     { tag: [tags.attributeName, tags.propertyName], color: "var(--syn-attr)" },
     { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--syn-comment)", fontStyle: "italic" }
-  ]);
+  ];
+  if (tags.heading) {
+    highlightRules.push({ tag: [tags.heading], color: "var(--syn-keyword)", fontWeight: "600" });
+  }
+  if (tags.strong) {
+    highlightRules.push({ tag: [tags.strong], color: "var(--color-ink)", fontWeight: "600" });
+  }
+  if (tags.emphasis) {
+    highlightRules.push({ tag: [tags.emphasis], fontStyle: "italic" });
+  }
+  if (tags.link) {
+    highlightRules.push({ tag: [tags.link], color: "var(--syn-attr)" });
+  }
+  if (tags.monospace) {
+    highlightRules.push({ tag: [tags.monospace], color: "var(--syn-string)" });
+  }
+  const studioHighlightStyle = HighlightStyle.define(highlightRules);
 
   const studioBaseTheme = EditorView.theme(
     {
@@ -130,7 +146,11 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
   function resolveLanguageExtension(lang) {
     switch (lang) {
       case "python":
-        return langs.python ? langs.python() : langs.javascript();
+        return langs.python ? langs.python() : [];
+      case "markdown":
+        return langs.markdown ? langs.markdown() : [];
+      case "text":
+        return [];
       case "cpp":
       case "c":
         return langs.cpp();
@@ -141,6 +161,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       case "sql":
         return langs.sql();
       case "js":
+      case "json":
       default:
         return langs.javascript();
     }
@@ -194,8 +215,12 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
 
   function emitSelection(state) {
     const main = state.selection.main;
+    const headLine = state.doc.lineAt(main.head);
+    const cursorLine = headLine.number;
+    const cursorCol = main.head - headLine.from + 1;
+
     if (main.empty) {
-      onSelectionChange({ text: "", lineCount: 0 });
+      onSelectionChange({ text: "", lineCount: 0, cursorLine, cursorCol });
       return;
     }
     const selectedText = state.sliceDoc(main.from, main.to);
@@ -203,7 +228,9 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     const toLine = state.doc.lineAt(main.to).number;
     onSelectionChange({
       text: selectedText,
-      lineCount: Math.max(1, toLine - fromLine + 1)
+      lineCount: Math.max(1, toLine - fromLine + 1),
+      cursorLine,
+      cursorCol
     });
   }
 
@@ -243,11 +270,14 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       statesByFile.set(activeFileId, view.state);
     }
     activeFileId = null;
-    onSelectionChange({ text: "", lineCount: 0 });
+    onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
   }
 
   function dropFileState(fileId) {
     statesByFile.delete(fileId);
+    if (activeFileId === fileId) {
+      activeFileId = null;
+    }
   }
 
   function renameFileStates(oldPath, newPath, isFolder) {
@@ -376,6 +406,7 @@ async function loadCodeMirrorModules() {
     cssMod,
     jsMod,
     pyMod,
+    mdMod,
     sqlMod
   ] = await Promise.all([
     import("@codemirror/state"),
@@ -390,6 +421,7 @@ async function loadCodeMirrorModules() {
     import("@codemirror/lang-css"),
     import("@codemirror/lang-javascript"),
     import("@codemirror/lang-python").catch(() => null),
+    import("@codemirror/lang-markdown").catch(() => null),
     import("@codemirror/lang-sql")
   ]);
 
@@ -430,6 +462,7 @@ async function loadCodeMirrorModules() {
       css: cssMod.css,
       javascript: jsMod.javascript,
       python: pyMod?.python ?? null,
+      markdown: mdMod?.markdown ?? null,
       sql: sqlMod.sql
     }
   };
@@ -458,22 +491,29 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     if (activeFileId) {
       onDocChange(activeFileId, textarea.value);
     }
+    emitSel();
   });
 
   const emitSel = () => {
     const start = textarea.selectionStart ?? 0;
     const end = textarea.selectionEnd ?? 0;
+    const before = textarea.value.slice(0, end);
+    const lastNl = before.lastIndexOf("\n");
+    const cursorLine = lastNl === -1 ? 1 : before.split("\n").length;
+    const cursorCol = lastNl === -1 ? end + 1 : end - lastNl;
+
     if (start === end) {
-      onSelectionChange({ text: "", lineCount: 0 });
+      onSelectionChange({ text: "", lineCount: 0, cursorLine, cursorCol });
       return;
     }
     const text = textarea.value.slice(start, end);
-    onSelectionChange({ text, lineCount: text.split("\n").length });
+    onSelectionChange({ text, lineCount: text.split("\n").length, cursorLine, cursorCol });
   };
 
   textarea.addEventListener("select", emitSel);
   textarea.addEventListener("keyup", emitSel);
   textarea.addEventListener("mouseup", emitSel);
+  textarea.addEventListener("click", emitSel);
 
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
@@ -495,6 +535,7 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     if (activeFileId) {
       onDocChange(activeFileId, textarea.value);
     }
+    emitSel();
   }
 
   return {
@@ -506,13 +547,17 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         mountEl.appendChild(textarea);
       }
       textarea.value = file.content;
-      onSelectionChange({ text: "", lineCount: 0 });
+      onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     },
     clearActiveFile() {
       activeFileId = null;
-      onSelectionChange({ text: "", lineCount: 0 });
+      onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     },
-    dropFileState() {},
+    dropFileState(fileId) {
+      if (activeFileId === fileId) {
+        activeFileId = null;
+      }
+    },
     renameFileStates() {},
     insertAtCursor: insertInTextarea,
     replaceSelection: (text) => insertInTextarea(text, 0),
@@ -521,6 +566,7 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
       if (activeFileId) {
         onDocChange(activeFileId, text);
       }
+      emitSel();
     },
     triggerUndo() {
       textarea.focus();
