@@ -41,6 +41,9 @@
 ### 3. Vista previa contextual en vivo, Consola, Multi-Página, SQLite y C/C++
 - **Resolución inteligente de punto de entrada:** al presionar *Vista previa* estando parado en un `.js` o `.css`, el motor busca en el workspace el `.html` que lo referencia directamente o el `index.html` principal, ensayando la aplicación web completa en lugar de correr scripts aislados.
 - **Navegación multi-página e Historial web:** Total Interceptor en el iframe que captura enlaces locales relativos (`<a href="contacto.html">`), envíos de `<form>` y llamadas de navegación programática (`location.assign`), ofreciendo botones de **Atrás / Adelante** y un selector desplegable de páginas HTML en la barra superior.
+- **Precarga y descarga bajo demanda inteligente (GitHub Lazy):** en repositorios remotos donde los archivos no están descargados previamente (`contentLoaded: false`), el motor de vista previa descarga automáticamente el HTML destino y todos los assets CSS y JS vinculados antes de compilar el iframe, evitando pantallas en blanco y estilos rotos.
+- **Inlining recursivo de `@import url(...)` en CSS:** empaqueta hojas de estilo CSS modulares complejas de forma recursiva dentro de etiquetas `<style>` protegidas, permitiendo previsualizar aplicaciones que estructuran sus estilos en múltiples subarchivos.
+- **Selector de páginas HTML optimizado y sin duplicados:** exclusión de carpetas de dependencias y artefactos de empaquetado (`node_modules`, `.git`, `dist`, `build`, `.next`, `.cache`, `out`, etc.), deduplicación por ruta normalizada y desambiguación automática de nombres con rutas relativas para evitar opciones triplicadas.
 - **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
 - **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal (sin capas iframe HTML intermedias) con terminal de salida en tiempo real, panel de estado, entrada interactiva `stdin` para `cin`/`scanf`, atajo `Ctrl + Enter` y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
 - **Detección y señalización de errores GCC (Línea roja y Tooltip):** parseo automático de las líneas de error del compilador (`file:line:col: error: ...`), marcación visual con fondo rojo en CodeMirror 6 (`addErrorMarker`) y tooltip flotante con el mensaje del compilador, más salto interactivo al hacer clic sobre el error en la terminal.
@@ -128,7 +131,7 @@
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
 │       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 264 pruebas unitarias
+└── tests/                      # Suite automatizada con 282 pruebas unitarias
 ```
 
 ---
@@ -142,10 +145,10 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **276 pruebas unitarias ejecutadas.**
-- **52 suites completadas.**
+- **282 pruebas unitarias ejecutadas.**
+- **53 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
-- Tiempo de ejecución: **~2.7 segundos.**
+- Tiempo de ejecución: **~1.3 segundos.**
 
 ---
 

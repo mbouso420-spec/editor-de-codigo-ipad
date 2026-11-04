@@ -56,7 +56,9 @@ export function initLivePreviewModal({
   onBeforePreview,
   onErrorMarker,
   onClearErrorMarkers,
-  onGoToLine
+  onGoToLine,
+  ensureFileLoaded,
+  ensureFilesLoaded
 }) {
   const openBtn = document.getElementById("btn-live-preview");
   const dialog = document.getElementById("preview-dialog");
@@ -103,21 +105,43 @@ export function initLivePreviewModal({
 
   function syncPageSelect(allFiles, activeHtmlPath) {
     if (!pageSelect) return;
-    const htmlFiles = (allFiles || []).filter((f) => {
+    const validHtmlFiles = (allFiles || []).filter((f) => {
+      if (!f || !f.path) return false;
+      const clean = normalizePath(f.path);
+      const parts = clean.split("/");
+      for (const part of parts) {
+        if (IGNORED_PREVIEW_DIRS.has(part.toLowerCase())) return false;
+      }
       const ext = getFileExtension(f.path);
       return HTML_EXTENSIONS.has(ext);
     });
+
+    const uniqueMap = new Map();
+    for (const hf of validHtmlFiles) {
+      const clean = normalizePath(hf.path);
+      if (!uniqueMap.has(clean)) {
+        uniqueMap.set(clean, hf);
+      }
+    }
+    const htmlFiles = Array.from(uniqueMap.values());
 
     if (htmlFiles.length === 0) {
       hideWebNavigationControls();
       return;
     }
 
+    const nameCount = new Map();
+    for (const hf of htmlFiles) {
+      const base = hf.path.split("/").pop();
+      nameCount.set(base, (nameCount.get(base) || 0) + 1);
+    }
+
     pageSelect.innerHTML = "";
     for (const hf of htmlFiles) {
       const opt = document.createElement("option");
       opt.value = hf.path;
-      opt.textContent = hf.shortName || hf.path;
+      const base = hf.path.split("/").pop();
+      opt.textContent = (nameCount.get(base) > 1 || hf.path.includes("/")) ? hf.path : base;
       if (normalizePath(hf.path) === normalizePath(activeHtmlPath)) {
         opt.selected = true;
       }
@@ -130,25 +154,77 @@ export function initLivePreviewModal({
 
   pageSelect?.addEventListener("change", () => {
     if (pageSelect.value) {
-      navigateToHtml(pageSelect.value, true);
+      void navigateToHtml(pageSelect.value, true);
     }
   });
 
   backBtn?.addEventListener("click", () => {
     if (historyIndex > 0) {
       historyIndex -= 1;
-      navigateToHtml(historyStack[historyIndex], false);
+      void navigateToHtml(historyStack[historyIndex], false);
     }
   });
 
   forwardBtn?.addEventListener("click", () => {
     if (historyIndex < historyStack.length - 1) {
       historyIndex += 1;
-      navigateToHtml(historyStack[historyIndex], false);
+      void navigateToHtml(historyStack[historyIndex], false);
     }
   });
 
-  function navigateToHtml(targetPath, pushHistory = true) {
+  async function prepareHtmlForPreview(targetFile, allFiles) {
+    if (!targetFile) return { html: "", assetMap: new Map() };
+
+    // 1. Si el HTML está pendiente de descarga bajo demanda (lazy en GitHub), descargarlo primero
+    if (targetFile.contentLoaded === false || (targetFile.content === "" && targetFile.blobSha)) {
+      if (typeof ensureFileLoaded === "function") {
+        await ensureFileLoaded(targetFile);
+      }
+    }
+
+    // 2. Extraer todos los assets locales referenciados por el HTML
+    const referencedPaths = extractReferencedAssetPaths(targetFile.path, targetFile.content || "");
+    const unloadedToFetch = [];
+
+    for (const refPath of referencedPaths) {
+      const assetFile = (allFiles || []).find((f) => normalizePath(f.path) === normalizePath(refPath));
+      if (assetFile && (assetFile.contentLoaded === false || (assetFile.content === "" && assetFile.blobSha))) {
+        unloadedToFetch.push(assetFile);
+      }
+    }
+
+    // 3. Descargar en lote los assets pendientes desde GitHub
+    if (unloadedToFetch.length > 0 && typeof ensureFilesLoaded === "function") {
+      await ensureFilesLoaded(unloadedToFetch);
+    }
+
+    // 4. Revisar si entre los CSS descargados hay reglas @import url(...) que a su vez requieran descarga
+    const secondaryUnloaded = [];
+    for (const refPath of referencedPaths) {
+      const assetFile = (allFiles || []).find((f) => normalizePath(f.path) === normalizePath(refPath));
+      if (assetFile && getFileExtension(assetFile.path) === "css" && typeof assetFile.content === "string") {
+        const cssImports = extractCssImportPaths(assetFile.path, assetFile.content);
+        for (const impPath of cssImports) {
+          const impFile = (allFiles || []).find((f) => normalizePath(f.path) === normalizePath(impPath));
+          if (impFile && (impFile.contentLoaded === false || (impFile.content === "" && impFile.blobSha))) {
+            secondaryUnloaded.push(impFile);
+          }
+        }
+      }
+    }
+    if (secondaryUnloaded.length > 0 && typeof ensureFilesLoaded === "function") {
+      await ensureFilesLoaded(secondaryUnloaded);
+    }
+
+    // 5. Construir mapa de assets del proyecto completo
+    const assetMap = buildWorkspaceAssetMap(allFiles);
+    return {
+      html: targetFile.content || "",
+      assetMap
+    };
+  }
+
+  async function navigateToHtml(targetPath, pushHistory = true) {
     const { files } = getWorkspaceSnapshot();
     const targetFile = files.find((f) => normalizePath(f.path) === normalizePath(targetPath));
     if (!targetFile) return;
@@ -165,10 +241,8 @@ export function initLivePreviewModal({
     updateNavButtons();
     syncPageSelect(files, targetFile.path);
 
-    const folder = getParentFolder(targetFile.path);
-    const sameFolderFiles = filterFolderScopeFiles(files, folder);
-    const sameFolderMap = new Map(sameFolderFiles.map((f) => [normalizePath(f.path), f]));
-    const compiledHtml = bundleHtmlWithFolderAssets(targetFile.path, targetFile.content, sameFolderMap, null, guardJs);
+    const { html, assetMap } = await prepareHtmlForPreview(targetFile, files);
+    const compiledHtml = bundleHtmlWithFolderAssets(targetFile.path, html, assetMap, null, guardJs, null, true);
 
     showRunnableIframe({
       headerTitle: "Vista previa de HTML",
@@ -204,7 +278,7 @@ export function initLivePreviewModal({
       await onBeforePreview();
     }
     await loadAcorn();
-    openPreview();
+    await openPreview();
   });
 
   closeBtn?.addEventListener("click", () => {
@@ -221,11 +295,11 @@ export function initLivePreviewModal({
 
   jsModeBtn?.addEventListener("click", () => {
     jsRunOverride = jsRunOverride === "folder" ? "standalone" : "folder";
-    renderActiveTabPreview();
+    void renderActiveTabPreview();
   });
 
   reloadBtn?.addEventListener("click", () => {
-    renderActiveTabPreview();
+    void renderActiveTabPreview();
   });
 
   toggleConsoleBtn?.addEventListener("click", () => {
@@ -299,12 +373,17 @@ export function initLivePreviewModal({
     consoleList.scrollTop = consoleList.scrollHeight;
   }
 
-  function openPreview() {
+  async function openPreview() {
     if (!dialog) return;
-    renderActiveTabPreview();
+    if (typeof onBeforePreview === "function") {
+      try {
+        await onBeforePreview();
+      } catch (_) {}
+    }
     if (!dialog.open) {
       dialog.showModal();
     }
+    await renderActiveTabPreview();
   }
 
   function showUnavailableState({ headerTitle, badgeText, messageTitle, messageDesc }) {
@@ -435,7 +514,7 @@ export function initLivePreviewModal({
     }
   }
 
-  function renderActiveTabPreview() {
+  async function renderActiveTabPreview() {
     const { files, activeFileId } = getWorkspaceSnapshot();
     const activeFile = activeFileId
       ? files.find((f) => normalizePath(f.path) === normalizePath(activeFileId)) || null
@@ -457,9 +536,8 @@ export function initLivePreviewModal({
     const extLabel = ext ? `.${ext}` : "sin extensión";
     const folder = getParentFolder(activeFile.path);
     const sameFolderFiles = filterFolderScopeFiles(files, folder);
-    const sameFolderMap = new Map(sameFolderFiles.map((f) => [normalizePath(f.path), f]));
 
-    // 1. Pestaña HTML: ensambla recursos relativos de su misma carpeta/subcarpetas
+    // 1. Pestaña HTML: ensambla recursos relativos de todo el proyecto web
     if (HTML_EXTENSIONS.has(ext)) {
       currentPreviewPath = activeFile.path;
       historyStack = [activeFile.path];
@@ -467,7 +545,8 @@ export function initLivePreviewModal({
       updateNavButtons();
       syncPageSelect(files, activeFile.path);
 
-      const compiledHtml = bundleHtmlWithFolderAssets(activeFile.path, activeFile.content, sameFolderMap, null, guardJs);
+      const { html, assetMap } = await prepareHtmlForPreview(activeFile, files);
+      const compiledHtml = bundleHtmlWithFolderAssets(activeFile.path, html, assetMap, null, guardJs, null, true);
       showRunnableIframe({
         headerTitle: "Vista previa de HTML",
         badgeText: activeFile.path,
@@ -492,17 +571,17 @@ export function initLivePreviewModal({
         updateNavButtons();
         syncPageSelect(files, bestHtml.path);
 
-        const targetFolder = getParentFolder(bestHtml.path);
-        const targetFolderFiles = filterFolderScopeFiles(files, targetFolder);
-        const targetFolderMap = new Map(targetFolderFiles.map((f) => [normalizePath(f.path), f]));
-        targetFolderMap.set(normalizePath(activeFile.path), activeFile);
+        const { html, assetMap } = await prepareHtmlForPreview(bestHtml, files);
+        assetMap.set(normalizePath(activeFile.path), activeFile);
 
         const compiledHtml = bundleHtmlWithFolderAssets(
           bestHtml.path,
-          bestHtml.content,
-          targetFolderMap,
+          html,
+          assetMap,
           activeFile,
-          guardJs
+          guardJs,
+          null,
+          true
         );
         showRunnableIframe({
           headerTitle: "Vista previa de JS",
@@ -534,18 +613,17 @@ export function initLivePreviewModal({
         updateNavButtons();
         syncPageSelect(files, bestHtml.path);
 
-        const targetFolder = getParentFolder(bestHtml.path);
-        const targetFolderFiles = filterFolderScopeFiles(files, targetFolder);
-        const targetFolderMap = new Map(targetFolderFiles.map((f) => [normalizePath(f.path), f]));
-        targetFolderMap.set(normalizePath(activeFile.path), activeFile);
+        const { html, assetMap } = await prepareHtmlForPreview(bestHtml, files);
+        assetMap.set(normalizePath(activeFile.path), activeFile);
 
         const compiledHtml = bundleHtmlWithFolderAssets(
           bestHtml.path,
-          bestHtml.content,
-          targetFolderMap,
+          html,
+          assetMap,
           null,
           guardJs,
-          activeFile
+          activeFile,
+          true
         );
         showRunnableIframe({
           headerTitle: "Vista previa de CSS",
@@ -642,7 +720,7 @@ function getParentFolder(path) {
 }
 
 const MAX_PREVIEW_ASSET_BYTES = 512 * 1024; // 512 KB por recurso individual para evitar bloqueos
-const IGNORED_PREVIEW_DIRS = new Set([
+export const IGNORED_PREVIEW_DIRS = new Set([
   "node_modules",
   ".git",
   "dist",
@@ -653,7 +731,9 @@ const IGNORED_PREVIEW_DIRS = new Set([
   ".venv",
   "target",
   "bin",
-  "obj"
+  "obj",
+  ".turbo",
+  "out"
 ]);
 
 /**
@@ -682,6 +762,100 @@ export function filterFolderScopeFiles(allFiles, baseFolder) {
 
     return true;
   });
+}
+
+/**
+ * Construye un mapa de todos los archivos del espacio de trabajo disponibles para la vista previa,
+ * indexados por su ruta normalizada y excluyendo directorios pesados (node_modules, dist, .git, etc.).
+ * @param {Array<{ path: string, content: string }>} allFiles
+ * @returns {Map<string, { path: string, content: string }>}
+ */
+export function buildWorkspaceAssetMap(allFiles) {
+  const map = new Map();
+  for (const f of allFiles || []) {
+    if (!f || !f.path) continue;
+    const clean = normalizePath(f.path);
+    const parts = clean.split("/");
+    let isIgnored = false;
+    for (const part of parts) {
+      if (IGNORED_PREVIEW_DIRS.has(part.toLowerCase())) {
+        isIgnored = true;
+        break;
+      }
+    }
+    if (!isIgnored) {
+      map.set(clean, f);
+      const baseName = f.shortName || clean.split("/").pop();
+      if (baseName && !map.has(baseName)) {
+        map.set(baseName, f);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Extrae todas las rutas relativas de hojas CSS y scripts JS referenciados por el HTML.
+ * @param {string} entryPath
+ * @param {string} rawHtml
+ * @returns {string[]}
+ */
+export function extractReferencedAssetPaths(entryPath, rawHtml) {
+  if (!rawHtml || typeof rawHtml !== "string") return [];
+  const dir = getParentFolder(entryPath);
+  const paths = new Set();
+
+  const linkRegex = /<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi;
+  let match;
+  while ((match = linkRegex.exec(rawHtml)) !== null) {
+    const hrefMatch = match[0].match(/href=["']([^"']+)["']/i);
+    if (hrefMatch && hrefMatch[1] && !/^(https?:|data:|blob:|\/\/)/i.test(hrefMatch[1])) {
+      const cleanRef = hrefMatch[1].split("?")[0].split("#")[0];
+      const resolved = resolveRelativePath(dir, cleanRef);
+      if (resolved) paths.add(resolved);
+      const rootClean = normalizePath(cleanRef);
+      if (rootClean) paths.add(rootClean);
+    }
+  }
+
+  const scriptRegex = /<script\b[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = scriptRegex.exec(rawHtml)) !== null) {
+    const srcMatch = match[0].match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1] && !/^(https?:|data:|blob:|\/\/)/i.test(srcMatch[1])) {
+      const cleanRef = srcMatch[1].split("?")[0].split("#")[0];
+      const resolved = resolveRelativePath(dir, cleanRef);
+      if (resolved) paths.add(resolved);
+      const rootClean = normalizePath(cleanRef);
+      if (rootClean) paths.add(rootClean);
+    }
+  }
+
+  return Array.from(paths);
+}
+
+/**
+ * Extrae las rutas locales de reglas @import url(...) presentes en un archivo CSS.
+ * @param {string} cssPath
+ * @param {string} cssContent
+ * @returns {string[]}
+ */
+export function extractCssImportPaths(cssPath, cssContent) {
+  if (!cssContent || typeof cssContent !== "string") return [];
+  const dir = getParentFolder(cssPath);
+  const paths = new Set();
+  const importRegex = /@import\s+(?:url\(\s*["']?|["'])([^"')]+)["']?\s*\)?\s*;?/gi;
+  let match;
+  while ((match = importRegex.exec(cssContent)) !== null) {
+    const importUrl = match[1];
+    if (importUrl && !/^(https?:|data:|blob:|\/\/)/i.test(importUrl)) {
+      const cleanRef = importUrl.split("?")[0].split("#")[0];
+      const resolved = resolveRelativePath(dir, cleanRef);
+      if (resolved) paths.add(resolved);
+      const rootClean = normalizePath(cleanRef);
+      if (rootClean) paths.add(rootClean);
+    }
+  }
+  return Array.from(paths);
 }
 
 /**
@@ -770,6 +944,12 @@ export function findTargetHtmlFile(allFiles, currentPreviewPath, requestedHref) 
   if (!clean) return null;
 
   const htmlFiles = (allFiles || []).filter((f) => {
+    if (!f || !f.path) return false;
+    const cleanPath = normalizePath(f.path);
+    const parts = cleanPath.split("/");
+    for (const part of parts) {
+      if (IGNORED_PREVIEW_DIRS.has(part.toLowerCase())) return false;
+    }
     const ext = getFileExtension(f.path);
     return HTML_EXTENSIONS.has(ext);
   });
@@ -838,7 +1018,15 @@ export function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   };
 }
 
-export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null, transformJs = (code) => code, ensureCssFile = null) {
+export function bundleHtmlWithFolderAssets(
+  entryPath,
+  rawHtml,
+  fileMap,
+  ensureJsFile = null,
+  transformJs = (code) => code,
+  ensureCssFile = null,
+  allowParentTraversal = false
+) {
   const dir = getParentFolder(entryPath);
 
   const resolveAsset = (rawHref) => {
@@ -846,11 +1034,17 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
       return null;
     }
     const cleanRef = rawHref.split("?")[0].split("#")[0];
-    if (cleanRef.startsWith("../")) {
+    if (cleanRef.startsWith("../") && !allowParentTraversal) {
       return null;
     }
     const resolved = resolveRelativePath(dir, cleanRef);
-    const asset = fileMap.get(resolved) || null;
+    let asset = fileMap.get(resolved) || null;
+    if (!asset && cleanRef.startsWith("./")) {
+      asset = fileMap.get(resolveRelativePath(dir, cleanRef.slice(2))) || null;
+    }
+    if (!asset && !cleanRef.startsWith("/")) {
+      asset = fileMap.get(normalizePath(cleanRef)) || null;
+    }
     if (!asset || asset.content == null || typeof asset.content !== "string") {
       return null;
     }
@@ -864,7 +1058,36 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
   let inlinedActiveCss = false;
   const deferredScripts = [];
 
-  // Incrustar hojas CSS locales de la misma carpeta
+  function inlineCssImports(cssContent, cssPath, visited = new Set()) {
+    const cleanPath = normalizePath(cssPath);
+    if (visited.has(cleanPath)) return "";
+    visited.add(cleanPath);
+
+    const cssDir = getParentFolder(cleanPath);
+    return cssContent.replace(/@import\s+(?:url\(\s*["']?|["'])([^"')]+)["']?\s*\)?\s*;?/gi, (match, importUrl) => {
+      if (!importUrl || /^(https?:|data:|blob:|\/\/)/i.test(importUrl)) {
+        return match;
+      }
+      const cleanRef = importUrl.split("?")[0].split("#")[0];
+      if (cleanRef.startsWith("../") && !allowParentTraversal) {
+        return match;
+      }
+      const resolved = resolveRelativePath(cssDir, cleanRef);
+      let importedAsset = fileMap.get(resolved);
+      if (!importedAsset && cleanRef.startsWith("./")) {
+        importedAsset = fileMap.get(resolveRelativePath(cssDir, cleanRef.slice(2)));
+      }
+      if (!importedAsset && !cleanRef.startsWith("/")) {
+        importedAsset = fileMap.get(normalizePath(cleanRef));
+      }
+      if (importedAsset && typeof importedAsset.content === "string") {
+        return `/* @import "${cleanRef}" */\n` + inlineCssImports(importedAsset.content, importedAsset.path, visited);
+      }
+      return match;
+    });
+  }
+
+  // Incrustar hojas CSS locales con soporte recursivo de @import
   let html = rawHtml.replace(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi, (tag) => {
     const hrefMatch = tag.match(/href=["']([^"']+)["']/i);
     if (!hrefMatch) return tag;
@@ -873,13 +1096,13 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
     if (ensureCssFile && normalizePath(asset.path) === normalizePath(ensureCssFile.path)) {
       inlinedActiveCss = true;
     }
-    const safeCss = asset.content.replace(/<\/style>/gi, "<\\/style>");
+    const safeCss = inlineCssImports(asset.content, asset.path).replace(/<\/style>/gi, "<\\/style>");
     return `<style data-source="${escapeAttr(asset.path)}">\n${safeCss}\n</style>`;
   });
 
   // Si se especificó un archivo CSS activo y no estaba enlazado en el HTML, inyectarlo
   if (ensureCssFile && !inlinedActiveCss) {
-    const safeExtraCss = ensureCssFile.content.replace(/<\/style>/gi, "<\\/style>");
+    const safeExtraCss = inlineCssImports(ensureCssFile.content || "", ensureCssFile.path).replace(/<\/style>/gi, "<\\/style>");
     const styleTag = `<style data-source="${escapeAttr(ensureCssFile.path)}">\n${safeExtraCss}\n</style>`;
     if (/<head\b[^>]*>/i.test(html)) {
       html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${styleTag}`);

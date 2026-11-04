@@ -14,7 +14,17 @@ const { parseQuickOpenQuery } = await import("../js/ui/quickOpenModal.js");
 const { generateDuplicatePath } = await import("../js/ui/explorerController.js");
 const { buildZipArchive, computeCrc32, getDosDateTime } = await import("../js/storage/zipExporter.js");
 const { formatStorageBytes, getStorageQuotaEstimate } = await import("../js/storage/storageQuota.js");
-const { resolveRelativePath, findBestHtmlEntrypoint, findTargetHtmlFile, filterFolderScopeFiles, bundleHtmlWithFolderAssets } = await import("../js/ui/livePreviewModal.js");
+const {
+  resolveRelativePath,
+  findBestHtmlEntrypoint,
+  findTargetHtmlFile,
+  filterFolderScopeFiles,
+  bundleHtmlWithFolderAssets,
+  IGNORED_PREVIEW_DIRS,
+  extractReferencedAssetPaths,
+  extractCssImportPaths,
+  buildWorkspaceAssetMap
+} = await import("../js/ui/livePreviewModal.js");
 const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
 const { buildWandboxPayload, compileAndRunWandbox, parseGccErrors, mountCRunnerView, hasMainFunction } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
@@ -803,6 +813,110 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         assert.ok(payload["compiler-option-raw"].includes("utils.c"), "utils.c debe compilarse con gcc");
         assert.ok(!payload["compiler-option-raw"].includes("utils.h"), "utils.h no debe pasarse al linker");
         assert.ok(!payload["compiler-option-raw"].includes("otro_ejercicio.c"), "otro_ejercicio.c no debe pasarse al linker");
+      });
+    });
+
+    describe("Optimización y Precarga de Proyectos Web Grandes y GitHub Lazy en Live Preview", () => {
+      test("IGNORED_PREVIEW_DIRS contiene directorios de dependencias y builds pesados", () => {
+        assert.ok(IGNORED_PREVIEW_DIRS.has("node_modules"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has(".git"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has("dist"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has("build"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has(".next"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has(".cache"));
+        assert.ok(IGNORED_PREVIEW_DIRS.has("out"));
+      });
+
+      test("extractReferencedAssetPaths extrae rutas relativas y absolutas de hojas CSS y scripts JS", () => {
+        const html = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <link rel="stylesheet" href="css/estilos.css">
+              <link rel="stylesheet" href="./tokens.css?v=2">
+              <link rel="stylesheet" href="/global.css#main">
+              <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap.min.css">
+              <link rel="icon" href="favicon.ico">
+            </head>
+            <body>
+              <script src="../shared/app.js"></script>
+              <script src="./main.js?cache=false"></script>
+              <script src="//unpkg.com/vue@3"></script>
+              <script>console.log("inline");</script>
+            </body>
+          </html>
+        `;
+
+        const refs = extractReferencedAssetPaths("pages/contacto.html", html);
+        // Debe resolver respecto a "pages/"
+        assert.ok(refs.includes("pages/css/estilos.css"));
+        assert.ok(refs.includes("pages/tokens.css"));
+        assert.ok(refs.includes("global.css"));
+        assert.ok(refs.includes("shared/app.js"));
+        assert.ok(refs.includes("pages/main.js"));
+        // No debe incluir CDNs externos
+        assert.equal(refs.some((r) => r.includes("jsdelivr") || r.includes("unpkg")), false);
+        // No debe incluir favicon ni scripts inline
+        assert.equal(refs.some((r) => r.includes("favicon")), false);
+      });
+
+      test("extractCssImportPaths extrae reglas @import locales y descarta URLs absolutas", () => {
+        const css = `
+          @import url("tokens.css");
+          @import url('./components/button.css');
+          @import '../theme/dark.css';
+          @import url("https://fonts.googleapis.com/css?family=Roboto");
+          @import url('//cdn.jsdelivr.net/npm/normalize.css');
+          body { color: red; }
+        `;
+
+        const imports = extractCssImportPaths("css/styles.css", css);
+        assert.ok(imports.includes("css/tokens.css"));
+        assert.ok(imports.includes("css/components/button.css"));
+        assert.ok(imports.includes("theme/dark.css"));
+        assert.equal(imports.some((i) => i.includes("googleapis") || i.includes("jsdelivr")), false);
+      });
+
+      test("bundleHtmlWithFolderAssets con allowParentTraversal=true incrusta archivos referenciados con ../", () => {
+        const fileMap = new Map([
+          ["secret.js", { path: "secret.js", content: 'console.log("compartido");' }],
+          ["css/estilos.css", { path: "css/estilos.css", content: "body { background: #000; }" }]
+        ]);
+
+        const html = '<script src="../secret.js"></script><link rel="stylesheet" href="../css/estilos.css">';
+        const out = bundleHtmlWithFolderAssets("subcarpeta/index.html", html, fileMap, null, (c) => c, null, true);
+
+        assert.ok(out.includes('console.log("compartido");'), "Debe incrustar secret.js");
+        assert.ok(out.includes("background: #000;"), "Debe incrustar estilos.css");
+        assert.ok(!out.includes('src="../secret.js"'), "No debe dejar el script src externo");
+      });
+
+      test("bundleHtmlWithFolderAssets inyecta de forma recursiva reglas @import CSS locales", () => {
+        const fileMap = new Map([
+          ["css/main.css", { path: "css/main.css", content: '@import url("tokens.css");\n@import "./layout.css";\nbody { font-size: 16px; }' }],
+          ["css/tokens.css", { path: "css/tokens.css", content: ":root { --brand: #ff0000; }" }],
+          ["css/layout.css", { path: "css/layout.css", content: ".container { max-width: 1200px; }" }]
+        ]);
+
+        const html = '<link rel="stylesheet" href="css/main.css">';
+        const out = bundleHtmlWithFolderAssets("index.html", html, fileMap, null, (c) => c, null, true);
+
+        assert.ok(out.includes("--brand: #ff0000;"), "Debe inlinear tokens.css recursivamente");
+        assert.ok(out.includes("max-width: 1200px;"), "Debe inlinear layout.css recursivamente");
+        assert.ok(out.includes("font-size: 16px;"), "Debe conservar las reglas de main.css");
+        assert.ok(!out.includes('@import url("tokens.css");'), "Debe reemplazar la sentencia @import original");
+      });
+
+      test("buildWorkspaceAssetMap mapea rutas normalizadas y atajos shortName", () => {
+        const files = [
+          { path: "src/index.html", shortName: "index.html", content: "<h1>Hola</h1>" },
+          { path: "src/app.js", shortName: "app.js", content: "const a = 1;" }
+        ];
+
+        const map = buildWorkspaceAssetMap(files);
+        assert.ok(map.has("src/index.html"));
+        assert.ok(map.has("src/app.js"));
+        assert.ok(map.has("app.js"), "Debe tener alias por shortName para resolución tolerante");
       });
     });
   });

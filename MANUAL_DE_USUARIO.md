@@ -103,7 +103,8 @@ Al presionar el botón **Vista previa** en la barra superior:
 - Si tu proyecto tiene múltiples páginas (`index.html`, `catalogo.html`, `contacto.html`), podés hacer clic libremente en cualquier enlace relativo (`<a href="catalogo.html">`, `<a href="./nosotros.html">` o `<a href="../blog/post.html">`) o enviar formularios (`<form action="...">`).
 - El visor intercepta la navegación sin recargas molestas y resuelve de forma inteligente el archivo destino en tu workspace.
 - **Botones de historial (Atrás / Adelante):** navegá entre las páginas visitadas exactamente igual que en un navegador real.
-- **Selector desplegable de páginas HTML:** en la cabecera del visor podés cambiar directamente entre cualquier archivo `.html` existente en el proyecto en un toque.
+- **Selector desplegable de páginas HTML:** en la cabecera del visor podés cambiar directamente entre cualquier archivo `.html` existente en el proyecto en un toque. El selector limpia automáticamente carpetas de compilación (`dist`, `build`, `node_modules`, etc.) para no duplicar opciones ni mostrar archivos innecesarios.
+- **Soporte transparente para repositorios remotos de GitHub:** si estás trabajando en un repositorio grande con carga bajo demanda (*lazy*), el IDE descarga automáticamente el código de la página que elijas y todas sus hojas de estilo CSS (incluyendo reglas modulares `@import`) y scripts JS vinculados antes de mostrarla, garantizando que el diseño y la interactividad se vean de inmediato sin pantallas en blanco.
 
 ### Emulador de medidas responsivas
 En la barra superior del modal de vista previa podés alternar el tamaño de pantalla:

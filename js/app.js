@@ -29,6 +29,7 @@ import {
   inferFileMeta,
   listProjects,
   markProjectOfflineCached,
+  normalizePath,
   renameProjectEntry,
   requestPersistentStorage,
   saveProjectChatHistory,
@@ -466,6 +467,24 @@ async function initApp() {
         activeFileId
       };
     },
+    async ensureFileLoaded(fileOrPath) {
+      const target = typeof fileOrPath === "string"
+        ? filesOnly.find((f) => normalizePath(f.path) === normalizePath(fileOrPath))
+        : fileOrPath;
+      if (target) {
+        await ensureFileContentLoaded(target);
+      }
+      return target;
+    },
+    async ensureFilesLoaded(fileList) {
+      if (!Array.isArray(fileList) || fileList.length === 0) return;
+      const targets = fileList.map((f) => {
+        return typeof f === "string"
+          ? filesOnly.find((item) => normalizePath(item.path) === normalizePath(f))
+          : f;
+      }).filter(Boolean);
+      await ensureFilesLoaded(targets);
+    },
     onErrorMarker(lineNum, errorMessage) {
       if (editor && typeof editor.addErrorMarker === "function") {
         editor.addErrorMarker(lineNum, errorMessage);
@@ -500,10 +519,11 @@ async function initApp() {
 
       const lastSlash = activeFile.path.lastIndexOf("/");
       const folderPrefix = lastSlash === -1 ? "" : `${activeFile.path.slice(0, lastSlash + 1)}`;
+      const isWeb = activeFile.lang === "html" || activeFile.lang === "js" || activeFile.lang === "css";
 
       const needed = filesOnly.filter((f) => {
         if (f.contentLoaded !== false || !f.blobSha) return false;
-        if (folderPrefix && !f.path.startsWith(folderPrefix)) return false;
+        if (!isWeb && folderPrefix && !f.path.startsWith(folderPrefix)) return false;
         if (activeFile.lang === "python") {
           return f.lang === "python";
         }
