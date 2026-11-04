@@ -1,0 +1,284 @@
+/* Barra rápida de proveedor/modelo y estado de clave bajo la cabecera del Asistente */
+.chat-model-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-sm);
+  background: var(--color-paper);
+  color: var(--color-ink-2);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+
+.chat-model-Current {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.chat-key-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-control);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-key-badge.has-key {
+  color: var(--color-success);
+}
+
+/* Panel desplegable de Configuración Multi-API y Bóveda Local */
+.chat-settings-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+  border-bottom: var(--rule-hair) solid var(--color-rule-strong);
+  max-height: 62%;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.field-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-ink-2);
+}
+
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.45;
+  min-height: 1lh;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.field-control {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-height);
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-control);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+}
+
+.field-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.storage-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2xs);
+}
+
+.storage-mode-btn {
+  min-height: var(--control-height-sm);
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-control);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-micro) var(--ease-out),
+    color var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out);
+}
+
+.storage-mode-btn[aria-pressed="true"] {
+  background: var(--color-paper-3);
+  border-color: var(--color-rule-strong);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+/* Chips opcionales para adjuntar otras pestañas abiertas al contexto */
+.chat-extra-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-sm);
+  background: var(--color-paper);
+  color: var(--color-ink-2);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.chat-extra-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-extra-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  min-height: 26px;
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-control);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out),
+    color var(--dur-micro) var(--ease-out);
+}
+
+.context-chip[aria-pressed="true"] {
+  background: var(--color-paper-3);
+  border-color: var(--color-accent-text);
+  color: var(--color-ink);
+}
+
+/* Estado vacío inicial y alertas del flujo de conversación */
+.chat-empty-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border-radius: var(--radius-card);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.chat-empty-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.chat-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
+}
+
+.chat-error-banner {
+  padding-block: var(--space-xs);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-control);
+  border: var(--rule-hair) solid var(--color-error);
+  background: var(--color-error-soft);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.chat-md-heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.chat-ai-response ul,
+.chat-ai-response ol {
+  margin: 0;
+  padding-left: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+}
+
+.chat-inline-code {
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-2xs);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+}
+
+/* Cabecera de bloques de código con las 4 acciones táctiles (Insertar, Reemplazar, Aplicar, Copiar) */
+.chat-code-header-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2xs);
+  padding-block: var(--space-2xs);
+  padding-inline: var(--space-xs);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-xs);
+}
+
+.chat-code-actions-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3xs);
+}
+
+.chat-streaming-note {
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+}

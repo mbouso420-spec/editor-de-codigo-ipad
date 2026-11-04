@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#10131a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Studio IDE">
+  <meta name="description" content="Entorno de desarrollo web personal optimizado para iPadOS y escritorio con asistencia de inteligencia artificial.">
+  <title>Studio IDE</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1",
+        "@codemirror/view": "https://esm.sh/@codemirror/view@6.26.3?deps=@codemirror/state@6.4.1",
+        "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.1?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.5.0?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1",
+        "@codemirror/search": "https://esm.sh/@codemirror/search@6.5.6?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3",
+        "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.15.0?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@lezer/common@1.2.1",
+        "@codemirror/lang-cpp": "https://esm.sh/@codemirror/lang-cpp@6.0.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.8?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.2.1?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.6.2?deps=@codemirror/state@6.4.1,@codemirror/view@6.26.3,@codemirror/language@6.10.1,@codemirror/autocomplete@6.15.0,@lezer/common@1.2.1,@lezer/highlight@1.2.0",
+        "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.0?deps=@lezer/common@1.2.1",
+        "@octokit/core": "https://esm.sh/@octokit/core@6.1.2"
+      }
+    }
+  </script>
+</head>
+<body data-left-open="true" data-right-open="true" data-symbols-visible="true">
+  <div class="ide-shell">
+    <header class="ide-topbar surface-glass-bar">
+      <div class="ide-topbar-left">
+        <button
+          type="button"
+          id="btn-toggle-left"
+          class="btn btn-ghost"
+          aria-expanded="true"
+          aria-controls="panel-explorer"
+          title="Alternar explorador (Cmd/Ctrl + B)"
+        >
+          <span data-icon="panelLeft"></span>
+          <span class="topbar-label-collapsible">Explorador</span>
+        </button>
+
+        <div class="ide-brand">
+          <span class="ide-brand-mark" data-icon="code"></span>
+          <span>Studio IDE</span>
+        </div>
+      </div>
+
+      <div class="ide-topbar-right">
+        <button
+          type="button"
+          id="btn-live-preview"
+          class="btn btn-ghost"
+          title="Ejecutar vista previa web en vivo con consola JS integrada"
+        >
+          <span data-icon="play"></span>
+          <span class="topbar-label-collapsible">Vista previa</span>
+        </button>
+
+        <button
+          type="button"
+          id="btn-toggle-symbols"
+          class="btn btn-ghost"
+          aria-pressed="true"
+          title="Mostrar u ocultar barra de símbolos para iPad"
+        >
+          <span data-icon="keyboard"></span>
+          <span class="topbar-label-collapsible">Símbolos</span>
+        </button>
+
+        <button
+          type="button"
+          id="btn-toggle-right"
+          class="btn btn-ghost"
+          aria-expanded="true"
+          aria-controls="panel-assistant"
+          title="Alternar asistente IA (Cmd/Ctrl + J)"
+        >
+          <span data-icon="panelRight"></span>
+          <span class="topbar-label-collapsible">Asistente</span>
+        </button>
+
+        <button type="button" id="btn-open-github" class="btn btn-primary" title="Sincronizar repositorios de GitHub y publicar commits">
+          <span data-icon="gitBranch"></span>
+          <span id="topbar-repo-label" class="topbar-label-collapsible">Repositorio</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="ide-workspace">
+      <div id="drawer-backdrop" class="ide-drawer-backdrop" aria-hidden="true"></div>
+
+      <!-- Isla Izquierda: Explorador jerárquico en IndexedDB + Importar/Exportar -->
+      <aside id="panel-explorer" class="ide-panel ide-panel-left surface-glass-panel" aria-label="Explorador de archivos">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span data-icon="folderOpen"></span>
+            <h2 class="panel-title">Explorador</h2>
+          </div>
+          <div class="panel-actions">
+            <button type="button" id="btn-new-file" class="btn btn-ghost btn-sm btn-icon" aria-label="Nuevo archivo" title="Nuevo archivo">
+              <span data-icon="plus"></span>
+            </button>
+            <button type="button" id="btn-new-folder" class="btn btn-ghost btn-sm btn-icon" aria-label="Nueva carpeta" title="Nueva carpeta">
+              <span data-icon="folderPlus"></span>
+            </button>
+            <button type="button" id="btn-close-left" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar explorador">
+              <span data-icon="x"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="explorer-project-bar">
+          <div class="explorer-project-row">
+            <label for="explorer-project-select" class="visually-hidden">Proyecto activo</label>
+            <select id="explorer-project-select" class="explorer-project-select"></select>
+            <button type="button" id="btn-new-project" class="btn btn-ghost btn-sm btn-icon" aria-label="Nuevo proyecto local" title="Nuevo proyecto local">
+              <span data-icon="layers"></span>
+            </button>
+            <button type="button" id="btn-delete-project" class="btn btn-ghost btn-sm btn-icon" aria-label="Eliminar proyecto actual" title="Eliminar proyecto actual">
+              <span data-icon="trash"></span>
+            </button>
+          </div>
+
+          <div class="explorer-io-row">
+            <span id="explorer-autosave-status" class="explorer-autosave-note">Autoguardado en IndexedDB</span>
+            <div class="panel-actions">
+              <input type="file" id="explorer-import-input" multiple hidden>
+              <button type="button" id="btn-import-files" class="btn btn-ghost btn-sm btn-icon" aria-label="Importar archivos desde el iPad" title="Importar archivos">
+                <span data-icon="upload"></span>
+              </button>
+              <button type="button" id="btn-export-file" class="btn btn-ghost btn-sm btn-icon" aria-label="Descargar archivo activo" title="Descargar archivo activo">
+                <span data-icon="download"></span>
+              </button>
+            </div>
+          </div>
+
+          <div id="explorer-inline-slot" hidden></div>
+        </div>
+
+        <div class="panel-body">
+          <ul id="file-tree" class="file-tree"></ul>
+        </div>
+      </aside>
+
+      <div
+        id="resizer-left"
+        class="ide-resizer ide-resizer-left"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionar explorador"
+        tabindex="0"
+      ></div>
+
+      <!-- Isla Central: Motor CodeMirror 6, pestañas cerrables, herramientas táctiles y barra de símbolos -->
+      <main class="ide-panel ide-panel-center surface-editor-solid" aria-label="Editor de código">
+        <div class="editor-header-bar">
+          <div id="editor-tabs" class="editor-tabs-scroll" role="tablist" aria-label="Archivos abiertos"></div>
+
+          <div class="editor-toolbar-actions" role="toolbar" aria-label="Herramientas táctiles del editor">
+            <button type="button" id="btn-editor-undo" class="btn btn-ghost btn-sm btn-icon" aria-label="Deshacer" title="Deshacer">
+              <span data-icon="undo"></span>
+            </button>
+            <button type="button" id="btn-editor-redo" class="btn btn-ghost btn-sm btn-icon" aria-label="Rehacer" title="Rehacer">
+              <span data-icon="redo"></span>
+            </button>
+            <button type="button" id="btn-editor-search" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar en archivo" title="Buscar y reemplazar (Cmd/Ctrl + F)">
+              <span data-icon="search"></span>
+            </button>
+            <button
+              type="button"
+              id="btn-editor-wrap"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-pressed="true"
+              aria-label="Alternar ajuste de línea"
+              title="Ajuste automático de línea (Word Wrap)"
+            >
+              <span data-icon="wrapText"></span>
+            </button>
+            <button type="button" id="btn-font-down" class="btn btn-ghost btn-sm btn-icon" aria-label="Reducir tamaño de fuente" title="Reducir fuente">
+              <span data-icon="minus"></span>
+            </button>
+            <span id="editor-zoom-readout" class="editor-zoom-readout">14px</span>
+            <button type="button" id="btn-font-up" class="btn btn-ghost btn-sm btn-icon" aria-label="Aumentar tamaño de fuente" title="Aumentar fuente">
+              <span data-icon="plus"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="editor-stage">
+          <div id="editor-mount" class="editor-mount"></div>
+
+          <div id="editor-empty-state" class="editor-empty-state" hidden>
+            <div class="editor-empty-mark">
+              <span data-icon="code"></span>
+            </div>
+            <h2 class="editor-empty-title">Ningún archivo abierto</h2>
+            <p class="editor-empty-desc">Elegí un archivo del explorador, creá uno nuevo con el botón más o abrí rápidamente uno de tu proyecto activo.</p>
+            <div id="editor-empty-quicklist" class="editor-empty-quicklist"></div>
+          </div>
+        </div>
+
+        <div id="symbol-bar" class="symbol-bar" role="toolbar" aria-label="Símbolos rápidos de programación">
+          <span id="symbol-lang-pill" class="symbol-lang-pill">C / C++</span>
+          <div id="symbol-keys-track" class="symbol-keys-track"></div>
+        </div>
+      </main>
+
+      <div
+        id="resizer-right"
+        class="ide-resizer ide-resizer-right"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionar asistente"
+        tabindex="0"
+      ></div>
+
+      <!-- Isla Derecha: Chat con IA Multi-Proveedor estilo Antigravity -->
+      <aside id="panel-assistant" class="ide-panel ide-panel-right surface-glass-panel" aria-label="Asistente de inteligencia artificial">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span data-icon="sparkles"></span>
+            <h2 class="panel-title">Asistente</h2>
+          </div>
+          <div class="panel-actions">
+            <button
+              type="button"
+              id="btn-ai-clear-chat"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-label="Nueva conversación"
+              title="Limpiar conversación"
+            >
+              <span data-icon="trash"></span>
+            </button>
+            <button
+              type="button"
+              id="btn-ai-settings"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-expanded="false"
+              aria-controls="chat-settings-drawer"
+              aria-label="Configurar proveedores y API Key"
+              title="Configurar IA y API Key"
+            >
+              <span data-icon="settings"></span>
+            </button>
+            <button type="button" id="btn-close-right" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar asistente">
+              <span data-icon="x"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-model-strip">
+          <span id="chat-current-model-label" class="chat-model-Current">Google Gemini (Gratis): gemini-3.5-flash-lite</span>
+          <button type="button" id="chat-key-status-btn" class="chat-key-badge" title="Abrir configuración de API Key">
+            <span data-icon="key"></span>
+            <span>Falta clave</span>
+          </button>
+        </div>
+
+        <div id="chat-settings-drawer" class="chat-settings-drawer" hidden>
+          <div class="field-group">
+            <label for="ai-provider-select" class="field-label">Proveedor gratuito</label>
+            <select id="ai-provider-select" class="field-control"></select>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label-row">
+              <label for="ai-model-select" class="field-label">Modelo gratuito</label>
+              <button type="button" id="ai-fetch-models-btn" class="btn btn-ghost btn-sm" title="Actualizar lista de modelos gratuitos disponibles">
+                <span data-icon="refreshCw"></span>
+                <span>Actualizar</span>
+              </button>
+            </div>
+            <select id="ai-model-select" class="field-control"></select>
+          </div>
+
+          <div class="field-group">
+            <label for="ai-custom-model-input" class="field-label">ID del modelo activo</label>
+            <input
+              type="text"
+              id="ai-custom-model-input"
+              class="field-control code-font"
+              spellcheck="false"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="field-group">
+            <label for="ai-api-key-input" class="field-label">API Key gratuita del proveedor</label>
+            <div class="field-row">
+              <input
+                type="password"
+                id="ai-api-key-input"
+                class="field-control code-font"
+                spellcheck="false"
+                autocomplete="off"
+              >
+              <button type="button" id="ai-toggle-key-vis" class="btn btn-icon" aria-label="Mostrar u ocultar clave">
+                <span data-icon="eye"></span>
+              </button>
+              <button type="button" id="ai-clear-key-btn" class="btn btn-icon" aria-label="Borrar clave guardada" title="Borrar clave">
+                <span data-icon="trash"></span>
+              </button>
+            </div>
+            <p id="ai-provider-help" class="field-hint">Clave guardada únicamente en tu navegador; nunca se sube a GitHub.</p>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">Pasar mis claves entre PC e iPad</span>
+            <div class="storage-mode-switch">
+              <button type="button" id="ai-export-keys-btn" class="storage-mode-btn">
+                Copiar pack de claves
+              </button>
+              <button type="button" id="ai-import-keys-btn" class="storage-mode-btn">
+                Importar pack
+              </button>
+            </div>
+            <div id="ai-import-keys-slot" hidden></div>
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">Dónde recordar mis claves y tokens</span>
+            <div class="storage-mode-switch" role="group" aria-label="Modo de almacenamiento de API Key">
+              <button type="button" id="ai-mode-local" class="storage-mode-btn" aria-pressed="true">
+                Este dispositivo
+              </button>
+              <button type="button" id="ai-mode-session" class="storage-mode-btn" aria-pressed="false">
+                Solo esta sesión
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-context-bar">
+          <span id="chat-context-status">Leyendo archivo activo</span>
+          <span class="chat-context-file">
+            <span data-icon="fileCode"></span>
+            <span id="chat-context-filename">main.cpp</span>
+          </span>
+        </div>
+
+        <div id="chat-extra-tabs" class="chat-extra-tabs" hidden></div>
+
+        <div id="chat-scroll-body" class="panel-body">
+          <div id="chat-stream" class="chat-stream"></div>
+        </div>
+
+        <form id="chat-composer-form" class="chat-composer">
+          <div class="chat-input-row">
+            <label for="chat-prompt-input" class="visually-hidden">Consultar al asistente sobre el código</label>
+            <textarea
+              id="chat-prompt-input"
+              class="chat-input"
+              rows="2"
+              placeholder="Preguntá sobre el archivo abierto o pedí un cambio…"
+            ></textarea>
+            <button type="submit" id="chat-submit-btn" class="btn btn-primary btn-icon" aria-label="Enviar consulta" title="Enviar consulta">
+              <span data-icon="send"></span>
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Diálogo de Sincronización con GitHub (Octokit + IndexedDB + Commit Atómico) -->
+  <dialog id="github-dialog" class="ide-dialog" aria-labelledby="github-dialog-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="gitBranch"></span>
+          <h2 id="github-dialog-title" class="dialog-title">Sincronización con GitHub</h2>
+        </div>
+        <button type="button" id="btn-close-github" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar ventana de GitHub">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+
+      <div class="dialog-body">
+        <section class="gh-section" aria-labelledby="gh-auth-heading">
+          <div class="gh-section-head">
+            <h3 id="gh-auth-heading" class="gh-section-title">1. Cuenta y Personal Access Token</h3>
+            <span id="gh-user-status" class="gh-user-tag">Sin sesión</span>
+          </div>
+
+          <div class="field-group">
+            <label for="gh-token-input" class="field-label">Fine-Grained PAT (permiso Contents: Read &amp; Write)</label>
+            <div class="field-row">
+              <input
+                type="password"
+                id="gh-token-input"
+                class="field-control code-font"
+                placeholder="github_pat_…"
+                spellcheck="false"
+                autocomplete="off"
+              >
+              <button type="button" id="btn-gh-connect" class="btn">Conectar</button>
+              <button type="button" id="btn-gh-clear-token" class="btn btn-icon" aria-label="Borrar token de GitHub" title="Borrar token">
+                <span data-icon="trash"></span>
+              </button>
+            </div>
+            <p id="gh-auth-msg" class="gh-status-msg">Tu token queda guardado solo en tu navegador siguiendo tu preferencia de privacidad.</p>
+          </div>
+        </section>
+
+        <section class="gh-section" aria-labelledby="gh-clone-heading">
+          <div class="gh-section-head">
+            <h3 id="gh-clone-heading" class="gh-section-title">2. Abrir repositorio en el iPad (IndexedDB)</h3>
+          </div>
+
+          <div class="field-group">
+            <label for="gh-repo-select" class="field-label">Tus repositorios recientes</label>
+            <select id="gh-repo-select" class="field-control">
+              <option value="">Conectá tu token para listar repositorios</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <div class="field-group field-grow-2">
+              <label for="gh-manual-repo" class="field-label">Repositorio (usuario/nombre)</label>
+              <input
+                type="text"
+                id="gh-manual-repo"
+                class="field-control code-font"
+                placeholder="usuario/mi-repo"
+                spellcheck="false"
+                autocomplete="off"
+              >
+            </div>
+            <div class="field-group field-grow-1">
+              <label for="gh-branch-select" class="field-label">Rama</label>
+              <select id="gh-branch-select" class="field-control">
+                <option value="main">main</option>
+                <option value="master">master</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <button type="button" id="btn-gh-clone" class="btn">
+              <span data-icon="cloudDownload"></span>
+              <span>Descargar archivos al iPad</span>
+            </button>
+          </div>
+          <p id="gh-clone-status" class="gh-status-msg">Descarga los archivos a IndexedDB para editar rápido e incluso sin conexión.</p>
+        </section>
+
+        <section id="gh-sync-section" class="gh-section" aria-labelledby="gh-sync-heading" hidden>
+          <div class="gh-section-head">
+            <h3 id="gh-sync-heading" class="gh-section-title">3. Cambios locales listos para Commit</h3>
+            <button type="button" id="btn-gh-pull" class="btn btn-ghost btn-sm" title="Volver a descargar desde GitHub">
+              <span data-icon="refreshCw"></span>
+              <span>Actualizar remoto</span>
+            </button>
+          </div>
+
+          <p id="gh-sync-repo-title" class="field-label code-font"></p>
+          <ul id="gh-changes-list" class="gh-changes-list"></ul>
+
+          <div class="field-group">
+            <label for="gh-commit-msg" class="field-label">Mensaje del commit</label>
+            <input
+              type="text"
+              id="gh-commit-msg"
+              class="field-control"
+              placeholder="Ej: Actualizar estilos y lógica desde Studio IDE"
+            >
+          </div>
+
+          <div class="field-row">
+            <button type="button" id="btn-gh-push" class="btn btn-primary">
+              <span data-icon="cloudUpload"></span>
+              <span>Commit y Push a GitHub</span>
+            </button>
+          </div>
+          <p id="gh-push-status" class="gh-status-msg">Agrupa todos los archivos nuevos, editados y eliminados en un solo commit limpio.</p>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Visor de Diferencias (Diff línea por línea en verde y rojo) -->
+  <dialog id="diff-dialog" class="ide-dialog ide-dialog-wide" aria-labelledby="diff-dialog-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="gitCompare"></span>
+          <h2 id="diff-dialog-title" class="dialog-title">Revisar diferencias</h2>
+          <div id="diff-dialog-stats" class="diff-stats-group" aria-live="polite"></div>
+        </div>
+        <button type="button" id="btn-close-diff" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar visor de diferencias">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+
+      <div class="dialog-body diff-dialog-body">
+        <div id="diff-lines-view" class="diff-lines-view code-font" role="region" aria-label="Comparación de líneas"></div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" id="btn-diff-cancel" class="btn">Cancelar</button>
+        <button type="button" id="btn-diff-confirm" class="btn btn-primary">Confirmar y aplicar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Vista Previa Web en Vivo por pestaña activa (Iframe Sandbox + Consola JS integrada para iPadOS) -->
+  <dialog id="preview-dialog" class="ide-dialog ide-dialog-preview" aria-labelledby="preview-dialog-title">
+    <div class="dialog-shell preview-dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="play"></span>
+          <h2 id="preview-dialog-title" class="dialog-title">Vista previa</h2>
+          <span id="preview-file-badge" class="preview-file-badge code-font"></span>
+        </div>
+
+        <div class="preview-toolbar-controls">
+          <button type="button" id="btn-preview-js-mode" class="btn btn-ghost btn-sm" hidden></button>
+          <button type="button" id="btn-preview-reload" class="btn btn-ghost btn-sm" title="Recargar vista previa">
+            <span data-icon="refreshCw"></span>
+            <span>Recargar</span>
+          </button>
+          <button type="button" id="btn-preview-console" class="btn btn-ghost btn-sm" aria-pressed="true" title="Mostrar u ocultar consola JavaScript">
+            <span data-icon="terminal"></span>
+            <span>Consola</span>
+          </button>
+          <button type="button" id="btn-close-preview" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar vista previa">
+            <span data-icon="x"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="preview-stage-split">
+        <div id="preview-unavailable-state" class="preview-unavailable-state" hidden>
+          <div class="editor-empty-mark">
+            <span data-icon="code"></span>
+          </div>
+          <h3 id="preview-unavailable-title" class="editor-empty-title">La vista previa no está disponible</h3>
+          <p id="preview-unavailable-desc" class="editor-empty-desc"></p>
+        </div>
+
+        <iframe
+          id="preview-iframe"
+          class="preview-iframe"
+          sandbox="allow-scripts allow-modals"
+          title="Vista previa web en vivo"
+        ></iframe>
+
+        <section id="preview-console-panel" class="preview-console-panel" aria-label="Consola JavaScript">
+          <div class="preview-console-header">
+            <span class="preview-console-title">Consola JS</span>
+            <button type="button" id="btn-preview-clear-console" class="btn btn-ghost btn-sm">Limpiar</button>
+          </div>
+          <div id="preview-console-list" class="preview-console-list code-font"></div>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

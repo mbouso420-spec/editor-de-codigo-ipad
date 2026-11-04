@@ -1,0 +1,830 @@
+const STORAGE_MODE_KEY = "ide.ai.storageMode";
+const ACTIVE_PROVIDER_KEY = "ide.ai.provider";
+const CUSTOM_MODEL_PREFIX = "ide.ai.model.";
+const KEY_PREFIX = "ide.ai.key.";
+const GH_TOKEN_STORAGE_KEY = "ide.github.pat";
+
+const liveSyncedByProvider = new Map();
+
+/**
+ * Catálogo depurado con los 4 proveedores 100% GRATUITOS (sin tarjeta) y con soporte CORS directo en navegador
+ * que siguen activos a fines de 2026:
+ * - Google Gemini (Gratis): familia 3.x Flash / Flash-Lite + Gemma.
+ * - Groq (Gratis): incluye los modelos oficiales abiertos de OpenAI (GPT-OSS 120B y 20B), Llama 4, Qwen 3 y Kimi.
+ * - OpenRouter (Gratis): router inteligente openrouter/free + todos los modelos :free vigentes del día.
+ * - Mistral / Codestral (Gratis): plan Experiment gratuito con Codestral y Devstral para código.
+ *
+ * Nota: GitHub Models (models.github.ai) fue dado de baja definitivamente por GitHub el 30 de julio de 2026,
+ * por lo que se retiró de la lista de IA (tu token de GitHub sigue funcionando en el botón Repositorio para clonar y hacer commits).
+ */
+export const AI_PROVIDERS = {
+  gemini: {
+    id: "gemini",
+    name: "Google Gemini (Gratis)",
+    protocol: "gemini",
+    supportsLiveModels: true,
+    keyPlaceholder: "AIzaSy…",
+    helpText: "Sincroniza automáticamente los modelos 3.x gratuitos activos en tu cuenta y reintenta solo si hay alta demanda.",
+    models: [
+      { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (Rápido, menor demanda)" },
+      { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash (Estable)" },
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Más reciente, con auto-reintento)" }
+    ]
+  },
+  groq: {
+    id: "groq",
+    name: "Groq (GPT de OpenAI y modelos abiertos Gratis)",
+    protocol: "openai",
+    endpoint: "https://api.groq.com/openai/v1/chat/completions",
+    supportsLiveModels: true,
+    keyPlaceholder: "gsk_…",
+    helpText: "100% gratis sin tarjeta en console.groq.com/keys. Incluye GPT-OSS 120B de OpenAI y responde al instante.",
+    models: [
+      { id: "openai/gpt-oss-120b", label: "OpenAI GPT-OSS 120B (Gratis y ultrarrápido)" },
+      { id: "openai/gpt-oss-20b", label: "OpenAI GPT-OSS 20B (Instantáneo, cuota amplia)" }
+    ]
+  },
+  openrouter: {
+    id: "openrouter",
+    name: "OpenRouter (Modelos :free Gratis)",
+    protocol: "openai",
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    supportsLiveModels: true,
+    keyPlaceholder: "sk-or-v1-…",
+    helpText: "Gratis sin tarjeta en openrouter.ai/keys. El modo Auto-Router elige siempre un modelo :free activo.",
+    models: [
+      { id: "openrouter/free", label: "Auto-Router Gratis (Elige un modelo :free activo)" },
+      { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "NVIDIA Nemotron 3 Ultra (:free)" },
+      { id: "google/gemma-4-31b-it:free", label: "Google Gemma 4 31B (:free)" },
+      { id: "cohere/north-mini-code:free", label: "Cohere North Mini Code (:free)" }
+    ]
+  },
+  mistral: {
+    id: "mistral",
+    name: "Mistral / Codestral (Plan Gratis)",
+    protocol: "openai",
+    endpoint: "https://api.mistral.ai/v1/chat/completions",
+    supportsLiveModels: true,
+    keyPlaceholder: "Clave de console.mistral.ai…",
+    helpText: "Gratis activando el plan Experiment (sin tarjeta) en console.mistral.ai.",
+    models: [
+      { id: "codestral-latest", label: "Codestral (Especialista en código)" },
+      { id: "devstral-small-latest", label: "Devstral Small (Agente de programación)" },
+      { id: "mistral-small-latest", label: "Mistral Small (Rápido y general)" }
+    ]
+  }
+};
+
+export function isFreeActiveGoogleModelId(id) {
+  const lower = String(id || "").toLowerCase();
+  if (!lower.startsWith("gemini-") && !lower.startsWith("gemma-")) {
+    return false;
+  }
+  const retiredOrPaidOrSpecial = [
+    "1.0",
+    "1.5",
+    "2.0",
+    "2.5",
+    "argon",
+    "-pro",
+    "ultra",
+    "tts",
+    "audio",
+    "transcribe",
+    "-live",
+    "image",
+    "imagen",
+    "veo",
+    "embedding",
+    "aqa",
+    "robotics",
+    "computer-use",
+    "thinking-exp"
+  ];
+  for (const token of retiredOrPaidOrSpecial) {
+    if (lower.includes(token)) {
+      return false;
+    }
+  }
+  return lower.includes("flash") || lower.startsWith("gemma-");
+}
+
+function isActiveGroqChatModelId(id) {
+  const lower = String(id || "").toLowerCase();
+  const excluded = [
+    "whisper",
+    "tts",
+    "orpheus",
+    "guard",
+    "safeguard",
+    "embedding",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+  ];
+  return !excluded.some((token) => lower.includes(token));
+}
+
+export function getKeyStorageMode() {
+  try {
+    const mode = window.localStorage.getItem(STORAGE_MODE_KEY);
+    return mode === "session" ? "session" : "local";
+  } catch {
+    return "session";
+  }
+}
+
+export function setKeyStorageMode(nextMode) {
+  const prevMode = getKeyStorageMode();
+  if (prevMode === nextMode) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(STORAGE_MODE_KEY, nextMode);
+    const fromStore = prevMode === "session" ? window.sessionStorage : window.localStorage;
+    const toStore = nextMode === "session" ? window.sessionStorage : window.localStorage;
+
+    for (const id of Object.keys(AI_PROVIDERS)) {
+      const k = `${KEY_PREFIX}${id}`;
+      const val = fromStore.getItem(k);
+      if (val) {
+        toStore.setItem(k, val);
+        fromStore.removeItem(k);
+      }
+    }
+    const ghVal = fromStore.getItem(GH_TOKEN_STORAGE_KEY);
+    if (ghVal) {
+      toStore.setItem(GH_TOKEN_STORAGE_KEY, ghVal);
+      fromStore.removeItem(GH_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Entorno restringido
+  }
+}
+
+export function getApiKey(providerId) {
+  const k = `${KEY_PREFIX}${providerId}`;
+  try {
+    return window.sessionStorage.getItem(k) || window.localStorage.getItem(k) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveApiKey(providerId, apiKey) {
+  const k = `${KEY_PREFIX}${providerId}`;
+  const trimmed = apiKey.trim();
+  liveSyncedByProvider.delete(providerId);
+  try {
+    window.localStorage.removeItem(k);
+    window.sessionStorage.removeItem(k);
+    if (!trimmed) {
+      return;
+    }
+    const target = getKeyStorageMode() === "session" ? window.sessionStorage : window.localStorage;
+    target.setItem(k, trimmed);
+  } catch {
+    // Entorno restringido
+  }
+}
+
+export function clearApiKey(providerId) {
+  saveApiKey(providerId, "");
+}
+
+export function exportKeysBundle() {
+  const bundle = {};
+  for (const id of Object.keys(AI_PROVIDERS)) {
+    const val = getApiKey(id);
+    if (val) {
+      bundle[id] = val;
+    }
+  }
+  try {
+    const ghToken =
+      window.sessionStorage.getItem(GH_TOKEN_STORAGE_KEY) ||
+      window.localStorage.getItem(GH_TOKEN_STORAGE_KEY) ||
+      "";
+    if (ghToken) {
+      bundle.githubPat = ghToken;
+    }
+  } catch {
+    // Ignorar
+  }
+  return JSON.stringify(bundle);
+}
+
+export function importKeysBundle(rawJson) {
+  const parsed = JSON.parse(rawJson);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Formato de claves inválido.");
+  }
+  let count = 0;
+  for (const id of Object.keys(AI_PROVIDERS)) {
+    if (typeof parsed[id] === "string" && parsed[id].trim()) {
+      saveApiKey(id, parsed[id].trim());
+      count += 1;
+    }
+  }
+  if (typeof parsed.githubPat === "string" && parsed.githubPat.trim()) {
+    try {
+      const cleanPat = parsed.githubPat.trim();
+      window.localStorage.removeItem(GH_TOKEN_STORAGE_KEY);
+      window.sessionStorage.removeItem(GH_TOKEN_STORAGE_KEY);
+      const target = getKeyStorageMode() === "session" ? window.sessionStorage : window.localStorage;
+      target.setItem(GH_TOKEN_STORAGE_KEY, cleanPat);
+      count += 1;
+    } catch {
+      // Ignorar
+    }
+  }
+  return count;
+}
+
+export function getSavedProviderId() {
+  try {
+    const saved = window.localStorage.getItem(ACTIVE_PROVIDER_KEY);
+    if (saved && AI_PROVIDERS[saved]) {
+      return saved;
+    }
+    if (saved && !AI_PROVIDERS[saved]) {
+      window.localStorage.setItem(ACTIVE_PROVIDER_KEY, "gemini");
+    }
+    return "gemini";
+  } catch {
+    return "gemini";
+  }
+}
+
+export function saveProviderId(providerId) {
+  try {
+    window.localStorage.setItem(ACTIVE_PROVIDER_KEY, providerId);
+  } catch {
+    // Ignorar
+  }
+}
+
+export function getSavedModel(providerId) {
+  const provider = AI_PROVIDERS[providerId] ?? AI_PROVIDERS.gemini;
+  try {
+    const saved = window.localStorage.getItem(`${CUSTOM_MODEL_PREFIX}${provider.id}`);
+    if (saved) {
+      if (provider.id === "gemini" && !isFreeActiveGoogleModelId(saved)) {
+        const cleanDefault = provider.models[0].id;
+        window.localStorage.setItem(`${CUSTOM_MODEL_PREFIX}${provider.id}`, cleanDefault);
+        return cleanDefault;
+      }
+      if (provider.id === "groq" && !isActiveGroqChatModelId(saved)) {
+        const cleanDefault = provider.models[0].id;
+        window.localStorage.setItem(`${CUSTOM_MODEL_PREFIX}${provider.id}`, cleanDefault);
+        return cleanDefault;
+      }
+      return saved;
+    }
+    return provider.models[0].id;
+  } catch {
+    return provider.models[0].id;
+  }
+}
+
+export function saveModel(providerId, modelId) {
+  try {
+    window.localStorage.setItem(`${CUSTOM_MODEL_PREFIX}${providerId}`, modelId.trim());
+  } catch {
+    // Ignorar
+  }
+}
+
+/**
+ * Consulta en vivo los modelos gratuitos vigentes directamente desde el servidor del proveedor.
+ */
+export async function fetchLiveFreeModels(providerId, apiKey, signal) {
+  if (providerId === "gemini") {
+    if (!apiKey) {
+      throw new Error("Pegá primero tu API Key de Google AI Studio.");
+    }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, { signal });
+    if (!res.ok) {
+      throw new Error(`Error al consultar Gemini (${res.status}).`);
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.models) ? data.models : [];
+    const filtered = list
+      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+      .map((m) => {
+        const id = String(m.name || "").replace(/^models\//, "");
+        return {
+          id,
+          label: m.displayName ? `${m.displayName} (${id})` : id
+        };
+      })
+      .filter((m) => isFreeActiveGoogleModelId(m.id));
+
+    filtered.sort((a, b) => scoreGoogleModel(a.id) - scoreGoogleModel(b.id));
+
+    if (filtered.length > 0) {
+      AI_PROVIDERS.gemini.models = filtered;
+      liveSyncedByProvider.set("gemini", apiKey);
+    }
+    return filtered;
+  }
+
+  if (providerId === "groq") {
+    if (!apiKey) {
+      throw new Error("Pegá primero tu API Key gratuita de Groq.");
+    }
+    const res = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal
+    });
+    if (!res.ok) {
+      throw new Error(`Error al consultar Groq (${res.status}).`);
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.data) ? data.data : [];
+    const filtered = list
+      .filter((m) => m?.active !== false && isActiveGroqChatModelId(m.id))
+      .map((m) => ({
+        id: m.id,
+        label: formatGroqLabel(m.id)
+      }));
+
+    filtered.sort((a, b) => scoreGroqModel(a.id) - scoreGroqModel(b.id));
+
+    if (filtered.length > 0) {
+      AI_PROVIDERS.groq.models = filtered;
+      liveSyncedByProvider.set("groq", apiKey);
+    }
+    return filtered;
+  }
+
+  if (providerId === "openrouter") {
+    const res = await fetch("https://openrouter.ai/api/v1/models", { signal });
+    if (!res.ok) {
+      throw new Error(`Error al consultar OpenRouter (${res.status}).`);
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.data) ? data.data : [];
+    const freeItems = list
+      .filter((m) => String(m.id || "").endsWith(":free"))
+      .map((m) => ({
+        id: m.id,
+        label: m.name ? `${m.name}` : m.id
+      }));
+
+    const combined = [
+      { id: "openrouter/free", label: "Auto-Router Gratis (Elige un modelo :free activo)" },
+      ...freeItems.filter((m) => m.id !== "openrouter/free")
+    ];
+
+    AI_PROVIDERS.openrouter.models = combined;
+    liveSyncedByProvider.set("openrouter", "public");
+    return combined;
+  }
+
+  if (providerId === "mistral") {
+    if (!apiKey) {
+      throw new Error("Pegá primero tu clave gratuita de Mistral.");
+    }
+    const res = await fetch("https://api.mistral.ai/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal
+    });
+    if (!res.ok) {
+      throw new Error(`Error al consultar Mistral (${res.status}).`);
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.data) ? data.data : [];
+    const filtered = list
+      .filter((m) => {
+        const id = String(m.id || "").toLowerCase();
+        return !id.includes("embed") && !id.includes("moderation") && !id.includes("ocr") && !id.includes("voxtral");
+      })
+      .map((m) => ({ id: m.id, label: m.id }));
+
+    if (filtered.length > 0) {
+      const preferred = ["codestral-latest", "devstral-small-latest", "mistral-small-latest"];
+      filtered.sort((a, b) => {
+        const ia = preferred.indexOf(a.id);
+        const ib = preferred.indexOf(b.id);
+        if (ia !== -1 || ib !== -1) {
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        }
+        return a.id.localeCompare(b.id);
+      });
+      AI_PROVIDERS.mistral.models = filtered;
+      liveSyncedByProvider.set("mistral", apiKey);
+    }
+    return filtered;
+  }
+
+  return AI_PROVIDERS[providerId]?.models || [];
+}
+
+function formatGroqLabel(id) {
+  if (id === "openai/gpt-oss-120b") return "OpenAI GPT-OSS 120B (Gratis y ultrarrápido)";
+  if (id === "openai/gpt-oss-20b") return "OpenAI GPT-OSS 20B (Instantáneo)";
+  return id;
+}
+
+function scoreGroqModel(id) {
+  const lower = id.toLowerCase();
+  if (lower === "openai/gpt-oss-120b") return 1;
+  if (lower === "openai/gpt-oss-20b") return 2;
+  if (lower.includes("gpt-oss")) return 3;
+  if (lower.includes("qwen") || lower.includes("kimi") || lower.includes("llama-4") || lower.includes("deepseek")) return 4;
+  return 5;
+}
+
+function scoreGoogleModel(id) {
+  if (id.includes("flash-lite")) return 1;
+  if (id.startsWith("gemini-3.6-flash")) return 2;
+  if (id.startsWith("gemini-3.8-flash")) return 3;
+  if (id.startsWith("gemini-")) return 4;
+  if (id.startsWith("gemma-") && id.includes("-it")) return 5;
+  return 6;
+}
+
+export async function streamAiCompletion({
+  providerId,
+  model,
+  apiKey,
+  systemPrompt,
+  history,
+  onChunk,
+  onFallbackNotice,
+  onModelsSynced,
+  signal
+}) {
+  const provider = AI_PROVIDERS[providerId] ?? AI_PROVIDERS.gemini;
+
+  if (provider.protocol === "gemini") {
+    return streamGeminiWithFallback({
+      model,
+      apiKey,
+      systemPrompt,
+      history,
+      onChunk,
+      onFallbackNotice,
+      onModelsSynced,
+      signal
+    });
+  }
+
+  return streamOpenAiWithFallback({
+    provider,
+    model,
+    apiKey,
+    systemPrompt,
+    history,
+    onChunk,
+    onFallbackNotice,
+    onModelsSynced,
+    signal
+  });
+}
+
+async function streamGeminiWithFallback({
+  model,
+  apiKey,
+  systemPrompt,
+  history,
+  onChunk,
+  onFallbackNotice,
+  onModelsSynced,
+  signal
+}) {
+  let cleanRequested = model.replace(/^models\//, "");
+
+  if (liveSyncedByProvider.get("gemini") !== apiKey) {
+    try {
+      const live = await fetchLiveFreeModels("gemini", apiKey, signal);
+      if (live.length > 0) {
+        onModelsSynced?.("gemini", live);
+      }
+    } catch {
+      // Seguimos con los modelos 3.x precargados
+    }
+  }
+
+  const activeIds = AI_PROVIDERS.gemini.models.map((m) => m.id);
+  if (
+    !isFreeActiveGoogleModelId(cleanRequested) ||
+    (liveSyncedByProvider.get("gemini") === apiKey && activeIds.length > 0 && !activeIds.includes(cleanRequested))
+  ) {
+    cleanRequested = activeIds[0] || "gemini-3.8-flash";
+  }
+
+  const candidates = [cleanRequested, ...activeIds].filter(
+    (m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx
+  );
+
+  let lastError = null;
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidateModel = candidates[i];
+    const maxAttempts = i === 0 ? 3 : 2;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        if (i > 0 && attempt === 1) {
+          onFallbackNotice?.(
+            `Usando modelo alternativo activo (${candidateModel}) para responder sin espera.`
+          );
+        } else if (attempt > 1) {
+          const waitMs = attempt === 2 ? 1300 : 2600;
+          onFallbackNotice?.(
+            `Alta demanda momentánea en ${candidateModel}; reintentando automáticamente (${attempt}/${maxAttempts})…`
+          );
+          await waitAbortable(waitMs, signal);
+        }
+
+        await runSingleGeminiStream({
+          cleanModel: candidateModel,
+          apiKey,
+          systemPrompt,
+          history,
+          onChunk,
+          signal
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw error;
+        }
+        lastError = error;
+        const status = error?.httpStatus || 0;
+        const msg = String(error?.message || "").toLowerCase();
+
+        const isNotFound =
+          status === 404 || msg.includes("no longer available") || msg.includes("not found");
+        const isOverloaded =
+          status === 503 ||
+          status === 429 ||
+          msg.includes("overloaded") ||
+          msg.includes("high demand") ||
+          msg.includes("unavailable") ||
+          msg.includes("resource_exhausted");
+
+        if (isNotFound) {
+          break;
+        }
+        if (!isOverloaded) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
+
+async function streamOpenAiWithFallback({
+  provider,
+  model,
+  apiKey,
+  systemPrompt,
+  history,
+  onChunk,
+  onFallbackNotice,
+  onModelsSynced,
+  signal
+}) {
+  const syncToken = provider.id === "openrouter" ? "public" : apiKey;
+  if (provider.supportsLiveModels && liveSyncedByProvider.get(provider.id) !== syncToken) {
+    try {
+      const live = await fetchLiveFreeModels(provider.id, apiKey, signal);
+      if (live.length > 0) {
+        onModelsSynced?.(provider.id, live);
+      }
+    } catch {
+      // Continuar con lista base
+    }
+  }
+
+  const activeIds = provider.models.map((m) => m.id);
+  let startModel = model;
+  if (
+    liveSyncedByProvider.get(provider.id) === syncToken &&
+    activeIds.length > 0 &&
+    !activeIds.includes(startModel)
+  ) {
+    startModel = activeIds[0];
+  }
+
+  const fallbackPool =
+    provider.id === "openrouter"
+      ? [startModel, "openrouter/free", ...activeIds.slice(0, 3)]
+      : [startModel, ...activeIds.slice(0, 3)];
+
+  const candidates = fallbackPool.filter((m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx);
+  let lastError = null;
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidateModel = candidates[i];
+    try {
+      if (i > 0) {
+        onFallbackNotice?.(`Cambiando automáticamente a ${candidateModel}…`);
+      }
+      await runSingleOpenAiStream({
+        providerId: provider.id,
+        endpoint: provider.endpoint,
+        model: candidateModel,
+        apiKey,
+        systemPrompt,
+        history,
+        onChunk,
+        signal
+      });
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      lastError = error;
+      const status = error?.httpStatus || 0;
+      const msg = String(error?.message || "").toLowerCase();
+      const canFallback =
+        status === 404 ||
+        status === 429 ||
+        status === 502 ||
+        status === 503 ||
+        msg.includes("model_not_found") ||
+        msg.includes("decommissioned") ||
+        msg.includes("not found") ||
+        msg.includes("rate limit");
+
+      if (!canFallback) {
+        throw error;
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
+
+function waitAbortable(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true }
+    );
+  });
+}
+
+async function runSingleGeminiStream({ cleanModel, apiKey, systemPrompt, history, onChunk, signal }) {
+  const isGemma = cleanModel.toLowerCase().startsWith("gemma-");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+
+  const contents = history.map((msg, idx) => {
+    const text =
+      isGemma && idx === 0 && msg.role === "user"
+        ? `${systemPrompt}\n\nConsulta del usuario:\n${msg.content}`
+        : msg.content;
+    return {
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text }]
+    };
+  });
+
+  const bodyPayload = {
+    contents,
+    generationConfig: { temperature: 0.25 }
+  };
+  if (!isGemma) {
+    bodyPayload.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bodyPayload),
+    signal
+  });
+
+  if (!res.ok) {
+    const err = new Error(await extractApiError(res, `Gemini (${cleanModel})`));
+    err.httpStatus = res.status;
+    throw err;
+  }
+
+  await consumeSseStream(res.body, (jsonStr) => {
+    const payload = JSON.parse(jsonStr);
+    const parts = payload?.candidates?.[0]?.content?.parts;
+    if (Array.isArray(parts)) {
+      for (const part of parts) {
+        if (part?.thought) {
+          continue;
+        }
+        if (typeof part.text === "string" && part.text.length > 0) {
+          onChunk(part.text);
+        }
+      }
+    }
+  });
+}
+
+async function runSingleOpenAiStream({ providerId, endpoint, model, apiKey, systemPrompt, history, onChunk, signal }) {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`
+  };
+
+  if (providerId === "openrouter") {
+    headers["HTTP-Referer"] = window.location.origin || "https://github.io";
+    headers["X-Title"] = "Studio IDE";
+  }
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...history.map((msg) => ({ role: msg.role, content: msg.content }))
+  ];
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: true,
+      temperature: 0.25
+    }),
+    signal
+  });
+
+  if (!res.ok) {
+    const err = new Error(await extractApiError(res, `${AI_PROVIDERS[providerId]?.name || providerId} (${model})`));
+    err.httpStatus = res.status;
+    throw err;
+  }
+
+  await consumeSseStream(res.body, (jsonStr) => {
+    const payload = JSON.parse(jsonStr);
+    const delta = payload?.choices?.[0]?.delta?.content;
+    if (typeof delta === "string" && delta.length > 0) {
+      onChunk(delta);
+    }
+  });
+}
+
+async function consumeSseStream(body, onDataPacket) {
+  if (!body) {
+    throw new Error("El navegador no recibió un flujo de datos válido.");
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+
+    let newlineIdx = buffer.indexOf("\n");
+    while (newlineIdx !== -1) {
+      const rawLine = buffer.slice(0, newlineIdx).trim();
+      buffer = buffer.slice(newlineIdx + 1);
+      newlineIdx = buffer.indexOf("\n");
+
+      if (!rawLine || !rawLine.startsWith("data:")) {
+        continue;
+      }
+      const dataStr = rawLine.slice(5).trim();
+      if (!dataStr || dataStr === "[DONE]") {
+        continue;
+      }
+
+      try {
+        onDataPacket(dataStr);
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+}
+
+async function extractApiError(res, label) {
+  try {
+    const data = await res.json();
+    const detail = data?.error?.message || data?.message || JSON.stringify(data);
+    return `${label} (${res.status}): ${detail}`;
+  } catch {
+    return `${label}: error HTTP ${res.status}. Verificá tu clave gratuita o probá otro modelo de la lista.`;
+  }
+}

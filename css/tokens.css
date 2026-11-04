@@ -1,0 +1,139 @@
+:root {
+  /* Escala de espaciado */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+  --space-3xl: 96px;
+  --space-4xl: 144px;
+
+  /* Safe areas y viewport visual dinámico para teclado virtual de iPadOS */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --vvh: 100dvh;
+  --vv-offset-top: 0px;
+
+  /* Escala tipográfica fija para aplicación */
+  --text-xs: 0.75rem;
+  --text-sm: 0.84rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.6rem;
+  --text-3xl: 1.95rem;
+  --text-display-s: 1.35rem;
+  --text-display: 1.6rem;
+  --text-section: 1.125rem;
+  --text-title: 0.9375rem;
+  --text-lead: 0.9375rem;
+  --text-code: 0.875rem;
+  --text-touch-input: 1rem;
+  --editor-font-size: 14px;
+
+  /* Familias tipográficas */
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-outlier: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Paleta: Grafito neutro profundo + Azul cobalto suave */
+  --color-paper: oklch(16.5% 0.012 255);
+  --color-paper-2: oklch(20.5% 0.014 255);
+  --color-paper-3: oklch(25.5% 0.016 255);
+  --color-editor-bg: oklch(15% 0.011 255);
+  --color-editor-gutter: oklch(15.8% 0.011 255);
+  --color-line-active: oklch(21% 0.015 255 / 0.55);
+  --color-selection: oklch(56% 0.155 252 / 0.28);
+
+  /* Superficies Glassmorphism estilo iPadOS */
+  --color-glass-bar: oklch(19% 0.014 255 / 0.78);
+  --color-glass-panel: oklch(20.5% 0.015 255 / 0.74);
+  --color-glass-drawer: oklch(21% 0.016 255 / 0.86);
+  --color-backdrop: oklch(10% 0.01 255 / 0.48);
+  --blur-glass: 22px;
+
+  /* Tintas y texto */
+  --color-ink: oklch(94.5% 0.007 255);
+  --color-ink-2: oklch(81% 0.012 255);
+  --color-muted: oklch(67% 0.014 255);
+  --color-gutter-ink: oklch(63% 0.014 255);
+
+  /* Tokens de resaltado de sintaxis para CodeMirror 6 (armonizados sobre grafito) */
+  --syn-keyword: oklch(74% 0.135 252);
+  --syn-type: oklch(78% 0.11 205);
+  --syn-fn: oklch(84% 0.1 82);
+  --syn-string: oklch(75% 0.125 152);
+  --syn-number: oklch(77% 0.13 55);
+  --syn-operator: oklch(78% 0.06 252);
+  --syn-tag: oklch(73% 0.14 22);
+  --syn-attr: oklch(80% 0.11 210);
+  --syn-comment: oklch(63% 0.014 255);
+
+  /* Bordes y divisores de 1px */
+  --color-rule: oklch(33% 0.016 255 / 0.65);
+  --color-rule-strong: oklch(43% 0.018 255 / 0.85);
+
+  /* Acento Azul Cobalto y estados semánticos */
+  --color-accent: oklch(52% 0.165 252);
+  --color-accent-hover: oklch(57% 0.165 252);
+  --color-accent-soft: oklch(62% 0.155 252 / 0.18);
+  --color-accent-text: oklch(74% 0.13 252);
+  --color-accent-ink: oklch(98% 0.005 252);
+  --color-focus: oklch(72% 0.145 252);
+
+  --color-error: oklch(62% 0.18 25);
+  --color-error-soft: oklch(62% 0.18 25 / 0.15);
+  --color-success: oklch(66% 0.14 152);
+  --color-success-soft: oklch(66% 0.14 152 / 0.15);
+  --color-warning: oklch(74% 0.14 75);
+
+  /* Geometría equilibrada estilo Antigravity (8px base) */
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-panel: 10px;
+  --radius-pill: 999px;
+  --rule-hair: 1px;
+
+  /* Sombras y elevación */
+  --shadow-card: 0 8px 24px oklch(8% 0.01 255 / 0.36);
+  --shadow-drawer: 0 16px 40px oklch(6% 0.01 255 / 0.58);
+
+  /* Movimiento y curvas */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 360ms;
+
+  /* Dimensiones de layout e islas */
+  --topbar-height: 46px;
+  --control-height: 36px;
+  --control-height-sm: 30px;
+  --symbol-key-height: 34px;
+  --left-panel-w: 250px;
+  --right-panel-w: 340px;
+  --resizer-track: 8px;
+  --container: 1440px;
+  --gutter: 32px;
+  --gap-columns: 24px;
+  --section-gap-s: 64px;
+  --section-gap: 96px;
+  --section-gap-l: 120px;
+  --tracking-display: -0.015em;
+
+  /* Capas Z */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-sticky-nav: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+}
