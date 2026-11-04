@@ -229,9 +229,10 @@ export function importKeysBundle(rawJson) {
       count += 1;
     }
   }
-  if (typeof parsed.githubPat === "string" && parsed.githubPat.trim()) {
+  const ghVal = parsed.githubPat || parsed.github || parsed.ghToken || parsed.token;
+  if (typeof ghVal === "string" && ghVal.trim()) {
     try {
-      const cleanPat = parsed.githubPat.trim();
+      const cleanPat = ghVal.trim();
       window.localStorage.removeItem(GH_TOKEN_STORAGE_KEY);
       window.sessionStorage.removeItem(GH_TOKEN_STORAGE_KEY);
       const target = getKeyStorageMode() === "session" ? window.sessionStorage : window.localStorage;
