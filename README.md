@@ -4,7 +4,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 273 tests unitarios pasando al 100% (52 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 276 tests unitarios pasando al 100% (52 suites, 0 fallos).
 
 ---
 
@@ -142,7 +142,7 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **273 pruebas unitarias ejecutadas.**
+- **276 pruebas unitarias ejecutadas.**
 - **52 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
 - Tiempo de ejecución: **~2.7 segundos.**

@@ -4,11 +4,35 @@
  * para proyectos universitarios y profesionales con headers (.h/.hpp) y módulos (.c/.cpp).
  */
 
-const C_EXTENSIONS = new Set(["c"]);
-const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "h", "hpp"]);
+export const C_SOURCE_EXTENSIONS = new Set(["c"]);
+export const C_HEADER_EXTENSIONS = new Set(["h"]);
+export const CPP_SOURCE_EXTENSIONS = new Set(["cpp", "cxx", "cc"]);
+export const CPP_HEADER_EXTENSIONS = new Set(["hpp", "hxx", "hh"]);
+
+export const ALL_HEADER_EXTENSIONS = new Set(["h", "hpp", "hxx", "hh"]);
+export const ALL_C_EXTENSIONS = new Set(["c", "h"]);
+export const ALL_CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp", "hxx", "hh"]);
+
+/**
+ * Detecta si un código fuente en C o C++ define la función de punto de entrada main().
+ * Descarta comentarios de bloque y de línea para prevenir falsos positivos.
+ * @param {string} code
+ * @returns {boolean}
+ */
+export function hasMainFunction(code) {
+  if (!code || typeof code !== "string") return false;
+  const stripped = code
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\r\n]*/g, " ");
+  return /\b(?:int|void|auto|signed)?\s*main\s*\([^)]*\)\s*(?:->\s*[a-zA-Z0-9_:<>]+\s*)?\{/m.test(stripped);
+}
 
 /**
  * Genera el payload de compilación para la API de Wandbox con soporte multi-archivo.
+ * Reglas de aislamiento estricto:
+ * 1. Si el archivo activo es C (.c): JAMÁS incluye archivos C++ (.cpp, .hpp) para no romper el compilador gcc de C.
+ * 2. Si un archivo compañero define su propia función main(), se EXCLUYE del enlace para evitar "multiple definition of `main`".
+ * 3. Las cabeceras (.h/.hpp) se cargan en `codes` para #include pero NUNCA se pasan como unidades de compilación al linker.
  * @param {{
  *   activeFile: { path: string, shortName?: string, content: string },
  *   companionFiles?: Array<{ path: string, shortName?: string, content: string }>,
@@ -25,7 +49,9 @@ const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "h", "hpp"]);
  */
 export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "" }) {
   const ext = getFileExtension(activeFile.path);
-  const isC = C_EXTENSIONS.has(ext);
+  const isCSource = C_SOURCE_EXTENSIONS.has(ext);
+  const isCHeader = C_HEADER_EXTENSIONS.has(ext);
+  const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
 
   const compiler = isC ? "gcc-head-c" : "gcc-head";
   const options = isC ? "c17,warning" : "c++20,warning";
@@ -38,24 +64,66 @@ export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "
   const extraSourceFiles = [];
 
   for (const comp of companionFiles) {
+    if (!comp || !comp.path) continue;
     const compClean = normalizePath(comp.path);
     if (compClean === cleanActivePath) continue;
 
     const compExt = getFileExtension(comp.path);
-    if (!C_EXTENSIONS.has(compExt) && !CPP_EXTENSIONS.has(compExt)) continue;
+
+    // 1. REGLA ESTRICTA DE LENGUAJE:
+    // Si estamos compilando un archivo C (gcc-head-c):
+    // JAMÁS incluir archivos de código fuente C++ (.cpp, .cxx, .cc) ni cabeceras C++ (.hpp).
+    // El compilador GCC de C no puede procesar C++ ni enlazar con libstdc++.
+    if (isC) {
+      if (!C_SOURCE_EXTENSIONS.has(compExt) && !C_HEADER_EXTENSIONS.has(compExt)) {
+        continue;
+      }
+    } else {
+      // Si estamos compilando C++ (gcc-head / g++):
+      if (!ALL_CPP_EXTENSIONS.has(compExt) && !ALL_C_EXTENSIONS.has(compExt)) {
+        continue;
+      }
+    }
 
     // Obtener ruta relativa respecto al archivo principal
-    const relName = prefix && compClean.startsWith(prefix) ? compClean.slice(prefix.length) : comp.shortName || compClean.split("/").pop();
+    const relName = prefix && compClean.startsWith(prefix)
+      ? compClean.slice(prefix.length)
+      : comp.shortName || compClean.split("/").pop();
 
+    const isHeader = ALL_HEADER_EXTENSIONS.has(compExt);
+    const compContent = String(comp.content || "");
+
+    // 2. CABECERAS (.h, .hpp, etc.):
+    // Se agregan al disco virtual de Wandbox (`codes`) para que puedan ser importadas con `#include "..."`.
+    // NUNCA se agregan como fuentes a compilar directamente en `extraSourceFiles` / `compiler-option-raw`.
+    if (isHeader) {
+      codes.push({
+        file: relName,
+        code: compContent
+      });
+      continue;
+    }
+
+    // 3. ARCHIVOS DE CÓDIGO FUENTE (.c, .cpp, .cxx, .cc):
+    // Verificar si el archivo compañero define su propia función `main()`.
+    const compHasMain = hasMainFunction(compContent);
+
+    // Si el archivo compañero define `main()`, es un programa INDEPENDIENTE
+    // (ej: otro ejercicio o programa separado en la misma carpeta).
+    // Si lo vinculáramos a la compilación de `activeFile`, el linker fallará con:
+    // `multiple definition of 'main'`.
+    // Por ende, NUNCA se debe compilar ni enlazar como módulo adicional.
+    if (compHasMain) {
+      continue;
+    }
+
+    // Si NO define `main()`, es un módulo auxiliar (ej: utils.c, calculos.cpp).
+    // Se incluye en `codes` y se pasa al compilador para enlace.
     codes.push({
       file: relName,
-      code: comp.content || ""
+      code: compContent
     });
-
-    // Si es un archivo de código fuente (.c o .cpp) adicional, pasarlo al compilador para enlace
-    if (compExt === "c" || compExt === "cpp" || compExt === "cxx" || compExt === "cc") {
-      extraSourceFiles.push(relName);
-    }
+    extraSourceFiles.push(relName);
   }
 
   const rawOptions = ["-O2", "-Wall"];
@@ -164,8 +232,11 @@ export function mountCRunnerView(containerEl, {
   containerEl.innerHTML = "";
 
   const ext = getFileExtension(activeFile.path);
-  const isC = C_EXTENSIONS.has(ext);
-  const langLabel = isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)";
+  const isCSource = C_SOURCE_EXTENSIONS.has(ext);
+  const isCHeader = C_HEADER_EXTENSIONS.has(ext);
+  const isHeader = ALL_HEADER_EXTENSIONS.has(ext);
+  const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
+  const langLabel = isHeader ? (isC ? "C Header (.h)" : "C++ Header (.hpp)") : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
   const initialPayload = buildWandboxPayload({ activeFile, companionFiles, stdin: "" });
   const companionCount = initialPayload.codes.length;
   const companionLabel = companionCount > 0
@@ -374,8 +445,11 @@ function escapeHtml(str) {
  */
 export function buildCRunnerPreview(activeFile, companionFiles = []) {
   const ext = getFileExtension(activeFile.path);
-  const isC = C_EXTENSIONS.has(ext);
-  const langLabel = isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)";
+  const isCSource = C_SOURCE_EXTENSIONS.has(ext);
+  const isCHeader = C_HEADER_EXTENSIONS.has(ext);
+  const isHeader = ALL_HEADER_EXTENSIONS.has(ext);
+  const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
+  const langLabel = isHeader ? (isC ? "C Header (.h)" : "C++ Header (.hpp)") : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
   const safeTitle = escapeHtml(activeFile.shortName || activeFile.path);
 
   const initialPayload = buildWandboxPayload({ activeFile, companionFiles, stdin: "" });

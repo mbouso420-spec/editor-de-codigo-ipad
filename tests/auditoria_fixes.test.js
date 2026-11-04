@@ -16,7 +16,7 @@ const { buildZipArchive, computeCrc32, getDosDateTime } = await import("../js/st
 const { formatStorageBytes, getStorageQuotaEstimate } = await import("../js/storage/storageQuota.js");
 const { resolveRelativePath, findBestHtmlEntrypoint, findTargetHtmlFile, filterFolderScopeFiles, bundleHtmlWithFolderAssets } = await import("../js/ui/livePreviewModal.js");
 const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
-const { buildWandboxPayload, compileAndRunWandbox, parseGccErrors, mountCRunnerView } = await import("../js/preview/cRunner.js");
+const { buildWandboxPayload, compileAndRunWandbox, parseGccErrors, mountCRunnerView, hasMainFunction } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
 describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
@@ -729,6 +729,80 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         assert.equal(container.querySelectorAll("iframe").length, 0, "No debe contener ningún iframe HTML");
 
         instance.destroy();
+      });
+
+      test("hasMainFunction detecta firmas de main e ignora comentarios y prototipos", () => {
+        assert.equal(hasMainFunction("int main() { return 0; }"), true);
+        assert.equal(hasMainFunction("int main(int argc, char* argv[])\n{\n  return 0;\n}"), true);
+        assert.equal(hasMainFunction("void main() {}"), true);
+        assert.equal(hasMainFunction("auto main() -> int { return 0; }"), true);
+        assert.equal(hasMainFunction("// int main() {\nint foo() { return 1; }"), false);
+        assert.equal(hasMainFunction("/* int main() { */\nint foo() { return 1; }"), false);
+        assert.equal(hasMainFunction("int domain_search() { return 0; }"), false);
+        assert.equal(hasMainFunction("int main();\nint foo() { return 0; }"), false);
+        assert.equal(hasMainFunction("int sumar(int a, int b) { return a + b; }"), false);
+      });
+
+      test("buildWandboxPayload en archivo .c descarta archivos C++ (.cpp) evitando 'multiple definition of main' y llamadas a libstdc++", () => {
+        const activeFile = {
+          path: "src/prog.c",
+          shortName: "prog.c",
+          content: '#include <stdio.h>\nint main() { printf("Hola C\\n"); return 0; }'
+        };
+        const companionFiles = [
+          {
+            path: "src/main.cpp",
+            shortName: "main.cpp",
+            content: '#include <iostream>\n#include <vector>\nint main() { std::cout << "Hola C++"; return 0; }'
+          },
+          {
+            path: "src/vector_helper.hpp",
+            shortName: "vector_helper.hpp",
+            content: '#pragma once\nclass Helper {};'
+          }
+        ];
+
+        const payload = buildWandboxPayload({ activeFile, companionFiles });
+        assert.equal(payload.compiler, "gcc-head-c");
+        assert.equal(payload.options, "c17,warning");
+        assert.equal(payload.codes.length, 0, "No debe incluir archivos C++ (.cpp ni .hpp) en una compilación C");
+        assert.ok(!payload["compiler-option-raw"].includes("main.cpp"), "No debe pasar main.cpp al compilador gcc de C");
+      });
+
+      test("buildWandboxPayload descarta archivos compañeros con su propio main() pero incluye módulos y headers legítimos", () => {
+        const activeFile = {
+          path: "src/prog.c",
+          shortName: "prog.c",
+          content: '#include <stdio.h>\n#include "utils.h"\nint main() { printf("%d", sumar(2, 3)); return 0; }'
+        };
+        const companionFiles = [
+          {
+            path: "src/utils.h",
+            shortName: "utils.h",
+            content: 'int sumar(int a, int b);'
+          },
+          {
+            path: "src/utils.c",
+            shortName: "utils.c",
+            content: 'int sumar(int a, int b) { return a + b; }'
+          },
+          {
+            path: "src/otro_ejercicio.c",
+            shortName: "otro_ejercicio.c",
+            content: '#include <stdio.h>\nint main() { return 0; }'
+          }
+        ];
+
+        const payload = buildWandboxPayload({ activeFile, companionFiles });
+        assert.equal(payload.codes.length, 2, "Debe incluir utils.h y utils.c en codes");
+        const codeFiles = payload.codes.map((c) => c.file);
+        assert.ok(codeFiles.includes("utils.h"), "Debe tener utils.h para #include");
+        assert.ok(codeFiles.includes("utils.c"), "Debe tener utils.c para enlace");
+        assert.ok(!codeFiles.includes("otro_ejercicio.c"), "No debe incluir otro_ejercicio.c porque tiene su propio main()");
+
+        assert.ok(payload["compiler-option-raw"].includes("utils.c"), "utils.c debe compilarse con gcc");
+        assert.ok(!payload["compiler-option-raw"].includes("utils.h"), "utils.h no debe pasarse al linker");
+        assert.ok(!payload["compiler-option-raw"].includes("otro_ejercicio.c"), "otro_ejercicio.c no debe pasarse al linker");
       });
     });
   });

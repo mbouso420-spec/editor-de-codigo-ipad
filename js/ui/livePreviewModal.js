@@ -38,8 +38,8 @@ const CSS_EXTENSIONS = new Set(["css"]);
 const PYTHON_EXTENSIONS = new Set(["py", "pyw"]);
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
 const SQL_EXTENSIONS = new Set(["sql"]);
-const C_EXTENSIONS = new Set(["c"]);
-const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "h", "hpp"]);
+const C_EXTENSIONS = new Set(["c", "h"]);
+const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp"]);
 
 /**
  * Vista previa contextual según la pestaña activa:
@@ -384,7 +384,13 @@ export function initLivePreviewModal({
 
     const ext = getFileExtension(activeFile.path);
     const isC = C_EXTENSIONS.has(ext);
-    if (titleEl) titleEl.textContent = isC ? "Compilador C (GCC)" : "Compilador C++ (G++)";
+    if (titleEl) {
+      if (ext === "h" || ext === "hpp") {
+        titleEl.textContent = ext === "h" ? "Cabecera C (.h)" : "Cabecera C++ (.hpp)";
+      } else {
+        titleEl.textContent = isC ? "Compilador C (GCC)" : "Compilador C++ (G++)";
+      }
+    }
     if (fileBadgeEl) {
       fileBadgeEl.textContent = activeFile.path;
       fileBadgeEl.hidden = false;
