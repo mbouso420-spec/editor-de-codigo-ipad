@@ -13,7 +13,8 @@ import {
   saveModel,
   saveProviderId,
   setKeyStorageMode,
-  streamAiCompletion
+  streamAiCompletion,
+  validateApiKey
 } from "./providers.js";
 
 /**
@@ -60,9 +61,25 @@ export function initChatController({
   let activeModelId = getSavedModel(activeProviderId);
   let settingsOpen = false;
   let keyVisible = false;
-  let abortController = null;
-  let keySyncTimer = 0;
   let currentStreamStatus = "";
+
+  /**
+   * Respuestas en curso por conversación (clave = id del proyecto). Una respuesta sigue en segundo plano
+   * si el usuario cambia de proyecto y se guarda en el proyecto donde se hizo la pregunta.
+   * @type {Map<string | null, { controller: AbortController, convo: Array<{ role: string, content: string }>, discarded: boolean }>}
+   */
+  const activeStreams = new Map();
+  /** @type {string | null} */
+  let conversationKey = null;
+
+  /**
+   * Resultado de la verificación de la clave por proveedor (solo en memoria; se re-verifica al abrir la app).
+   * @type {Map<string, { key: string, status: "checking" | "valid" | "invalid" | "offline" | "unknown", message: string }>}
+   */
+  const keyChecks = new Map();
+  let keyCheckTimer = 0;
+  /** @type {AbortController | null} */
+  let keyCheckController = null;
 
   /** @type {Set<string>} */
   const attachedTabIds = new Set();
@@ -73,7 +90,65 @@ export function initChatController({
   populateProviderOptions();
   syncSettingsForm();
   renderConversation();
-  void syncLiveModelsSilently(activeProviderId);
+  // La lista de modelos se pide recién cuando la clave resulta válida: con una clave inválida
+  // se hace una sola consulta (la verificación) en lugar de dos.
+  scheduleKeyValidation(activeProviderId, 0, false);
+
+  /**
+   * Verifica la clave del proveedor con una consulta liviana y actualiza el indicador.
+   * @param {string} providerId
+   * @param {number} delayMs espera para no consultar en cada tecla
+   * @param {boolean} announce si mostrar el resultado en el texto de ayuda (cuando el usuario la acaba de pegar)
+   */
+  function scheduleKeyValidation(providerId, delayMs, announce) {
+    window.clearTimeout(keyCheckTimer);
+    keyCheckController?.abort();
+    keyCheckController = null;
+
+    const key = getApiKey(providerId);
+    if (!key) {
+      keyChecks.delete(providerId);
+      updateModelStrip();
+      if (providerId === "openrouter") {
+        // El catálogo de OpenRouter es público: se puede listar sin clave.
+        void syncLiveModelsSilently(providerId);
+      }
+      return;
+    }
+    const previous = keyChecks.get(providerId);
+    if (!announce && previous && previous.key === key && previous.status !== "checking") {
+      updateModelStrip();
+      return;
+    }
+
+    keyChecks.set(providerId, { key, status: "checking", message: "" });
+    updateModelStrip();
+
+    keyCheckTimer = window.setTimeout(async () => {
+      const controller = new AbortController();
+      keyCheckController = controller;
+      let result;
+      try {
+        result = await validateApiKey(providerId, key, controller.signal);
+      } catch {
+        return; // Cancelada porque el usuario siguió escribiendo o cambió de proveedor
+      }
+      if (keyCheckController === controller) {
+        keyCheckController = null;
+      }
+      if (getApiKey(providerId) !== key) {
+        return; // La clave cambió mientras se verificaba: este resultado ya no aplica
+      }
+      keyChecks.set(providerId, { key, ...result });
+      updateModelStrip();
+      if (result.status === "valid") {
+        void syncLiveModelsSilently(providerId);
+      }
+      if (providerId === activeProviderId && providerHelpEl && (announce || result.status !== "valid")) {
+        providerHelpEl.textContent = result.message;
+      }
+    }, delayMs);
+  }
 
   async function syncLiveModelsSilently(providerId) {
     const provider = AI_PROVIDERS[providerId];
@@ -116,13 +191,16 @@ export function initChatController({
   keyStatusBtn?.addEventListener("click", () => toggleSettings());
 
   clearChatBtn?.addEventListener("click", () => {
-    if (abortController) {
-      abortController.abort();
-      abortController = null;
+    const running = activeStreams.get(conversationKey);
+    if (running) {
+      // Se descarta: al cortarse no debe volver a guardar la conversación que el usuario acaba de limpiar.
+      running.discarded = true;
+      running.controller.abort();
     }
     conversation = [];
     renderConversation();
-    onConversationChange?.([]);
+    setStreamingUiState(false);
+    onConversationChange?.([], conversationKey);
   });
 
   providerSelect?.addEventListener("change", () => {
@@ -130,7 +208,7 @@ export function initChatController({
     saveProviderId(activeProviderId);
     activeModelId = getSavedModel(activeProviderId);
     syncSettingsForm();
-    void syncLiveModelsSilently(activeProviderId);
+    scheduleKeyValidation(activeProviderId, 0, false);
   });
 
   modelSelect?.addEventListener("change", () => {
@@ -153,14 +231,7 @@ export function initChatController({
 
   apiKeyInput?.addEventListener("input", () => {
     saveApiKey(activeProviderId, apiKeyInput.value);
-    updateModelStrip();
-    window.clearTimeout(keySyncTimer);
-    if (apiKeyInput.value.trim().length >= 20) {
-      const targetProvider = activeProviderId;
-      keySyncTimer = window.setTimeout(() => {
-        void syncLiveModelsSilently(targetProvider);
-      }, 500);
-    }
+    scheduleKeyValidation(activeProviderId, 700, true);
   });
 
   toggleKeyVisBtn?.addEventListener("click", () => {
@@ -176,7 +247,7 @@ export function initChatController({
     if (apiKeyInput) {
       apiKeyInput.value = "";
     }
-    updateModelStrip();
+    scheduleKeyValidation(activeProviderId, 0, false);
   });
 
   modeLocalBtn?.addEventListener("click", () => {
@@ -242,6 +313,7 @@ export function initChatController({
         const count = importKeysBundle(input.value.trim());
         close();
         syncSettingsForm();
+        scheduleKeyValidation(activeProviderId, 0, true);
         onKeysImported?.();
         if (providerHelpEl) {
           providerHelpEl.textContent = `Se importaron ${count} clave(s) en este dispositivo.`;
@@ -293,10 +365,9 @@ export function initChatController({
   composerForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    if (abortController) {
-      abortController.abort();
-      abortController = null;
-      setStreamingUiState(false);
+    const running = activeStreams.get(conversationKey);
+    if (running) {
+      running.controller.abort();
       return;
     }
 
@@ -326,23 +397,30 @@ export function initChatController({
     const snapshot = getContextSnapshot();
     const systemPrompt = buildSystemPrompt(snapshot);
 
-    conversation.push({ role: "user", content: userText });
+    // La respuesta queda atada a ESTA conversación aunque el usuario cambie de proyecto mientras llega.
+    const key = conversationKey;
+    const convo = conversation;
+    convo.push({ role: "user", content: userText });
     const assistantEntry = { role: "assistant", content: "" };
-    conversation.push(assistantEntry);
+    convo.push(assistantEntry);
+
+    const stream = { controller: new AbortController(), convo, discarded: false };
+    activeStreams.set(key, stream);
+    const isVisible = () => conversationKey === key && conversation === convo;
 
     renderConversation();
     scrollToBottom();
 
-    abortController = new AbortController();
     currentStreamStatus = "";
     setStreamingUiState(true);
 
     let rafPending = false;
     const scheduleRender = () => {
-      if (rafPending) return;
+      if (rafPending || !isVisible()) return;
       rafPending = true;
       window.requestAnimationFrame(() => {
         rafPending = false;
+        if (!isVisible()) return;
         updateLastAssistantMessage(assistantEntry.content, true);
         scrollToBottom();
       });
@@ -354,8 +432,8 @@ export function initChatController({
         model: activeModelId,
         apiKey,
         systemPrompt,
-        history: conversation.slice(0, -1),
-        signal: abortController.signal,
+        history: convo.slice(0, -1),
+        signal: stream.controller.signal,
         onModelsSynced(syncedProviderId, liveModels) {
           if (activeProviderId === syncedProviderId && Array.isArray(liveModels) && liveModels.length > 0) {
             const stillValid = liveModels.some((m) => m.id === activeModelId);
@@ -367,6 +445,7 @@ export function initChatController({
           }
         },
         onFallbackNotice(noticeText) {
+          if (!isVisible()) return;
           currentStreamStatus = noticeText;
           if (providerHelpEl) {
             providerHelpEl.textContent = noticeText;
@@ -374,28 +453,60 @@ export function initChatController({
           scheduleRender();
         },
         onChunk(delta) {
-          currentStreamStatus = "";
+          if (isVisible()) {
+            currentStreamStatus = "";
+          }
           assistantEntry.content += delta;
           scheduleRender();
         }
       });
 
-      updateLastAssistantMessage(assistantEntry.content || "Sin contenido devuelto por el modelo.", false);
+      if (isVisible()) {
+        updateLastAssistantMessage(assistantEntry.content || "Sin contenido devuelto por el modelo.", false);
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        assistantEntry.content += "\n\n*(Generación detenida)*";
-        updateLastAssistantMessage(assistantEntry.content, false);
+        if (!stream.discarded) {
+          assistantEntry.content += "\n\n*(Generación detenida)*";
+          if (isVisible()) {
+            updateLastAssistantMessage(assistantEntry.content, false);
+          }
+        }
       } else {
-        conversation.pop();
-        renderConversation();
-        appendErrorBanner(error instanceof Error ? error.message : "Error de red al conectar con el proveedor gratuito.");
+        const message =
+          error instanceof Error ? error.message : "Error de red al conectar con el proveedor gratuito.";
+        if (assistantEntry.content.trim()) {
+          // Se conserva lo que ya llegó: perderlo sería peor que mostrarlo incompleto.
+          assistantEntry.content += `\n\n*(Respuesta interrumpida: ${message})*`;
+          if (isVisible()) {
+            updateLastAssistantMessage(assistantEntry.content, false);
+          }
+        } else {
+          const idx = convo.indexOf(assistantEntry);
+          if (idx !== -1) {
+            convo.splice(idx, 1);
+          }
+          if (isVisible()) {
+            renderConversation();
+            appendErrorBanner(message);
+          }
+        }
       }
     } finally {
-      currentStreamStatus = "";
-      abortController = null;
-      setStreamingUiState(false);
-      onConversationChange?.(conversation.map((m) => ({ role: m.role, content: m.content })));
-      scrollToBottom();
+      if (activeStreams.get(key) === stream) {
+        activeStreams.delete(key);
+      }
+      if (isVisible()) {
+        currentStreamStatus = "";
+        setStreamingUiState(false);
+        scrollToBottom();
+      }
+      if (!stream.discarded) {
+        onConversationChange?.(
+          convo.map((m) => ({ role: m.role, content: m.content })),
+          key
+        );
+      }
     }
   }
 
@@ -465,15 +576,41 @@ export function initChatController({
 
   function updateModelStrip() {
     const provider = AI_PROVIDERS[activeProviderId] ?? AI_PROVIDERS.gemini;
-    const hasKey = Boolean(getApiKey(provider.id));
+    const key = getApiKey(provider.id);
 
     if (currentModelLabel) {
       currentModelLabel.textContent = `${provider.name}: ${activeModelId}`;
     }
 
     if (keyStatusBtn) {
-      keyStatusBtn.classList.toggle("has-key", hasKey);
-      keyStatusBtn.innerHTML = `${icon("key")}<span>${hasKey ? "Clave lista" : "Falta clave"}</span>`;
+      const check = keyChecks.get(provider.id);
+      const current = check && check.key === key ? check : null;
+      let label = "Falta clave";
+      let state = "missing";
+      if (key) {
+        if (!current) {
+          label = "Clave sin verificar";
+          state = "unverified";
+        } else if (current.status === "checking") {
+          label = "Verificando…";
+          state = "checking";
+        } else if (current.status === "valid") {
+          label = "Clave válida";
+          state = "valid";
+        } else if (current.status === "invalid") {
+          label = "Clave inválida";
+          state = "invalid";
+        } else {
+          label = "Clave sin verificar";
+          state = "unverified";
+        }
+      }
+      keyStatusBtn.classList.toggle("has-key", state === "valid");
+      keyStatusBtn.classList.toggle("is-invalid", state === "invalid");
+      keyStatusBtn.classList.toggle("is-unverified", state === "unverified" || state === "checking");
+      keyStatusBtn.dataset.keyState = state;
+      keyStatusBtn.title = current?.message || "Abrir configuración de API Key";
+      keyStatusBtn.innerHTML = `${icon("key")}<span>${label}</span>`;
     }
   }
 
@@ -566,7 +703,8 @@ export function initChatController({
         const aiNode = document.createElement("div");
         aiNode.className = "chat-ai-response";
         aiNode.dataset.assistantIndex = String(index);
-        populateAssistantNode(aiNode, msg.content, false);
+        const isLiveTail = index === conversation.length - 1 && activeStreams.has(conversationKey);
+        populateAssistantNode(aiNode, msg.content, isLiveTail);
         streamContainer.appendChild(aiNode);
       }
     });
@@ -765,11 +903,18 @@ export function initChatController({
     notifySelectionChanged() {
       syncReplaceButtonsState();
     },
-    setConversation(nextHistory) {
-      if (abortController) {
-        abortController.abort();
-        abortController = null;
+    setConversation(nextHistory, key = null) {
+      conversationKey = key;
+      const live = activeStreams.get(key);
+      if (live && !live.discarded) {
+        // Volvemos a un proyecto cuya respuesta sigue llegando: mostrar la conversación en vivo.
+        conversation = live.convo;
+        renderConversation();
+        setStreamingUiState(true);
+        scrollToBottom();
+        return;
       }
+      setStreamingUiState(false);
       conversation = Array.isArray(nextHistory)
         ? nextHistory
             .filter(

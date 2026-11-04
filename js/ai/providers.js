@@ -1,3 +1,5 @@
+import { toFriendlyNetworkError } from "../net/networkErrors.js";
+
 const STORAGE_MODE_KEY = "ide.ai.storageMode";
 const ACTIVE_PROVIDER_KEY = "ide.ai.provider";
 const CUSTOM_MODEL_PREFIX = "ide.ai.model.";
@@ -6,6 +8,17 @@ const GH_TOKEN_STORAGE_KEY = "ide.github.pat";
 const GH_REPOS_CACHE_KEY = "ide.github.reposCache";
 
 const liveSyncedByProvider = new Map();
+
+const PROVIDER_SHORT_NAMES = {
+  gemini: "Google Gemini",
+  groq: "Groq",
+  openrouter: "OpenRouter",
+  mistral: "Mistral"
+};
+
+function providerLabel(providerId) {
+  return PROVIDER_SHORT_NAMES[providerId] || "el proveedor de IA";
+}
 
 /**
  * Catálogo depurado con los 4 proveedores 100% GRATUITOS (sin tarjeta) y con soporte CORS directo en navegador
@@ -300,7 +313,83 @@ export function saveModel(providerId, modelId) {
 /**
  * Consulta en vivo los modelos gratuitos vigentes directamente desde el servidor del proveedor.
  */
+const KEY_CHECK_ENDPOINTS = {
+  gemini: { url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", header: "x-goog-api-key" },
+  groq: { url: "https://api.groq.com/openai/v1/models", header: "bearer" },
+  mistral: { url: "https://api.mistral.ai/v1/models", header: "bearer" },
+  // La lista de modelos de OpenRouter es pública: /key es la consulta que sí exige una clave válida.
+  openrouter: { url: "https://openrouter.ai/api/v1/key", header: "bearer" }
+};
+
+/**
+ * Comprueba una API Key con UNA consulta liviana al proveedor oficial (no consume cuota de generación).
+ * Respuestas verificadas contra las APIs reales: Gemini responde 400 "API key not valid";
+ * Groq, Mistral y OpenRouter responden 401 ante una clave inválida.
+ * @returns {Promise<{ status: "valid" | "invalid" | "offline" | "unknown", message: string }>}
+ */
+export async function validateApiKey(providerId, apiKey, signal) {
+  const cleanKey = String(apiKey || "").trim();
+  const check = KEY_CHECK_ENDPOINTS[providerId];
+  const label = providerLabel(providerId);
+  if (!cleanKey) {
+    return { status: "invalid", message: "Falta la clave." };
+  }
+  if (!check) {
+    return { status: "unknown", message: `No hay verificación disponible para ${label}.` };
+  }
+
+  const headers =
+    check.header === "bearer" ? { Authorization: `Bearer ${cleanKey}` } : { [check.header]: cleanKey };
+
+  let res;
+  try {
+    res = await fetch(check.url, { headers, signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    const friendly = toFriendlyNetworkError(error, label);
+    if (friendly?.isNetworkFailure) {
+      return { status: "offline", message: `Sin conexión: no se pudo verificar la clave de ${label}.` };
+    }
+    return { status: "unknown", message: `No se pudo verificar la clave de ${label} ahora.` };
+  }
+
+  if (res.ok || res.status === 429) {
+    // 429 = la clave fue reconocida pero llegó al límite momentáneo de consultas.
+    return { status: "valid", message: `Clave de ${label} verificada.` };
+  }
+
+  let detail = "";
+  try {
+    const data = await res.json();
+    detail = String(data?.error?.message || data?.detail || data?.message || "");
+  } catch {
+    // Sin cuerpo JSON
+  }
+
+  const keyRejected =
+    res.status === 401 ||
+    res.status === 403 ||
+    (res.status === 400 && /api key|api_key|apikey/i.test(detail));
+  if (keyRejected) {
+    return {
+      status: "invalid",
+      message: `${label} rechazó la clave. Revisá que la hayas copiado completa o generá una nueva.`
+    };
+  }
+  return { status: "unknown", message: `No se pudo verificar la clave de ${label} (respuesta ${res.status}).` };
+}
+
 export async function fetchLiveFreeModels(providerId, apiKey, signal) {
+  try {
+    return await fetchLiveFreeModelsRaw(providerId, apiKey, signal);
+  } catch (error) {
+    throw toFriendlyNetworkError(error, providerLabel(providerId));
+  }
+}
+
+async function fetchLiveFreeModelsRaw(providerId, apiKey, signal) {
   if (providerId === "gemini") {
     if (!apiKey) {
       throw new Error("Pegá primero tu API Key de Google AI Studio.");
@@ -557,12 +646,13 @@ async function streamGeminiWithFallback({
           signal
         });
         return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          throw error;
+      } catch (rawError) {
+        if (rawError instanceof DOMException && rawError.name === "AbortError") {
+          throw rawError;
         }
-        if (emittedAnyChunk) {
-          // La respuesta ya empezó a mostrarse: reintentar duplicaría el texto en el chat.
+        const error = toFriendlyNetworkError(rawError, providerLabel("gemini"));
+        if (emittedAnyChunk || error?.isNetworkFailure) {
+          // Ya se mostró parte de la respuesta (reintentar duplicaría texto) o no hay red (reintentar no sirve).
           throw error;
         }
         lastError = error;
@@ -657,12 +747,13 @@ async function streamOpenAiWithFallback({
         signal
       });
       return;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw error;
+    } catch (rawError) {
+      if (rawError instanceof DOMException && rawError.name === "AbortError") {
+        throw rawError;
       }
-      if (emittedAnyChunk) {
-        // La respuesta ya empezó a mostrarse: reintentar duplicaría el texto en el chat.
+      const error = toFriendlyNetworkError(rawError, providerLabel(provider.id));
+      if (emittedAnyChunk || error?.isNetworkFailure) {
+        // Ya se mostró parte de la respuesta (reintentar duplicaría texto) o no hay red (reintentar no sirve).
         throw error;
       }
       lastError = error;

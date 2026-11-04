@@ -44,6 +44,14 @@
   color: var(--color-success);
 }
 
+.chat-key-badge.is-invalid {
+  color: var(--color-error);
+}
+
+.chat-key-badge.is-unverified {
+  color: var(--color-warning);
+}
+
 /* Panel desplegable de Configuración Multi-API y Bóveda Local */
 .chat-settings-drawer {
   display: flex;

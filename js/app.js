@@ -20,6 +20,7 @@ import {
   deleteProject,
   deleteProjectEntry,
   ensureInitialWorkspace,
+  entryExists,
   getProject,
   getProjectEntries,
   getSavedActiveProjectId,
@@ -35,6 +36,11 @@ import {
   updateFileContent,
   upsertEntry
 } from "./storage/workspaceDb.js";
+import {
+  clearEmergencyBackup,
+  restoreEmergencyBackup,
+  writeEmergencyBackup
+} from "./storage/emergencyBackup.js";
 
 async function initApp() {
   hydrateIcons(document);
@@ -66,6 +72,13 @@ async function initApp() {
   const statusNetworkEl = document.getElementById("status-network-state");
 
   let projects = await ensureInitialWorkspace();
+  // Recuperar lo escrito justo antes de un cierre/recarga abrupta (ver emergencyBackup.js)
+  let restoredFromBackup = 0;
+  try {
+    restoredFromBackup = await restoreEmergencyBackup({ entryExists, updateFileContent });
+  } catch {
+    // Si falla, el respaldo queda en localStorage y se reintenta en la próxima apertura
+  }
   let activeProject =
     projects.find((p) => p.id === getSavedActiveProjectId()) || projects[0];
   setSavedActiveProjectId(activeProject.id);
@@ -505,9 +518,13 @@ async function initApp() {
         }
       });
     },
-    onConversationChange(history) {
-      activeProject.chatHistory = history;
-      void saveProjectChatHistory(activeProject.id, history);
+    onConversationChange(history, projectId) {
+      // La respuesta puede terminar después de cambiar de proyecto: se guarda donde se hizo la pregunta.
+      const targetId = projectId || activeProject.id;
+      if (targetId === activeProject.id) {
+        activeProject.chatHistory = history;
+      }
+      void saveProjectChatHistory(targetId, history);
     },
     onKeysImported() {
       void github.syncExplorerReposInBackground();
@@ -541,15 +558,25 @@ async function initApp() {
     }
   });
 
-  // Autoguardado inmediato si Safari en iPad suspende la app o cambia en Stage Manager
+  // Autoguardado inmediato si Safari en iPad suspende la app o cambia en Stage Manager.
+  // Primero se escribe un respaldo SÍNCRONO (localStorage): si la página muere antes de que IndexedDB
+  // termine, lo pendiente se recupera en la próxima apertura.
+  const backupAndFlush = () => {
+    if (saveTimers.size === 0) return;
+    writeEmergencyBackup([...saveTimers.values()]);
+    void flushPendingSaves().then(() => {
+      if (saveTimers.size === 0) {
+        clearEmergencyBackup();
+      }
+    });
+  };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
-      flushPendingSaves();
+      backupAndFlush();
     }
   });
-  window.addEventListener("pagehide", () => {
-    flushPendingSaves();
-  });
+  window.addEventListener("pagehide", backupAndFlush);
+  window.addEventListener("beforeunload", backupAndFlush);
 
   syncToolbarState();
   preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp]);
@@ -578,26 +605,35 @@ async function initApp() {
       window.clearTimeout(prev.timerId);
     }
 
-    const timerId = window.setTimeout(async () => {
-      saveTimers.delete(timerKey);
+    const item = { timerId: 0, projectId, filePath, content };
+    item.timerId = window.setTimeout(async () => {
+      item.timerId = 0;
+      // La entrada sigue registrada mientras se escribe: así el respaldo de emergencia y
+      // flushPendingSaves también cubren un guardado que está "en vuelo".
       await updateFileContent(projectId, filePath, content);
+      if (saveTimers.get(timerKey) === item) {
+        saveTimers.delete(timerKey);
+      }
       explorer.setAutosaveStatus("Autoguardado en IndexedDB");
       await github.refreshTopbarBadge();
     }, 240);
 
-    saveTimers.set(timerKey, { timerId, projectId, filePath, content });
+    saveTimers.set(timerKey, item);
   }
 
   async function flushPendingSaves() {
     if (saveTimers.size === 0) return;
     const entries = [...saveTimers.entries()];
-    saveTimers.clear();
-    for (const [_, item] of entries) {
+    for (const [key, item] of entries) {
       if (item && item.timerId) {
         window.clearTimeout(item.timerId);
+        item.timerId = 0;
       }
       if (item && item.projectId && item.filePath && typeof item.content === "string") {
         await updateFileContent(item.projectId, item.filePath, item.content);
+      }
+      if (saveTimers.get(key) === item) {
+        saveTimers.delete(key);
       }
     }
     explorer.setAutosaveStatus("Autoguardado en IndexedDB");
@@ -644,7 +680,7 @@ async function initApp() {
     }
 
     explorer.renderProjects(projects, activeProject.id);
-    chat.setConversation(activeProject.chatHistory || []);
+    chat.setConversation(activeProject.chatHistory || [], activeProject.id);
     renderWorkspaceView();
     await github.refreshTopbarBadge();
   }
@@ -899,6 +935,25 @@ async function initApp() {
       wrapper.append(selectBtn, closeBtn);
       tabStripEl.appendChild(wrapper);
     }
+
+    revealActiveTab();
+  }
+
+  /** En pantallas angostas desplaza la tira de pestañas hasta la activa (sin mover el resto de la página). */
+  function revealActiveTab() {
+    if (!tabStripEl) return;
+    const activeEl = tabStripEl.querySelector(".editor-tab-item.is-active");
+    if (!(activeEl instanceof HTMLElement)) return;
+    const strip = tabStripEl.getBoundingClientRect();
+    const tab = activeEl.getBoundingClientRect();
+    if (tab.width >= strip.width) {
+      // Más ancha que la tira: alinear el comienzo para que se lea el nombre del archivo
+      tabStripEl.scrollLeft += tab.left - strip.left;
+    } else if (tab.left < strip.left) {
+      tabStripEl.scrollLeft -= strip.left - tab.left + 8;
+    } else if (tab.right > strip.right) {
+      tabStripEl.scrollLeft += tab.right - strip.right + 8;
+    }
   }
 
   function renderEmptyQuickList() {
@@ -997,6 +1052,13 @@ async function initApp() {
   }
 
   await switchProject(activeProject.id);
+  if (restoredFromBackup > 0) {
+    explorer.setAutosaveStatus(
+      restoredFromBackup === 1
+        ? "Se recuperó 1 archivo con cambios sin guardar"
+        : `Se recuperaron ${restoredFromBackup} archivos con cambios sin guardar`
+    );
+  }
   void github.syncExplorerReposInBackground();
 }
 

@@ -86,6 +86,32 @@
   color: var(--color-error);
 }
 
+.explorer-token-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--color-error-soft);
+  color: var(--color-error);
+  font-size: var(--text-xs);
+}
+
+.explorer-token-warning[hidden] {
+  display: none;
+}
+
+.explorer-import-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.explorer-import-confirm .tree-confirm-bar {
+  padding-inline: var(--space-2xs);
+}
+
 /* Nodos jerárquicos del árbol de archivos con acciones táctiles inline */
 .tree-row {
   display: flex;

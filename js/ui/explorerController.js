@@ -1,5 +1,6 @@
 import { icon } from "./icons.js";
 import { inferFileMeta, normalizePath, validateUserPath } from "../storage/workspaceDb.js";
+import { decodeImportedFile } from "../storage/fileImport.js";
 
 /**
  * Controlador del Explorador jerárquico con creación/renombrado inline,
@@ -132,19 +133,89 @@ export function initExplorerController({
       try {
         cleanPath = validateUserPath(targetPath);
       } catch {
-        rejected.push(file.name);
+        rejected.push(`${file.name} (el nombre tiene caracteres no permitidos)`);
         continue;
       }
-      const content = await file.text();
-      imported.push({ path: cleanPath, content });
+      const decoded = decodeImportedFile(new Uint8Array(await file.arrayBuffer()), file.name);
+      if (!decoded.ok) {
+        rejected.push(`${file.name} (${decoded.reason})`);
+        continue;
+      }
+      imported.push({ path: cleanPath, content: decoded.text });
     }
-    if (imported.length > 0) {
+
+    const rejectedMsg = rejected.length > 0 ? `No se importó: ${rejected.join(", ")}` : "";
+    if (imported.length === 0) {
+      if (rejectedMsg) setAutosaveStatus(rejectedMsg);
+      return;
+    }
+
+    const existingFiles = new Set(currentEntries.filter((e) => !e.isFolder).map((e) => e.path));
+    const conflicts = imported.filter((item) => existingFiles.has(item.path));
+    if (conflicts.length === 0) {
       await onImportFiles(imported);
+      if (rejectedMsg) setAutosaveStatus(rejectedMsg);
+      return;
     }
-    if (rejected.length > 0) {
-      setAutosaveStatus(`No se importó ${rejected.join(", ")}: el nombre tiene caracteres no permitidos`);
-    }
+
+    // Hay archivos con el mismo nombre: no se pisa nada sin una confirmación explícita.
+    openImportOverwriteConfirm(conflicts.map((c) => c.path), async () => {
+      await onImportFiles(imported);
+      if (rejectedMsg) setAutosaveStatus(rejectedMsg);
+    }, rejectedMsg);
   });
+
+  function openImportOverwriteConfirm(conflictPaths, onConfirm, rejectedMsg) {
+    if (!inlineSlot) return;
+    inlineSlot.hidden = false;
+    inlineSlot.innerHTML = "";
+
+    const box = document.createElement("div");
+    box.className = "explorer-import-confirm";
+    box.setAttribute("role", "alertdialog");
+    box.setAttribute("aria-label", "Confirmar reemplazo de archivos");
+
+    const msg = document.createElement("p");
+    msg.className = "explorer-inline-error";
+    const shown = conflictPaths.slice(0, 3).join(", ");
+    const more = conflictPaths.length > 3 ? ` y ${conflictPaths.length - 3} más` : "";
+    msg.textContent =
+      conflictPaths.length === 1
+        ? `Ya existe "${shown}". ¿Reemplazarlo con el archivo importado?`
+        : `Ya existen ${shown}${more}. ¿Reemplazarlos con los archivos importados?`;
+
+    const actions = document.createElement("div");
+    actions.className = "tree-confirm-bar";
+
+    const replaceBtn = document.createElement("button");
+    replaceBtn.type = "button";
+    replaceBtn.className = "tree-confirm-delete";
+    replaceBtn.textContent = "Reemplazar";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "tree-icon-btn";
+    cancelBtn.setAttribute("aria-label", "Cancelar importación");
+    cancelBtn.innerHTML = icon("x");
+
+    const close = () => {
+      inlineSlot.hidden = true;
+      inlineSlot.innerHTML = "";
+    };
+    replaceBtn.addEventListener("click", async () => {
+      close();
+      await onConfirm();
+    });
+    cancelBtn.addEventListener("click", () => {
+      close();
+      setAutosaveStatus(rejectedMsg ? `Importación cancelada. ${rejectedMsg}` : "Importación cancelada");
+    });
+
+    actions.append(replaceBtn, cancelBtn);
+    box.append(msg, actions);
+    inlineSlot.appendChild(box);
+    replaceBtn.focus();
+  }
 
   btnExport?.addEventListener("click", () => {
     onDownloadActiveFile();

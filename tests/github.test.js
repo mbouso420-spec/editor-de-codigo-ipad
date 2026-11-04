@@ -65,9 +65,17 @@ describe("Cliente REST GitHub (fallback sin Octokit)", () => {
     assert.equal(idx.branch, "trunk");
   });
 
-  test("error 401 se propaga con mensaje de GitHub", async () => {
+  test("error 401 se propaga en español conservando status 401 (requisito actualizado en Vuelta #3)", async () => {
     installFakeGithub({ "GET /repos/o/r/branches/main": () => [401, { message: "Bad credentials" }] });
-    await assert.rejects(gh.fetchRepoTreeIndex({ token: "x", owner: "o", repo: "r", branch: "main" }), /Bad credentials/);
+    await assert.rejects(
+      gh.fetchRepoTreeIndex({ token: "x", owner: "o", repo: "r", branch: "main" }),
+      (e) => /GitHub rechazó el token/.test(e.message) && e.status === 401
+    );
+  });
+
+  test("otros errores de la API (404) conservan el mensaje original de GitHub", async () => {
+    installFakeGithub({ "GET /repos/o/r/branches/main": () => [404, { message: "Branch not found" }], "GET /repos/o/r": () => [404, { message: "Not Found" }] });
+    await assert.rejects(gh.fetchRepoTreeIndex({ token: "x", owner: "o", repo: "r", branch: "main" }), /Not Found/);
   });
 
   test("fetchSingleRepoBlob decodifica base64 UTF-8 con saltos de línea (ñ, emoji, CJK)", async () => {

@@ -1,4 +1,5 @@
 import { getKeyStorageMode } from "../ai/providers.js";
+import { toFriendlyNetworkError } from "../net/networkErrors.js";
 
 const GH_TOKEN_KEY = "ide.github.pat";
 const GH_REPOS_CACHE_KEY = "ide.github.reposCache";
@@ -74,6 +75,27 @@ function saveCachedUserRepositories(repos) {
  * @param {string} token
  */
 async function createGithubClient(token) {
+  const raw = await createRawGithubClient(token);
+  return {
+    async request(route, params = {}) {
+      try {
+        return await raw.request(route, params);
+      } catch (error) {
+        if (error?.status === 401) {
+          const authError = new Error(
+            "GitHub rechazó el token (inválido, vencido o revocado). Conectá uno nuevo desde el botón Repositorio."
+          );
+          authError.status = 401;
+          authError.cause = error;
+          throw authError;
+        }
+        throw toFriendlyNetworkError(error, "GitHub");
+      }
+    }
+  };
+}
+
+async function createRawGithubClient(token) {
   try {
     const mod = await import("@octokit/core");
     if (mod && typeof mod.Octokit === "function") {
@@ -146,6 +168,35 @@ async function createGithubClient(token) {
       return res.json();
     }
   };
+}
+
+/**
+ * Comprueba un token con GET /user (GitHub responde 401 "Bad credentials" si es inválido, vencido o revocado).
+ * @returns {Promise<{ status: "valid", login: string } | { status: "invalid" | "offline" | "unknown", message: string }>}
+ */
+export async function verifyGithubToken(token) {
+  const clean = String(token || "").trim();
+  if (!clean) {
+    return { status: "invalid", message: "Pegá un Personal Access Token (PAT) de GitHub." };
+  }
+  try {
+    const user = await fetchGithubUser(clean);
+    return { status: "valid", login: String(user?.login || "") };
+  } catch (error) {
+    if (error?.isNetworkFailure) {
+      return { status: "offline", message: "Sin conexión: no se pudo verificar el token con GitHub." };
+    }
+    if (error?.status === 401) {
+      return {
+        status: "invalid",
+        message: "Token inválido o vencido. Revisá que lo hayas copiado completo o generá uno nuevo en GitHub."
+      };
+    }
+    return {
+      status: "unknown",
+      message: `No se pudo verificar el token ahora (${error instanceof Error ? error.message : "error desconocido"}).`
+    };
+  }
 }
 
 export async function fetchGithubUser(token) {

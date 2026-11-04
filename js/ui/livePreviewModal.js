@@ -1,4 +1,34 @@
 import { normalizePath } from "../storage/workspaceDb.js";
+import { buildLoopGuardRuntime, instrumentLoops } from "../preview/loopGuard.js";
+
+const ACORN_URL = "https://esm.sh/acorn@8.14.0";
+let acornModule = null;
+let acornLoading = null;
+
+/** Carga (una sola vez) el analizador de JS usado para proteger los bucles. Sin red, la vista previa sigue sin protección. */
+function loadAcorn() {
+  if (!acornLoading) {
+    acornLoading = Promise.race([
+      import(ACORN_URL),
+      new Promise((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 5000))
+    ])
+      .then((mod) => {
+        acornModule = mod && typeof mod.parse === "function" ? mod : null;
+        return acornModule;
+      })
+      .catch(() => {
+        acornLoading = null; // reintentar la próxima vez que se abra la vista previa
+        return null;
+      });
+  }
+  return acornLoading;
+}
+
+/** Inserta el guardián de bucles si el analizador está disponible. */
+function guardJs(code, isModule = false) {
+  if (!acornModule) return code;
+  return instrumentLoops(code, acornModule, { module: isModule }).code;
+}
 
 const HTML_EXTENSIONS = new Set(["html", "htm"]);
 const JS_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
@@ -44,6 +74,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
     if (typeof onBeforePreview === "function") {
       await onBeforePreview();
     }
+    await loadAcorn();
     openPreview();
   });
 
@@ -217,7 +248,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
 
     // 1. Pestaña HTML: ensambla recursos relativos de su misma carpeta/subcarpetas
     if (HTML_EXTENSIONS.has(ext)) {
-      const compiledHtml = bundleHtmlWithFolderAssets(activeFile.path, activeFile.content, sameFolderMap);
+      const compiledHtml = bundleHtmlWithFolderAssets(activeFile.path, activeFile.content, sameFolderMap, null, guardJs);
       showRunnableIframe({
         headerTitle: "Vista previa de HTML",
         badgeText: activeFile.path,
@@ -241,7 +272,8 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
           siblingHtml.file.path,
           siblingHtml.file.content,
           sameFolderMap,
-          activeFile
+          activeFile,
+          guardJs
         );
         showRunnableIframe({
           headerTitle: "Vista previa de JS",
@@ -252,7 +284,7 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
         return;
       }
 
-      const compiledJsHtml = buildStandaloneJsPreview(activeFile);
+      const compiledJsHtml = buildStandaloneJsPreview(activeFile, guardJs);
       showRunnableIframe({
         headerTitle: "Vista previa de JS",
         badgeText: activeFile.path,
@@ -269,7 +301,9 @@ export function initLivePreviewModal({ getWorkspaceSnapshot, onBeforePreview }) 
         const compiledHtml = bundleHtmlWithFolderAssets(
           siblingHtml.file.path,
           siblingHtml.file.content,
-          sameFolderMap
+          sameFolderMap,
+          null,
+          guardJs
         );
         showRunnableIframe({
           headerTitle: "Vista previa de CSS",
@@ -378,7 +412,7 @@ export function findSiblingHtmlInSameFolder(scopeFiles, folder, targetFile) {
   };
 }
 
-export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null) {
+export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJsFile = null, transformJs = (code) => code) {
   const dir = getParentFolder(entryPath);
 
   const resolveAsset = (rawHref) => {
@@ -407,9 +441,16 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
   });
 
   // Incrustar scripts JS locales respetando type="module" y defer
-  html = html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullTag, attrs) => {
+  html = html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullTag, attrs, inlineCode) => {
     const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
-    if (!srcMatch) return fullTag;
+    if (!srcMatch) {
+      // Script escrito dentro del HTML: también se protege, salvo que no sea JavaScript (plantillas, JSON…)
+      const typeMatch = attrs.match(/\btype=["']([^"']*)["']/i);
+      const type = typeMatch ? typeMatch[1].trim().toLowerCase() : "";
+      const isJs = !type || type === "module" || type === "text/javascript" || type === "application/javascript";
+      if (!isJs || !inlineCode.trim()) return fullTag;
+      return `<script${attrs}>${transformJs(inlineCode, type === "module")}</script>`;
+    }
     const asset = resolveAsset(srcMatch[1]);
     if (!asset) return fullTag;
 
@@ -419,7 +460,7 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
 
     const isModule = /\btype=["']module["']/i.test(attrs);
     const hasDefer = /\bdefer\b/i.test(attrs);
-    const safeJs = asset.content.replace(/<\/script>/gi, "<\\/script>");
+    const safeJs = transformJs(asset.content, isModule).replace(/<\/script>/gi, "<\\/script>");
 
     if (!isModule && hasDefer) {
       deferredScripts.push(`<script data-source="${escapeAttr(asset.path)}">\n${safeJs}\n</script>`);
@@ -430,7 +471,7 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
   });
 
   if (ensureJsFile && !inlinedActiveJs) {
-    const safeExtraJs = ensureJsFile.content.replace(/<\/script>/gi, "<\\/script>");
+    const safeExtraJs = transformJs(ensureJsFile.content, false).replace(/<\/script>/gi, "<\\/script>");
     deferredScripts.push(`<script data-source="${escapeAttr(ensureJsFile.path)}">\n${safeExtraJs}\n</script>`);
   }
 
@@ -450,11 +491,11 @@ export function bundleHtmlWithFolderAssets(entryPath, rawHtml, fileMap, ensureJs
   return `${bridge}\n${html}`;
 }
 
-function buildStandaloneJsPreview(jsFile) {
+export function buildStandaloneJsPreview(jsFile, transformJs = (code) => code) {
   const bridge = buildConsoleBridgeScript(true);
-  const safeJs = jsFile.content.replace(/<\/script>/gi, "<\\/script>");
-  const safeName = escapeHtmlText(jsFile.path);
   const isModule = /\b(import|export|await)\b/.test(jsFile.content);
+  const safeJs = transformJs(jsFile.content, isModule).replace(/<\/script>/gi, "<\\/script>");
+  const safeName = escapeHtmlText(jsFile.path);
 
   const scriptSnippet = isModule
     ? `<script type="module">
@@ -591,6 +632,7 @@ ${safeJs}
 
 function buildConsoleBridgeScript(mirrorOnScreen) {
   return `<script>
+${buildLoopGuardRuntime()}
 (function () {
   var mirror = ${mirrorOnScreen ? "true" : "false"};
   function formatArgs(args) {
@@ -625,7 +667,8 @@ function buildConsoleBridgeScript(mirrorOnScreen) {
       stErr.style.color = "var(--err)";
       stErr.textContent = "Error en ejecución";
     }
-    send("error", [e.message + (e.lineno ? " (línea " + e.lineno + ")" : "")]);
+    var fromLoopGuard = /Bucle detenido en la línea/.test(e.message || "");
+    send("error", [e.message + (e.lineno && !fromLoopGuard ? " (línea " + e.lineno + ")" : "")]);
   });
   window.addEventListener("unhandledrejection", function (e) {
     send("error", ["Promesa rechazada: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason))]);
@@ -870,13 +913,28 @@ export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder
       border-color: var(--accent-solid);
       color: var(--accent-ink);
     }
+    .py-runner-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .py-btn-stop {
+      min-height: 30px;
+      padding: 4px 12px;
+      border-color: var(--err);
+      color: var(--err);
+    }
+    .py-btn-stop[hidden] { display: none; }
   </style>
 </head>
 <body>
   <section class="py-runner-card">
     <div class="py-runner-head">
       <span class="py-runner-file">${safePathLabel}</span>
-      <span id="__py_status" class="py-runner-status">Iniciando motor Python 3 (WebAssembly)…</span>
+      <span class="py-runner-controls">
+        <span id="__py_status" class="py-runner-status">Iniciando motor Python 3 (WebAssembly)…</span>
+        <button type="button" id="__py_stop" class="py-btn py-btn-stop" hidden>Detener</button>
+      </span>
     </div>
     <div id="__py_screen_log" class="py-runner-output"></div>
     <form id="__py_input_form" class="py-input-bar" hidden>
@@ -888,20 +946,86 @@ export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder
   </section>
 
   <script id="__py_payload" type="application/json">${payloadJson}</script>
+  <script id="__py_runner_src" type="text/plain">
+    var PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/";
+    var pyodide = null;
+    var loading = null;
+    function send(msg) { self.postMessage(msg); }
+    function ensurePyodide() {
+      if (pyodide) return Promise.resolve(pyodide);
+      if (!loading) {
+        send({ type: "status", text: "loading" });
+        loading = (async function () {
+          await __loadScript(PYODIDE_URL + "pyodide.js");
+          var py = await loadPyodide({ indexURL: PYODIDE_URL });
+          py.setStdout({ batched: function (line) { send({ type: "out", level: "log", text: line }); } });
+          py.setStderr({ batched: function (line) { send({ type: "out", level: "error", text: line }); } });
+          pyodide = py;
+          return py;
+        })();
+      }
+      return loading;
+    }
+    function ensureParentDirs(FS, filePath) {
+      var parts = filePath.split("/");
+      var current = "";
+      for (var i = 0; i < parts.length - 1; i += 1) {
+        current = current ? current + "/" + parts[i] : parts[i];
+        try { FS.mkdir(current); } catch (_) {}
+      }
+    }
+    function writeFiles(py, job) {
+      ensureParentDirs(py.FS, job.entryName);
+      try { py.FS.writeFile(job.entryName, job.code, { encoding: "utf8" }); } catch (_) {}
+      if (job.entryPath && job.entryPath !== job.entryName) {
+        ensureParentDirs(py.FS, job.entryPath);
+        try { py.FS.writeFile(job.entryPath, job.code, { encoding: "utf8" }); } catch (_) {}
+      }
+      for (var i = 0; i < job.modules.length; i += 1) {
+        var mod = job.modules[i];
+        ensureParentDirs(py.FS, mod.path);
+        py.FS.writeFile(mod.path, mod.content, { encoding: "utf8" });
+      }
+    }
+    self.onmessage = async function (event) {
+      var job = event.data;
+      if (!job || job.type !== "run") return;
+      try {
+        var py = await ensurePyodide();
+        send({ type: "status", text: "running" });
+        writeFiles(py, job);
+        py.globals.set("__studio_entry_name", job.entryName);
+        py.globals.set("__studio_entry_code", job.code);
+        py.globals.set("__studio_seed", job.seed);
+        py.globals.set("__studio_inputs_json", JSON.stringify(job.inputs));
+        py.globals.set("__studio_mod_prefixes_json", JSON.stringify(job.modPrefixes));
+        var raw = await py.runPythonAsync(job.bootstrap);
+        send({ type: "result", outcome: JSON.parse(String(raw || '{"status":"ok"}')) });
+      } catch (err) {
+        send({ type: "fatal", message: err && err.message ? String(err.message) : String(err) });
+      }
+    };
+  </script>
   <script>
     (function () {
       var statusEl = document.getElementById("__py_status");
+      var stopBtn = document.getElementById("__py_stop");
       var screenBox = document.getElementById("__py_screen_log");
       var inputForm = document.getElementById("__py_input_form");
       var inputPromptEl = document.getElementById("__py_input_prompt");
       var inputField = document.getElementById("__py_input_field");
       var cancelBtn = document.getElementById("__py_input_cancel");
       var payload = JSON.parse(document.getElementById("__py_payload").textContent);
+      var runnerSrc = document.getElementById("__py_runner_src").textContent;
 
-      var pyodideInstance = null;
       var sessionSeed = Math.floor(Math.random() * 1000000000);
       var submittedInputs = [];
       var MAX_INPUT_STEPS = 200;
+      var runner = null;
+      var running = false;
+      var runStartedAt = 0;
+      var ticker = 0;
+      var sawWorkerMessage = false;
 
       function clearOutputs() {
         if (screenBox) screenBox.innerHTML = "";
@@ -911,7 +1035,7 @@ export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder
       }
 
       function emit(level, text) {
-        var msg = String(text ?? "");
+        var msg = String(text == null ? "" : text);
         try {
           parent.postMessage({ source: "studio-ide-preview", level: level, text: msg }, "*");
         } catch (_) {}
@@ -929,77 +1053,161 @@ export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder
         statusEl.style.color = colorVar;
       }
 
-      function ensureParentDirs(FS, filePath) {
-        var parts = filePath.split("/");
-        if (parts.length <= 1) return;
-        var current = "";
-        for (var i = 0; i < parts.length - 1; i += 1) {
-          current = current ? current + "/" + parts[i] : parts[i];
-          try { FS.mkdir(current); } catch (_) {}
+      function setRunning(next) {
+        running = next;
+        window.clearInterval(ticker);
+        if (stopBtn) stopBtn.hidden = !(next && runner && runner.canStop);
+        if (next) {
+          runStartedAt = Date.now();
+          ticker = window.setInterval(function () {
+            var secs = Math.floor((Date.now() - runStartedAt) / 1000);
+            if (secs >= 1) {
+              setStatus(
+                secs >= 5
+                  ? "Ejecutando… " + secs + " s (¿bucle infinito? Tocá Detener)"
+                  : "Ejecutando… " + secs + " s",
+                secs >= 5 ? "var(--warn)" : "var(--accent)"
+              );
+            }
+          }, 1000);
         }
       }
 
-      function writeFolderModules(pyodide) {
-        ensureParentDirs(pyodide.FS, payload.entryName);
-        try { pyodide.FS.writeFile(payload.entryName, payload.code, { encoding: "utf8" }); } catch (_) {}
-        if (payload.entryPath && payload.entryPath !== payload.entryName) {
-          ensureParentDirs(pyodide.FS, payload.entryPath);
-          try { pyodide.FS.writeFile(payload.entryPath, payload.code, { encoding: "utf8" }); } catch (_) {}
-        }
-        for (var i = 0; i < payload.modules.length; i += 1) {
-          var mod = payload.modules[i];
-          ensureParentDirs(pyodide.FS, mod.path);
-          pyodide.FS.writeFile(mod.path, mod.content, { encoding: "utf8" });
+      function loadScriptTag(url) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement("script");
+          s.src = url;
+          s.onload = function () { resolve(); };
+          s.onerror = function () { reject(new Error("No se pudo descargar el motor Python 3 (Pyodide). Conectate a internet al menos una vez para almacenarlo en caché.")); };
+          document.head.appendChild(s);
+        });
+      }
+
+      // Respaldo: mismo ejecutor en el hilo principal (si el navegador no permite Workers aquí).
+      // En este modo no se puede detener un bucle infinito.
+      function createMainThreadRunner() {
+        var fakeSelf = {
+          postMessage: function (msg) { window.setTimeout(function () { handle(msg); }, 0); },
+          onmessage: null
+        };
+        new Function("self", "__loadScript", runnerSrc)(fakeSelf, loadScriptTag);
+        return {
+          canStop: false,
+          post: function (msg) { fakeSelf.onmessage({ data: msg }); },
+          stop: function () {}
+        };
+      }
+
+      // Normal: el motor Python corre en un Worker. Si el script entra en un bucle infinito,
+      // la página y el IDE siguen respondiendo y "Detener" lo corta al instante.
+      function createRunner() {
+        try {
+          var prefix = "var __loadScript = function (url) { importScripts(url); return Promise.resolve(); };\\n";
+          var blobUrl = URL.createObjectURL(new Blob([prefix + runnerSrc], { type: "text/javascript" }));
+          var worker = new Worker(blobUrl);
+          var r = {
+            canStop: true,
+            post: function (msg) { worker.postMessage(msg); },
+            stop: function () { worker.terminate(); }
+          };
+          worker.onmessage = function (event) {
+            sawWorkerMessage = true;
+            handle(event.data);
+          };
+          worker.onerror = function (event) {
+            if (event && event.preventDefault) event.preventDefault();
+            if (!sawWorkerMessage && runner === r) {
+              // El Worker no pudo arrancar en este navegador: reintentar en el hilo principal.
+              worker.terminate();
+              runner = createMainThreadRunner();
+              executePass();
+              return;
+            }
+            handle({ type: "fatal", message: event && event.message ? event.message : "Error en el motor Python." });
+          };
+          return r;
+        } catch (_) {
+          return createMainThreadRunner();
         }
       }
 
-      async function executePass() {
-        if (!pyodideInstance) return;
+      function handle(msg) {
+        if (!msg) return;
+        if (msg.type === "out") {
+          emit(msg.level, msg.text);
+          return;
+        }
+        if (msg.type === "status") {
+          if (msg.text === "loading") setStatus("Iniciando motor Python 3 (WebAssembly)…", "var(--warn)");
+          if (msg.text === "running") setStatus("Ejecutando script…", "var(--accent)");
+          return;
+        }
+        if (msg.type === "fatal") {
+          setRunning(false);
+          setStatus("Error al iniciar Python", "var(--err)");
+          emit("error", msg.message);
+          return;
+        }
+        if (msg.type === "result") {
+          setRunning(false);
+          var outcome = msg.outcome || { status: "ok" };
+          if (outcome.status === "need_input") {
+            setStatus("Esperando entrada en consola…", "var(--warn)");
+            if (inputPromptEl) inputPromptEl.textContent = outcome.prompt || "Entrada (input):";
+            if (inputForm && inputField) {
+              inputField.value = "";
+              inputForm.hidden = false;
+              inputField.focus();
+            }
+            return;
+          }
+          if (outcome.status === "error") {
+            setStatus("Error en ejecución", "var(--err)");
+          } else {
+            setStatus("Ejecutado correctamente", "var(--ok)");
+            if (screenBox && screenBox.children.length === 0) {
+              var note = document.createElement("div");
+              note.className = "py-empty";
+              note.textContent = "El script Python finalizó sin errores. Usá print(...) para mostrar resultados acá.";
+              screenBox.appendChild(note);
+            }
+          }
+        }
+      }
+
+      function executePass() {
         if (inputForm) inputForm.hidden = true;
-
         if (submittedInputs.length > MAX_INPUT_STEPS) {
           emit("error", "Se superó el límite de 200 lecturas input() consecutivas.");
           setStatus("Detenido por límite de entradas", "var(--err)");
           return;
         }
-
+        if (!runner) runner = createRunner();
         clearOutputs();
-        writeFolderModules(pyodideInstance);
-        setStatus("Ejecutando script…", "var(--accent)");
+        setRunning(true);
+        runner.post({
+          type: "run",
+          entryName: payload.entryName,
+          entryPath: payload.entryPath,
+          code: payload.code,
+          modules: payload.modules,
+          modPrefixes: payload.modPrefixes,
+          bootstrap: payload.bootstrap,
+          inputs: submittedInputs,
+          seed: sessionSeed
+        });
+      }
 
-        pyodideInstance.globals.set("__studio_entry_name", payload.entryName);
-        pyodideInstance.globals.set("__studio_entry_code", payload.code);
-        pyodideInstance.globals.set("__studio_seed", sessionSeed);
-        pyodideInstance.globals.set("__studio_inputs_json", JSON.stringify(submittedInputs));
-        pyodideInstance.globals.set("__studio_mod_prefixes_json", JSON.stringify(payload.modPrefixes));
-
-        var rawJson = await pyodideInstance.runPythonAsync(payload.bootstrap);
-        var outcome = JSON.parse(String(rawJson || '{"status":"ok"}'));
-
-        if (outcome.status === "need_input") {
-          setStatus("Esperando entrada en consola…", "var(--warn)");
-          if (inputPromptEl) {
-            inputPromptEl.textContent = outcome.prompt || "Entrada (input):";
-          }
-          if (inputForm && inputField) {
-            inputField.value = "";
-            inputForm.hidden = false;
-            inputField.focus();
-          }
-          return;
-        }
-
-        if (outcome.status === "error") {
-          setStatus("Error en ejecución", "var(--err)");
-        } else {
-          setStatus("Ejecutado correctamente", "var(--ok)");
-          if (screenBox && screenBox.children.length === 0) {
-            var note = document.createElement("div");
-            note.className = "py-empty";
-            note.textContent = "El script Python finalizó sin errores. Usá print(...) para mostrar resultados acá.";
-            screenBox.appendChild(note);
-          }
-        }
+      if (stopBtn) {
+        stopBtn.addEventListener("click", function () {
+          if (!running || !runner || !runner.canStop) return;
+          runner.stop();
+          runner = null;
+          setRunning(false);
+          if (inputForm) inputForm.hidden = true;
+          setStatus("Ejecución detenida", "var(--err)");
+          emit("error", "Ejecución detenida por el usuario. Tocá Recargar para volver a ejecutar.");
+        });
       }
 
       if (inputForm) {
@@ -1017,34 +1225,7 @@ export function buildStandalonePythonPreview(pyFile, sameFolderFiles, baseFolder
         });
       }
 
-      async function bootAndRun() {
-        try {
-          pyodideInstance = await window.loadPyodide({
-            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/"
-          });
-
-          pyodideInstance.setStdout({
-            batched: function (line) { emit("log", line); }
-          });
-          pyodideInstance.setStderr({
-            batched: function (line) { emit("error", line); }
-          });
-
-          await executePass();
-        } catch (err) {
-          setStatus("Error al iniciar Python", "var(--err)");
-          emit("error", err && err.message ? err.message : String(err));
-        }
-      }
-
-      var script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
-      script.onload = bootAndRun;
-      script.onerror = function () {
-        setStatus("Sin conexión al motor Python", "var(--err)");
-        emit("error", "No se pudo descargar el motor Python 3 (Pyodide). Conectate a internet al menos una vez para almacenarlo en caché.");
-      };
-      document.head.appendChild(script);
+      executePass();
     })();
   </script>
 </body>

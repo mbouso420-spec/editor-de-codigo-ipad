@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v14";
+const SHELL_CACHE = "studio-ide-shell-v15";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 
 const APP_SHELL_URLS = [
@@ -27,6 +27,10 @@ const APP_SHELL_URLS = [
   "./js/ai/providers.js",
   "./js/ai/chatController.js",
   "./js/storage/workspaceDb.js",
+  "./js/storage/emergencyBackup.js",
+  "./js/storage/fileImport.js",
+  "./js/net/networkErrors.js",
+  "./js/preview/loopGuard.js",
   "./js/github/githubService.js",
   "./js/github/githubController.js"
 ];

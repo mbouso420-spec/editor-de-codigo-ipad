@@ -366,3 +366,21 @@ describe("Árbol del Explorador (buildHierarchy / flattenVisibleTree)", () => {
     assert.deepEqual(flat.map((n) => `${n.depth}:${n.path}`), ["0:lib", "0:src", "1:src/a.js", "1:src/b.js", "0:z.txt"]);
   });
 });
+
+describe("Vista previa: los scripts generados compilan (guarda de Vuelta #4)", () => {
+  test("Python: script principal y ejecutor del Worker son JavaScript válido", () => {
+    const html = buildStandalonePythonPreview(
+      { path: "a/main.py", shortName: "main.py", content: 'print("hola")\nx = "\n"\n' },
+      [{ path: "a/util.py", content: "def f():\n    return 1\n" }],
+      "a"
+    );
+    const blocks = [...html.matchAll(/<script(?:\s+id="([^"]*)")?(?:\s+type="([^"]*)")?>([\s\S]*?)<\/script>/g)];
+    const runnable = blocks.filter((m) => !m[2] || m[2] === "text/plain");
+    assert.ok(runnable.length >= 2, `se esperaban ≥2 scripts ejecutables, hubo ${runnable.length}`);
+    for (const m of runnable) {
+      assert.doesNotThrow(() => new Function(m[3]), `script ${m[1] || "(principal)"} no compila`);
+    }
+    const runner = blocks.find((m) => m[1] === "__py_runner_src")[3];
+    assert.doesNotThrow(() => new Function("self", "__loadScript", runner));
+  });
+});

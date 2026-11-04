@@ -12,7 +12,8 @@ import {
   getGithubToken,
   pushAtomicCommit,
   RemoteAheadError,
-  saveGithubToken
+  saveGithubToken,
+  verifyGithubToken
 } from "./githubService.js";
 import {
   getPendingGithubChanges,
@@ -66,6 +67,30 @@ export function initGithubController({
   const conflictList = document.getElementById("gh-conflict-list");
   const conflictViewBtn = document.getElementById("btn-gh-conflict-view");
   const conflictForceBtn = document.getElementById("btn-gh-conflict-force");
+
+  const tokenWarning = document.getElementById("explorer-token-warning");
+  const tokenWarningText = document.getElementById("explorer-token-warning-text");
+  const tokenReconnectBtn = document.getElementById("btn-token-reconnect");
+
+  const INVALID_TOKEN_MSG =
+    "Token inválido o vencido. Revisá que lo hayas copiado completo o generá uno nuevo en GitHub.";
+
+  function showTokenWarning(message) {
+    if (tokenWarningText) tokenWarningText.textContent = message;
+    if (tokenWarning) tokenWarning.hidden = false;
+  }
+
+  function hideTokenWarning() {
+    if (tokenWarning) tokenWarning.hidden = true;
+  }
+
+  tokenReconnectBtn?.addEventListener("click", () => {
+    openDialogBtn?.click();
+    window.setTimeout(() => {
+      tokenInput?.focus();
+      tokenInput?.select();
+    }, 50);
+  });
 
   let reposCache = [];
   let pendingPullConfirm = false;
@@ -145,12 +170,32 @@ export function initGithubController({
       setStatus(authMsgEl, "Pegá un Personal Access Token (PAT) de GitHub.", "error");
       return;
     }
+
+    // Se verifica ANTES de guardar: un token inválido no debe quedar guardado.
+    connectBtn.disabled = true;
+    setStatus(authMsgEl, "Verificando el token con GitHub…", "neutral");
+    const check = await verifyGithubToken(token);
+    connectBtn.disabled = false;
+
+    if (check.status === "invalid") {
+      setStatus(authMsgEl, check.message, "error");
+      return;
+    }
+
     saveGithubToken(token);
+    hideTokenWarning();
+
+    if (check.status !== "valid") {
+      // Sin internet o GitHub sin responder: se guarda para usarlo cuando vuelva la conexión.
+      setStatus(authMsgEl, `${check.message} El token quedó guardado.`, "error");
+      return;
+    }
     await connectAndLoadRepos(token);
   });
 
   clearTokenBtn?.addEventListener("click", () => {
     clearGithubToken();
+    hideTokenWarning();
     reposCache = [];
     onReposListChanged?.([]);
     if (tokenInput) tokenInput.value = "";
@@ -401,6 +446,9 @@ export function initGithubController({
     } catch (error) {
       if (error instanceof RemoteAheadError) {
         showConflictBox(error, project, token);
+      } else if (error?.status === 401) {
+        setStatus(pushStatusEl, INVALID_TOKEN_MSG, "error");
+        showTokenWarning("Tu token de GitHub venció o fue revocado: no se pudo hacer push.");
       } else {
         setStatus(pushStatusEl, error instanceof Error ? error.message : "Error al publicar commit.", "error");
       }
@@ -533,7 +581,12 @@ export function initGithubController({
       if (userStatusEl) {
         userStatusEl.textContent = `@${user.login}`;
       }
-      setStatus(authMsgEl, `Conectado como @${user.login} (${reposCache.length} repositorios disponibles).`, "ok");
+      const repoCount = reposCache.length;
+      setStatus(
+        authMsgEl,
+        `Conectado como @${user.login} (${repoCount} ${repoCount === 1 ? "repositorio disponible" : "repositorios disponibles"}).`,
+        "ok"
+      );
 
       if (repoSelect) {
         repoSelect.innerHTML = "";
@@ -550,7 +603,12 @@ export function initGithubController({
         await loadBranchesForRepo(reposCache[0].full_name, reposCache[0].default_branch);
       }
     } catch (error) {
-      setStatus(authMsgEl, error instanceof Error ? error.message : "Token inválido o sin permisos.", "error");
+      if (error?.status === 401) {
+        setStatus(authMsgEl, INVALID_TOKEN_MSG, "error");
+        showTokenWarning("Tu token de GitHub venció o fue revocado. Conectá uno nuevo para ver tus repos y hacer push.");
+      } else {
+        setStatus(authMsgEl, error instanceof Error ? error.message : "Token inválido o sin permisos.", "error");
+      }
     } finally {
       connectBtn.disabled = false;
     }
@@ -681,8 +739,13 @@ export function initGithubController({
         reposCache = liveRepos;
         onReposListChanged?.(liveRepos);
       }
-    } catch {
-      // Silencioso en modo sin conexión: mantiene los repositorios cacheados localmente
+      hideTokenWarning();
+    } catch (error) {
+      if (error?.status === 401) {
+        // El token guardado dejó de funcionar: avisar ahora y no recién al intentar el push.
+        showTokenWarning("Tu token de GitHub venció o fue revocado. Conectá uno nuevo para ver tus repos y hacer push.");
+      }
+      // Sin conexión: silencioso, se mantienen los repositorios cacheados localmente
     }
   }
 
