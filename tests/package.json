@@ -11,5 +11,8 @@
     "eslint": "^9.39.5",
     "fake-indexeddb": "^6.0.0",
     "globals": "^15.15.0"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.16.0"
   }
 }

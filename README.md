@@ -1,7 +1,7 @@
 # Studio IDE — Editor de Código Web para iPadOS y Escritorio
 
 <p align="center">
-  <img src="./docs/screenshots/01-studio-ide-overview.svg" alt="Studio IDE — Vista General de las 3 Islas (Explorador, Editor CodeMirror 6 y Asistente IA)" width="100%">
+  <img src="./docs/screenshots/01-studio-ide-overview.png" alt="Studio IDE — Vista General de las 3 Islas (Explorador, Editor CodeMirror 6 y Asistente IA)" width="100%">
 </p>
 
 **Studio IDE** es un entorno de desarrollo web ligero, modular y 100% offline-first sin servidores intermedios, diseñado específicamente para programar con fluidez desde un **iPad** (instalado como PWA a pantalla completa en Safari y adaptable a ventanas de **Stage Manager**) así como desde una **PC de escritorio**.
@@ -36,7 +36,7 @@
 ### 2. Asistente de IA integrado (APIs gratuitas y seguras)
 
 <p align="center">
-  <img src="./docs/screenshots/04-ai-diff-viewer.svg" alt="Asistente de IA y Visor de Diferencias (Diff Visual) con Reemplazo Atómico Total" width="100%">
+  <img src="./docs/screenshots/04-ai-assistant.png" alt="Asistente de IA Integrado con Presupuesto de Contexto y Contador de Tokens en Vivo" width="100%">
 </p>
 
 - Conexión directa desde el navegador con niveles gratuitos de **Groq** (`openai/gpt-oss-120b`), **Google Gemini** (`AI Studio`), **OpenRouter** (`openrouter/free`) y **Mistral** (`La Plateforme`), con sincronización automática de modelos.
@@ -50,7 +50,7 @@
 ### 3. Vista previa contextual en vivo, Consola, Multi-Página, SQLite y C/C++
 
 <p align="center">
-  <img src="./docs/screenshots/02-live-preview-responsive.svg" alt="Vista Previa Web Multi-Página con Selector Responsivo de Dispositivos (Móvil, Tablet y Escritorio)" width="100%">
+  <img src="./docs/screenshots/02-live-preview-responsive.png" alt="Vista Previa Web Multi-Página con Selector Responsivo de Dispositivos (Móvil, Tablet y Escritorio)" width="100%">
 </p>
 
 - **Resolución inteligente de punto de entrada:** al presionar *Vista previa* estando parado en un `.js` o `.css`, el motor busca en el workspace el `.html` que lo referencia directamente o el `index.html` principal, ensayando la aplicación web completa en lugar de correr scripts aislados.
@@ -61,7 +61,7 @@
 - **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
 
 <p align="center">
-  <img src="./docs/screenshots/03-c-runner-interactive.svg" alt="Runner C/C++ Nativo con Terminal Interactiva Paso a Paso y Detección de Errores GCC" width="100%">
+  <img src="./docs/screenshots/03-c-runner-interactive.png" alt="Runner C/C++ Nativo con Terminal Interactiva Paso a Paso y Detección de Errores GCC" width="100%">
 </p>
 
 - **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal con **Terminal Interactiva Paso a Paso** (con línea de comando `>`, envío interactivo de respuestas paso a paso con `Enter` sin amontonar entradas previas, e historial con flechas Arriba/Abajo para repetir valores), panel de estado, entrada opcional por lotes (`batch stdin`), y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
@@ -76,7 +76,7 @@
 ### 4. Persistencia offline y Sincronización avanzada con GitHub
 
 <p align="center">
-  <img src="./docs/screenshots/05-github-branches-sync.svg" alt="Sincronización con GitHub, Gestión de Ramas y Commits Atómicos" width="100%">
+  <img src="./docs/screenshots/05-github-branches-sync.png" alt="Sincronización con GitHub, Gestión de Ramas y Commits Atómicos" width="100%">
 </p>
 
 - Autoguardado continuo en **`IndexedDB`** con respaldo síncrono de emergencia (`localStorage`) ante suspensiones repentinas de Safari.

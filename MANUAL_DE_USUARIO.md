@@ -37,7 +37,7 @@ Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad
 ## 2. Recorrido por la interfaz, atajos y gestos táctiles
 
 <p align="center">
-  <img src="./docs/screenshots/01-studio-ide-overview.svg" alt="Recorrido de la Interfaz — 3 Islas Ergonómicas de Studio IDE" width="100%">
+  <img src="./docs/screenshots/01-studio-ide-overview.png" alt="Recorrido de la Interfaz — 3 Islas Ergonómicas de Studio IDE" width="100%">
 </p>
 
 La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
@@ -61,6 +61,10 @@ La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
 | `Ctrl + Espacio` | Abre manualmente el menú de autocompletado inteligente |
 | `Enter` (en el chat IA) | Envía el prompt (`Shift + Enter` inserta salto de línea) |
 | `Escape` | Cierra cualquier diálogo modal, menú contextual o paleta |
+
+<p align="center">
+  <img src="./docs/screenshots/06-quick-open.png" alt="Paleta de Apertura Rápida (Cmd + P) y Salto Directo a Línea" width="100%">
+</p>
 
 ### Gestos y ergonomía táctil en el iPad
 
@@ -106,7 +110,7 @@ Al presionar el botón **Vista previa** en la barra superior:
 ### Navegación Multi-Página e Historial Web
 
 <p align="center">
-  <img src="./docs/screenshots/02-live-preview-responsive.svg" alt="Vista Previa Web Multi-Página con Selector de Dispositivos y Consola JS" width="100%">
+  <img src="./docs/screenshots/02-live-preview-responsive.png" alt="Vista Previa Web Multi-Página con Selector de Dispositivos y Consola JS" width="100%">
 </p>
 
 - Si tu proyecto tiene múltiples páginas (`index.html`, `catalogo.html`, `contacto.html`), podés hacer clic libremente en cualquier enlace relativo (`<a href="catalogo.html">`, `<a href="./nosotros.html">` o `<a href="../blog/post.html">`) o enviar formularios (`<form action="...">`).
@@ -131,7 +135,7 @@ En la barra superior del modal de vista previa podés alternar el tamaño de pan
 ### Compilador y Ejecutor Nativo de C y C++ (`.c`, `.cpp`, `.h`)
 
 <p align="center">
-  <img src="./docs/screenshots/03-c-runner-interactive.svg" alt="Terminal Interactiva de C/C++ y Detección de Errores con Salto al Editor" width="100%">
+  <img src="./docs/screenshots/03-c-runner-interactive.png" alt="Terminal Interactiva de C/C++ y Detección de Errores con Salto al Editor" width="100%">
 </p>
 
 - **Aislamiento nativo sin iframes:** al abrir un archivo `.c`, `.cpp` o `.h` y tocar **Vista previa**, la interfaz monta un runner nativo de ejecución dentro del diálogo, evitando bloqueos o interferencias con iframes HTML.
@@ -174,7 +178,7 @@ En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu p
 ## 6. Trabajar con el Asistente IA sobre tu código
 
 <p align="center">
-  <img src="./docs/screenshots/04-ai-diff-viewer.svg" alt="Visor de Diferencias Diff y Reemplazo Quirúrgico de la IA" width="100%">
+  <img src="./docs/screenshots/04-ai-assistant.png" alt="Asistente de IA Integrado con Presupuesto de Contexto y Contador de Tokens" width="100%">
 </p>
 
 * **Lectura contextual inteligente:** el asistente lee el archivo activo y las líneas seleccionadas en el editor.
@@ -192,7 +196,7 @@ En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu p
 ## 7. GitHub avanzado: Ramas, Diff visual y Commit + Push
 
 <p align="center">
-  <img src="./docs/screenshots/05-github-branches-sync.svg" alt="Gestión de Ramas y Sincronización Atómica en GitHub" width="100%">
+  <img src="./docs/screenshots/05-github-branches-sync.png" alt="Gestión de Ramas y Sincronización Atómica en GitHub" width="100%">
 </p>
 
 ### Conectar tu cuenta con Personal Access Token (PAT)
