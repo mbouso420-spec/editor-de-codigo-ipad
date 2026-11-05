@@ -964,6 +964,33 @@ async function consumeSseStream(body, onDataPacket) {
 
 export const AI_TEMP_STORAGE_KEY = "studio_ai_temp";
 export const AI_BUDGET_STORAGE_KEY = "studio_ai_budget";
+export const AI_THINKING_SPEED_STORAGE_KEY = "studio_ai_thinking_speed";
+
+export function getAiThinkingSpeed() {
+  try {
+    const val = localStorage.getItem(AI_THINKING_SPEED_STORAGE_KEY);
+    if (val === "baja" || val === "media" || val === "alta") return val;
+  } catch (_) {}
+  return "media";
+}
+
+export function setAiThinkingSpeed(speed) {
+  try {
+    localStorage.setItem(AI_THINKING_SPEED_STORAGE_KEY, String(speed));
+  } catch (_) {}
+}
+
+export function getThinkingBudget(speed = getAiThinkingSpeed()) {
+  switch (speed) {
+    case "baja":
+      return 1024;
+    case "alta":
+      return 16384;
+    case "media":
+    default:
+      return 4096;
+  }
+}
 
 export function getAiTemperature() {
   try {

@@ -429,19 +429,46 @@
 
         <form id="chat-composer-form" class="chat-composer">
           <div class="chat-composer-info">
-            <span id="chat-token-counter" class="chat-token-counter code-font">~0 tokens</span>
+            <div id="chat-fuel-gauge" class="chat-fuel-gauge" role="progressbar" aria-label="Nivel de combustible de tokens" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" title="Combustible de tokens: 100% disponible">
+              <span class="chat-fuel-icon" data-icon="gauge" aria-hidden="true"></span>
+              <span class="chat-fuel-label-end">E</span>
+              <div class="chat-fuel-track">
+                <div id="chat-fuel-needle" class="chat-fuel-needle"></div>
+              </div>
+              <span class="chat-fuel-label-end">F</span>
+              <span id="chat-token-counter" class="chat-token-counter code-font">100% (~0 / 16k)</span>
+            </div>
+
             <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
               <span data-icon="refreshCw"></span>
               <span>Regenerar respuesta</span>
             </button>
           </div>
+
+          <div class="chat-quick-controls">
+            <div class="chat-thinking-control" role="group" aria-label="Velocidad de pensamiento">
+              <span class="chat-control-label" title="Profundidad de razonamiento de la IA"><span data-icon="zap"></span> Pensar:</span>
+              <div class="chat-pill-group">
+                <button type="button" class="chat-pill-btn" data-speed="baja" aria-pressed="false" title="Baja: Respuesta rápida y ligera">Baja</button>
+                <button type="button" class="chat-pill-btn is-active" data-speed="media" aria-pressed="true" title="Media: Razonamiento equilibrado">Media</button>
+                <button type="button" class="chat-pill-btn" data-speed="alta" aria-pressed="false" title="Alta: Análisis profundo y exhaustivo">Alta</button>
+              </div>
+            </div>
+
+            <div class="chat-slash-shortcuts" role="toolbar" aria-label="Comandos rápidos">
+              <button type="button" class="chat-slash-btn" data-command="/fix" title="Corregir errores del archivo activo">/fix</button>
+              <button type="button" class="chat-slash-btn" data-command="/explain" title="Explicar detalladamente el código">/explain</button>
+              <button type="button" class="chat-slash-btn" data-command="/test" title="Generar pruebas unitarias">/test</button>
+            </div>
+          </div>
+
           <div class="chat-input-row">
             <label for="chat-prompt-input" class="visually-hidden">Consultar al asistente sobre el código</label>
             <textarea
               id="chat-prompt-input"
               class="chat-input"
               rows="2"
-              placeholder="Preguntá sobre el archivo abierto o pedí un cambio…"
+              placeholder="Preguntá o escribí /fix, /explain, /test…"
             ></textarea>
             <button type="submit" id="chat-submit-btn" class="btn btn-primary btn-icon" aria-label="Enviar consulta" title="Enviar consulta">
               <span data-icon="send"></span>

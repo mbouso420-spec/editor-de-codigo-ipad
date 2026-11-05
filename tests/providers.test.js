@@ -161,4 +161,31 @@ describe("Streaming SSE OpenAI-compatible", () => {
     }
     assert.ok(seen.some((s) => s.headers["x-goog-api-key"] === "AIzaSECRETO"));
   });
+
+  describe("Preferencias de IA: Temperatura, Presupuesto y Velocidad de Pensamiento", () => {
+    test("velocidad de pensamiento por defecto es 'media' y calcula presupuestos adecuados", () => {
+      localStorage.clear();
+      assert.equal(p.getAiThinkingSpeed(), "media");
+      assert.equal(p.getThinkingBudget("media"), 4096);
+      assert.equal(p.getThinkingBudget("baja"), 1024);
+      assert.equal(p.getThinkingBudget("alta"), 16384);
+
+      p.setAiThinkingSpeed("alta");
+      assert.equal(p.getAiThinkingSpeed(), "alta");
+      assert.equal(p.getThinkingBudget(), 16384);
+    });
+
+    test("temperatura y presupuesto de contexto se leen y persisten correctamente", () => {
+      localStorage.clear();
+      assert.equal(p.getAiTemperature(), 0.25);
+      p.setAiTemperature(0.7);
+      assert.equal(p.getAiTemperature(), 0.7);
+
+      assert.equal(p.getAiContextBudget(), 16000);
+      p.setAiContextBudget("compact");
+      assert.equal(p.getAiContextBudget(), 8000);
+      p.setAiContextBudget("large");
+      assert.equal(p.getAiContextBudget(), 40000);
+    });
+  });
 });
