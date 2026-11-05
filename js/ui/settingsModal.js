@@ -1,0 +1,218 @@
+import { keyboardRouter } from "./keyboardRouter.js";
+import { getStorageQuotaEstimate, formatStorageBytes } from "../storage/storageQuota.js";
+import { getKeyStorageMode, setKeyStorageMode } from "../ai/providers.js";
+
+const THEME_STORAGE_KEY = "studio_theme";
+
+export const KEYBOARD_SHORTCUTS = [
+  { combo: "Cmd/Ctrl + P", desc: "Apertura rápida de archivo y salto directo a línea (ej. app.js:145)", category: "Navegación" },
+  { combo: "Cmd/Ctrl + Shift + F", desc: "Búsqueda global de texto y expresiones regulares en todo el proyecto", category: "Búsqueda" },
+  { combo: "Cmd/Ctrl + S", desc: "Forzar guardado inmediato en almacenamiento local IndexedDB", category: "Archivo" },
+  { combo: "Cmd/Ctrl + W / Alt + W", desc: "Cerrar pestaña activa (Alt+W prioritario en iPad Safari PWA)", category: "Editor" },
+  { combo: "Cmd/Ctrl + B", desc: "Alternar visibilidad del panel lateral del Explorador", category: "Paneles" },
+  { combo: "Cmd/Ctrl + J", desc: "Alternar visibilidad del panel lateral del Asistente IA", category: "Paneles" },
+  { combo: "Cmd/Ctrl + ,", desc: "Abrir ventana de Configuración y Atajos de Teclado", category: "General" },
+  { combo: "Escape", desc: "Cerrar diálogo activo o cancelar acción", category: "General" },
+  { combo: "Enter", desc: "Confirmar acción en modales y ejecutar búsquedas", category: "General" }
+];
+
+/**
+ * Inicializa el modal de Configuración y Preferencias del IDE.
+ *
+ * @param {{
+ *   editor: {
+ *     getFontSize: () => number,
+ *     stepFontSize: (delta: number) => number,
+ *     isWordWrapEnabled: () => boolean,
+ *     toggleWordWrap: () => boolean,
+ *     isMinimapVisible: () => boolean,
+ *     toggleMinimap: () => boolean
+ *   },
+ *   onThemeChange?: (newTheme: string) => void
+ * }} config
+ */
+export function initSettingsModal({ editor, onThemeChange }) {
+  const dialog = document.getElementById("settings-dialog");
+  const openBtn = document.getElementById("btn-open-settings");
+  const closeBtn = document.getElementById("btn-close-settings");
+
+  const selectTheme = document.getElementById("select-theme");
+  const chkWordWrap = document.getElementById("setting-word-wrap");
+  const chkMinimap = document.getElementById("setting-minimap");
+  const selectKeyStorage = document.getElementById("setting-key-storage");
+  const quotaTextEl = document.getElementById("setting-quota-text");
+  const shortcutsFilter = document.getElementById("setting-shortcuts-filter");
+  const shortcutsListEl = document.getElementById("setting-shortcuts-list");
+
+  const tabButtons = dialog?.querySelectorAll(".settings-tab-btn");
+  const tabPanels = dialog?.querySelectorAll(".settings-tab-panel");
+
+  function open() {
+    if (!dialog) return;
+    syncControlsWithState();
+    refreshStorageInfo();
+    renderShortcutsList("");
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+    keyboardRouter.pushModal({
+      id: "settings-dialog",
+      onEscape: () => close()
+    });
+  }
+
+  function close() {
+    keyboardRouter.popModal("settings-dialog");
+    if (dialog?.open) {
+      dialog.close();
+    }
+  }
+
+  function syncControlsWithState() {
+    if (selectTheme) {
+      try {
+        const saved = localStorage.getItem(THEME_STORAGE_KEY) || "default";
+        selectTheme.value = saved;
+      } catch (_) {
+        selectTheme.value = "default";
+      }
+    }
+
+    if (chkWordWrap && editor) {
+      chkWordWrap.checked = Boolean(editor.isWordWrapEnabled?.());
+    }
+
+    if (chkMinimap && editor) {
+      chkMinimap.checked = Boolean(editor.isMinimapVisible?.());
+    }
+
+    if (selectKeyStorage) {
+      selectKeyStorage.value = getKeyStorageMode();
+    }
+  }
+
+  async function refreshStorageInfo() {
+    if (!quotaTextEl) return;
+    try {
+      const estimate = await getStorageQuotaEstimate();
+      if (estimate && estimate.quota) {
+        quotaTextEl.textContent = `${formatStorageBytes(estimate.usage)} usados de ${formatStorageBytes(estimate.quota)} disponibles`;
+      } else {
+        quotaTextEl.textContent = "Almacenamiento persistente activo en IndexedDB";
+      }
+    } catch (_) {
+      quotaTextEl.textContent = "IndexedDB activo";
+    }
+  }
+
+  function renderShortcutsList(query = "") {
+    if (!shortcutsListEl) return;
+    const clean = String(query || "").trim().toLowerCase();
+
+    const filtered = KEYBOARD_SHORTCUTS.filter(
+      (s) => s.combo.toLowerCase().includes(clean) || s.desc.toLowerCase().includes(clean) || s.category.toLowerCase().includes(clean)
+    );
+
+    if (filtered.length === 0) {
+      shortcutsListEl.innerHTML = '<div class="settings-empty-note">No se encontraron atajos de teclado coincidentes.</div>';
+      return;
+    }
+
+    shortcutsListEl.innerHTML = filtered
+      .map(
+        (item) => `
+        <div class="settings-shortcut-row">
+          <div class="settings-shortcut-info">
+            <span class="settings-shortcut-category">${escapeHtml(item.category)}</span>
+            <span class="settings-shortcut-desc">${escapeHtml(item.desc)}</span>
+          </div>
+          <kbd class="settings-shortcut-kbd">${escapeHtml(item.combo)}</kbd>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  // Switch tabs
+  tabButtons?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetTab = btn.dataset.tab;
+      tabButtons.forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle("is-active", active);
+        b.setAttribute("aria-selected", String(active));
+      });
+      tabPanels?.forEach((panel) => {
+        panel.hidden = panel.dataset.tab !== targetTab;
+      });
+    });
+  });
+
+  // Control Events
+  openBtn?.addEventListener("click", () => open());
+  closeBtn?.addEventListener("click", () => close());
+
+  dialog?.addEventListener("click", (e) => {
+    if (e.target === dialog) close();
+  });
+
+  selectTheme?.addEventListener("change", (e) => {
+    const chosen = (e?.target ? e.target.value : selectTheme?.value) || "default";
+    if (chosen === "default") {
+      delete document.documentElement.dataset.theme;
+      try {
+        localStorage.removeItem(THEME_STORAGE_KEY);
+      } catch (_) {}
+    } else {
+      document.documentElement.dataset.theme = chosen;
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, chosen);
+      } catch (_) {}
+    }
+    onThemeChange?.(chosen);
+  });
+
+  chkWordWrap?.addEventListener("change", () => {
+    if (editor) {
+      const enabled = editor.toggleWordWrap();
+      chkWordWrap.checked = enabled;
+      const btnWrap = document.getElementById("btn-editor-wrap");
+      if (btnWrap) btnWrap.setAttribute("aria-pressed", String(enabled));
+    }
+  });
+
+  chkMinimap?.addEventListener("change", () => {
+    if (editor) {
+      const enabled = editor.toggleMinimap();
+      chkMinimap.checked = enabled;
+      const btnMinimap = document.getElementById("btn-editor-minimap");
+      if (btnMinimap) btnMinimap.setAttribute("aria-pressed", String(enabled));
+    }
+  });
+
+  selectKeyStorage?.addEventListener("change", (e) => {
+    const mode = e.target.value;
+    if (mode === "session" || mode === "local") {
+      setKeyStorageMode(mode);
+    }
+  });
+
+  shortcutsFilter?.addEventListener("input", (e) => {
+    renderShortcutsList((e?.target ? e.target.value : shortcutsFilter?.value) || "");
+  });
+
+  return {
+    open,
+    close,
+    syncControls: syncControlsWithState
+  };
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}

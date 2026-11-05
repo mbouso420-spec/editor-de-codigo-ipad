@@ -50,6 +50,7 @@ class MockElement {
     this.id = "";
     this.children = [];
     this.parentElement = null;
+    this.dataset = {};
     this.classList = {
       _classes: new Set(),
       add: (c) => this.classList._classes.add(c),
@@ -118,6 +119,11 @@ class MockElement {
     }
   }
   dispatchEvent(event) {
+    if (event) {
+      try {
+        Object.defineProperty(event, "target", { value: this, configurable: true });
+      } catch (_) {}
+    }
     const list = this._listeners.get(event?.type || "");
     if (list) {
       for (const fn of list) {
@@ -129,7 +135,13 @@ class MockElement {
   click() {
     this.dispatchEvent({ type: "click", bubbles: true, target: this, stopPropagation: () => {} });
   }
-  setAttribute(k, v) { this.attributes.set(k, String(v)); }
+  setAttribute(k, v) {
+    this.attributes.set(k, String(v));
+    if (k.startsWith("data-")) {
+      const camel = k.slice(5).replace(/-([a-z])/g, (_, g) => g.toUpperCase());
+      this.dataset[camel] = String(v);
+    }
+  }
   getAttribute(k) { return this.attributes.get(k) || null; }
   setRangeText(text, start, end) {
     const s = start !== undefined ? start : (this.selectionStart || 0);
@@ -138,29 +150,47 @@ class MockElement {
   }
   setSelectionRange(s, e) { this.selectionStart = s; this.selectionEnd = e; }
   focus() {}
-  querySelector(sel) {
-    if (sel.startsWith(".")) {
-      const cls = sel.slice(1);
-      if (this.classList.contains(cls)) return this;
-      for (const ch of this.children) {
-        if (ch instanceof MockElement) {
-          const res = ch.querySelector(sel);
-          if (res) return res;
+  matches(sel) {
+    if (!sel) return false;
+    const parts = sel.match(/(\.[^.#[\]]+|#[^.#[\]]+|\[[^\]]+\]|^[^.#[\]]+)/g) || [sel];
+    for (const part of parts) {
+      if (part.startsWith(".")) {
+        if (!this.classList.contains(part.slice(1))) return false;
+      } else if (part.startsWith("#")) {
+        if (this.id !== part.slice(1)) return false;
+      } else if (part.startsWith("[") && part.endsWith("]")) {
+        const inner = part.slice(1, -1);
+        const eqIdx = inner.indexOf("=");
+        if (eqIdx === -1) {
+          if (!this.attributes.has(inner)) return false;
+        } else {
+          const attr = inner.slice(0, eqIdx).trim();
+          const val = inner.slice(eqIdx + 1).replace(/^["']|["']$/g, "").trim();
+          if (this.getAttribute(attr) !== val) return false;
         }
+      } else {
+        if (this.tagName.toLowerCase() !== part.toLowerCase()) return false;
+      }
+    }
+    return true;
+  }
+  querySelector(sel) {
+    for (const ch of this.children) {
+      if (ch instanceof MockElement) {
+        if (ch.matches(sel)) return ch;
+        const res = ch.querySelector(sel);
+        if (res) return res;
       }
     }
     return null;
   }
   querySelectorAll(sel) {
     const list = [];
-    if (sel.startsWith(".")) {
-      const cls = sel.slice(1);
-      if (this.classList.contains(cls)) list.push(this);
-    } else if (sel.toLowerCase() === this.tagName.toLowerCase()) {
-      list.push(this);
-    }
     for (const ch of this.children) {
-      if (ch instanceof MockElement) list.push(...ch.querySelectorAll(sel));
+      if (ch instanceof MockElement) {
+        if (ch.matches(sel)) list.push(ch);
+        list.push(...ch.querySelectorAll(sel));
+      }
     }
     return list;
   }
@@ -186,8 +216,8 @@ globalThis.document = {
   body: bodyElement,
   createElement: (tag) => new MockElement(tag),
   getElementById: (id) => findElementById(htmlElement, id),
-  querySelector: () => null,
-  querySelectorAll: () => []
+  querySelector: (sel) => htmlElement.querySelector(sel),
+  querySelectorAll: (sel) => htmlElement.querySelectorAll(sel)
 };
 
 /** Generador pseudoaleatorio reproducible (mulberry32) para fuzzing determinista. */

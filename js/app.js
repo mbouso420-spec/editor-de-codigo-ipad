@@ -7,6 +7,7 @@ import { initDiffModal } from "./ui/diffModal.js";
 import { initLivePreviewModal } from "./ui/livePreviewModal.js";
 import { initQuickOpenModal } from "./ui/quickOpenModal.js";
 import { initGlobalSearchModal } from "./ui/globalSearchModal.js";
+import { initSettingsModal } from "./ui/settingsModal.js";
 import { createEditorManager } from "./editor/editorManager.js";
 import { initChatController } from "./ai/chatController.js";
 import { initGithubController } from "./github/githubController.js";
@@ -198,6 +199,13 @@ async function initApp() {
 
   keyboardRouter.registerGlobalShortcut("ctrl+shift+f", () => globalSearchModal.open());
   keyboardRouter.registerGlobalShortcut("meta+shift+f", () => globalSearchModal.open());
+
+  const settingsModal = initSettingsModal({
+    editor
+  });
+
+  keyboardRouter.registerGlobalShortcut("ctrl+,", () => settingsModal?.open());
+  keyboardRouter.registerGlobalShortcut("meta+,", () => settingsModal?.open());
 
   const symbolBar = initSymbolBar({
     onInsert(text, cursorBack) {

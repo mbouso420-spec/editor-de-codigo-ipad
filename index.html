@@ -96,12 +96,16 @@
           <span class="topbar-label-collapsible">Asistente</span>
         </button>
 
-        <select id="select-theme" class="select-theme" aria-label="Tema visual del IDE" title="Tema visual">
-          <option value="default">Studio Dark</option>
-          <option value="dracula">Dracula</option>
-          <option value="nord">Nord</option>
-          <option value="monokai">Monokai</option>
-        </select>
+        <button
+          type="button"
+          id="btn-open-settings"
+          class="btn btn-ghost"
+          aria-haspopup="dialog"
+          title="Configuración y atajos de teclado (Cmd/Ctrl + ,)"
+        >
+          <span data-icon="settings"></span>
+          <span class="topbar-label-collapsible">Configuración</span>
+        </button>
 
         <button type="button" id="btn-open-github" class="btn btn-primary" title="Sincronizar repositorios de GitHub y publicar commits">
           <span data-icon="gitBranch"></span>
@@ -821,6 +825,87 @@
         </div>
 
         <div id="global-search-results" class="search-results-viewport"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Ventana de Configuración y Atajos de Teclado (Cmd/Ctrl + ,) -->
+  <dialog id="settings-dialog" class="ide-dialog ide-dialog-wide" aria-labelledby="settings-dialog-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="settings"></span>
+          <h2 id="settings-dialog-title" class="dialog-title">Configuración del IDE</h2>
+        </div>
+        <button type="button" id="btn-close-settings" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar configuración">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+
+      <div class="dialog-body">
+        <div class="settings-tabs-bar" role="tablist" aria-label="Secciones de configuración">
+          <button type="button" class="settings-tab-btn is-active" data-tab="appearance" role="tab" aria-selected="true">Apariencia</button>
+          <button type="button" class="settings-tab-btn" data-tab="shortcuts" role="tab" aria-selected="false">Atajos de Teclado</button>
+          <button type="button" class="settings-tab-btn" data-tab="storage" role="tab" aria-selected="false">Almacenamiento</button>
+        </div>
+
+        <div class="settings-content">
+          <!-- Pestaña 1: Apariencia -->
+          <div class="settings-tab-panel" data-tab="appearance">
+            <div class="setting-field">
+              <label for="select-theme" class="setting-label">Tema visual de la interfaz</label>
+              <select id="select-theme" class="field-control">
+                <option value="default">Studio Dark (Cobalto Neutro)</option>
+                <option value="dracula">Dracula (Púrpura y Rosa)</option>
+                <option value="nord">Nord (Polar Ártico)</option>
+                <option value="monokai">Monokai (Cálido Clásico)</option>
+              </select>
+            </div>
+
+            <div class="setting-toggles-list">
+              <label class="setting-toggle">
+                <input type="checkbox" id="setting-word-wrap" checked>
+                <span class="setting-toggle-label">Ajuste automático de línea (Word Wrap) en el editor</span>
+              </label>
+
+              <label class="setting-toggle">
+                <input type="checkbox" id="setting-minimap" checked>
+                <span class="setting-toggle-label">Minimapa visual lateral (vista de pájaro para archivos extensos)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Pestaña 2: Atajos de Teclado -->
+          <div class="settings-tab-panel" data-tab="shortcuts" hidden>
+            <div class="settings-shortcuts-header">
+              <input
+                type="search"
+                id="setting-shortcuts-filter"
+                class="field-control"
+                placeholder="Filtrar atajos por combinación o comando…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div id="setting-shortcuts-list" class="settings-shortcuts-viewport"></div>
+          </div>
+
+          <!-- Pestaña 3: Almacenamiento -->
+          <div class="settings-tab-panel" data-tab="storage" hidden>
+            <div class="setting-field">
+              <label for="setting-key-storage" class="setting-label">Modo de almacenamiento de credenciales (IA y GitHub)</label>
+              <select id="setting-key-storage" class="field-control">
+                <option value="local">Persistente en navegador (localStorage)</option>
+                <option value="session">Temporal de sesión (se borra al cerrar la pestaña)</option>
+              </select>
+            </div>
+
+            <div class="setting-info-block">
+              <span class="setting-info-title">Estado de Almacenamiento Local (IndexedDB)</span>
+              <span id="setting-quota-text" class="setting-info-desc">Calculando espacio disponible…</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </dialog>

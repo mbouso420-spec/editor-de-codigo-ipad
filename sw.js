@@ -23,6 +23,7 @@ const APP_SHELL_URLS = [
   "./js/ui/explorerController.js",
   "./js/ui/quickOpenModal.js",
   "./js/ui/globalSearchModal.js",
+  "./js/ui/settingsModal.js",
   "./js/ui/keyboardRouter.js",
   "./js/ui/diffModal.js",
   "./js/ui/livePreviewModal.js",
