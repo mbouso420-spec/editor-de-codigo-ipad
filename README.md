@@ -1,10 +1,14 @@
 # Studio IDE — Editor de Código Web para iPadOS y Escritorio
 
+<p align="center">
+  <img src="./docs/screenshots/01-studio-ide-overview.svg" alt="Studio IDE — Vista General de las 3 Islas (Explorador, Editor CodeMirror 6 y Asistente IA)" width="100%">
+</p>
+
 **Studio IDE** es un entorno de desarrollo web ligero, modular y 100% offline-first sin servidores intermedios, diseñado específicamente para programar con fluidez desde un **iPad** (instalado como PWA a pantalla completa en Safari y adaptable a ventanas de **Stage Manager**) así como desde una **PC de escritorio**.
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 276 tests unitarios pasando al 100% (52 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 290 tests unitarios pasando al 100% (56 suites, 0 fallos).
 
 ---
 
@@ -30,6 +34,11 @@
   - Re-clamp dinámico de dimensiones de paneles al rotar el dispositivo o redimensionar ventanas en Stage Manager.
 
 ### 2. Asistente de IA integrado (APIs gratuitas y seguras)
+
+<p align="center">
+  <img src="./docs/screenshots/04-ai-diff-viewer.svg" alt="Asistente de IA y Visor de Diferencias (Diff Visual) con Reemplazo Atómico Total" width="100%">
+</p>
+
 - Conexión directa desde el navegador con niveles gratuitos de **Groq** (`openai/gpt-oss-120b`), **Google Gemini** (`AI Studio`), **OpenRouter** (`openrouter/free`) y **Mistral** (`La Plateforme`), con sincronización automática de modelos.
 - **Presupuesto y truncamiento inteligente de contexto:** preserva cabecera y pie del código advirtiendo líneas omitidas para evitar agotar la ventana de contexto de modelos gratuitos.
 - **Contador de tokens en tiempo real:** estimador visual (~4 caracteres por token) en el compositor del chat.
@@ -39,13 +48,23 @@
 - **Acciones directas en bloques de código:** *En cursor*, *Reemplazar código* (reemplaza limpiamente el archivo completo si no hay selección o el fragmento seleccionado si lo hay, evitando sobrescrituras accidentales en el cursor), *Copiar* y *Aplicar archivo* con apertura previa del **Visor de Diferencias (Diff)** visual en verde y rojo.
 
 ### 3. Vista previa contextual en vivo, Consola, Multi-Página, SQLite y C/C++
+
+<p align="center">
+  <img src="./docs/screenshots/02-live-preview-responsive.svg" alt="Vista Previa Web Multi-Página con Selector Responsivo de Dispositivos (Móvil, Tablet y Escritorio)" width="100%">
+</p>
+
 - **Resolución inteligente de punto de entrada:** al presionar *Vista previa* estando parado en un `.js` o `.css`, el motor busca en el workspace el `.html` que lo referencia directamente o el `index.html` principal, ensayando la aplicación web completa en lugar de correr scripts aislados.
 - **Navegación multi-página e Historial web:** Total Interceptor en el iframe que captura enlaces locales relativos (`<a href="contacto.html">`), envíos de `<form>` y llamadas de navegación programática (`location.assign`), ofreciendo botones de **Atrás / Adelante** y un selector desplegable de páginas HTML en la barra superior.
 - **Precarga y descarga bajo demanda inteligente (GitHub Lazy):** en repositorios remotos donde los archivos no están descargados previamente (`contentLoaded: false`), el motor de vista previa descarga automáticamente el HTML destino y todos los assets CSS y JS vinculados antes de compilar el iframe, evitando pantallas en blanco y estilos rotos.
 - **Inlining recursivo de `@import url(...)` en CSS:** empaqueta hojas de estilo CSS modulares complejas de forma recursiva dentro de etiquetas `<style>` protegidas, permitiendo previsualizar aplicaciones que estructuran sus estilos en múltiples subarchivos.
 - **Selector de páginas HTML optimizado y sin duplicados:** exclusión de carpetas de dependencias y artefactos de empaquetado (`node_modules`, `.git`, `dist`, `build`, `.next`, `.cache`, `out`, etc.), deduplicación por ruta normalizada y desambiguación automática de nombres con rutas relativas para evitar opciones triplicadas.
 - **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
-- **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal con **Terminal Interactiva Paso a Paso** (con línea de comando `>`, envío interactivo de respuestas paso a paso con `Enter` sin amontonar entradas previas, y botón de reinicio), panel de estado, entrada opcional por lotes (`batch stdin`), y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
+
+<p align="center">
+  <img src="./docs/screenshots/03-c-runner-interactive.svg" alt="Runner C/C++ Nativo con Terminal Interactiva Paso a Paso y Detección de Errores GCC" width="100%">
+</p>
+
+- **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal con **Terminal Interactiva Paso a Paso** (con línea de comando `>`, envío interactivo de respuestas paso a paso con `Enter` sin amontonar entradas previas, e historial con flechas Arriba/Abajo para repetir valores), panel de estado, entrada opcional por lotes (`batch stdin`), y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
 - **Detección y señalización de errores GCC (Línea roja y Tooltip):** parseo automático de las líneas de error del compilador (`file:line:col: error: ...`), marcación visual con fondo rojo en CodeMirror 6 (`addErrorMarker`) y tooltip flotante con el mensaje del compilador, más salto interactivo al hacer clic sobre el error en la terminal.
 - **Optimización para repositorios gigantes:** empaquetado perezoso con filtrado de directorios pesados (`node_modules`, `.git`, `dist`, `build`, etc.) y umbral máximo de tamaño por archivo (512 KB) para prevenir congelamientos en proyectos masivos.
 - **Selector de medidas responsivas (Device Switcher):** botones de alternancia en la cabecera del visor para probar el diseño en **Móvil (390px)**, **Tablet / iPad (820px)** y **Escritorio (100%)** con transiciones suaves.
@@ -55,6 +74,11 @@
 - **Consola integrada:** captura de `console.log`, `warn`, `error` y trazas de Python con entrada inline interactiva (`input()`).
 
 ### 4. Persistencia offline y Sincronización avanzada con GitHub
+
+<p align="center">
+  <img src="./docs/screenshots/05-github-branches-sync.svg" alt="Sincronización con GitHub, Gestión de Ramas y Commits Atómicos" width="100%">
+</p>
+
 - Autoguardado continuo en **`IndexedDB`** con respaldo síncrono de emergencia (`localStorage`) ante suspensiones repentinas de Safari.
 - **Integración con GitHub REST API v3 / Octokit:**
   - **Apertura instantánea sin clonar todo:** visualización del árbol de directorios con descarga perezosa (*lazy*) de archivos bajo demanda.
@@ -131,7 +155,7 @@
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
 │       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 282 pruebas unitarias
+└── tests/                      # Suite automatizada con 290 pruebas unitarias
 ```
 
 ---
@@ -145,8 +169,8 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **283 pruebas unitarias ejecutadas.**
-- **53 suites completadas.**
+- **290 pruebas unitarias ejecutadas.**
+- **56 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
 - Tiempo de ejecución: **~1.2 segundos.**
 

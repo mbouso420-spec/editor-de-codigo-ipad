@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="100%" height="100%" style="background:#0b0d13;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <filter id="shadow-modal-5" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+  </defs>
+
+  <!-- Modal Shell -->
+  <rect x="24" y="20" width="1152" height="720" rx="14" fill="#0f131c" stroke="#252d3d" stroke-width="1.5" filter="url(#shadow-modal-5)"/>
+
+  <!-- Modal Header -->
+  <rect x="24" y="20" width="1152" height="58" rx="14" fill="#141924"/>
+  <rect x="24" y="60" width="1152" height="18" fill="#141924"/>
+  <line x1="24" y1="78" x2="1176" y2="78" stroke="#232936" stroke-width="1"/>
+
+  <text x="46" y="52" fill="#f8fafc" font-size="15" font-weight="700">Sincronización con GitHub y Control de Versiones</text>
+  <rect x="440" y="36" width="220" height="24" rx="5" fill="#1e2636" stroke="#2c374d" stroke-width="1"/>
+  <circle cx="452" cy="48" r="3.5" fill="#10b981"/>
+  <text x="464" y="52" fill="#cbd5e1" font-size="11.5" font-family="'SF Mono',Menlo,monospace">mbouso420-spec/editor-ipad</text>
+
+  <!-- Header Right Actions -->
+  <g transform="translate(1000, 34)">
+    <rect x="0" y="0" width="140" height="28" rx="6" fill="#1e2636" stroke="#2f3b52" stroke-width="1"/>
+    <text x="70" y="18" text-anchor="middle" fill="#cbd5e1" font-size="11.5" font-weight="600">Actualizar Remoto</text>
+  </g>
+
+  <!-- ==================== BODY CONTENT ==================== -->
+
+  <!-- LEFT: GITHUB REPO & BRANCH MANAGEMENT (w: 520) -->
+  <g transform="translate(44, 96)">
+    <rect x="0" y="0" width="500" height="540" rx="10" fill="#121723" stroke="#212838" stroke-width="1"/>
+
+    <!-- Header -->
+    <rect x="0" y="0" width="500" height="42" rx="10" fill="#171d2c"/>
+    <rect x="0" y="32" width="500" height="10" fill="#171d2c"/>
+    <line x1="0" y1="42" x2="500" y2="42" stroke="#212838" stroke-width="1"/>
+    <text x="20" y="26" fill="#f8fafc" font-size="12" font-weight="700">GESTIÓN DE RAMAS Y CAMBIOS</text>
+
+    <!-- Branch Selector Section -->
+    <g transform="translate(20, 60)">
+      <text x="0" y="12" fill="#94a3b8" font-size="11" font-weight="600">RAMA ACTIVA:</text>
+      
+      <rect x="0" y="24" width="310" height="34" rx="6" fill="#0b0f17" stroke="#3b82f6" stroke-width="1.5"/>
+      <circle cx="18" cy="41" r="4" fill="#3b82f6"/>
+      <text x="32" y="45" fill="#f1f5f9" font-size="12.5" font-weight="600" font-family="'SF Mono',Menlo,monospace">main</text>
+      <text x="286" y="44" fill="#94a3b8" font-size="11">▼</text>
+
+      <!-- New Branch Button -->
+      <rect x="326" y="24" width="134" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="393" y="45" text-anchor="middle" fill="#93c5fd" font-size="12" font-weight="600">+ Nueva rama</text>
+    </g>
+
+    <!-- Pending Changes List Section -->
+    <g transform="translate(20, 144)">
+      <text x="0" y="12" fill="#94a3b8" font-size="11" font-weight="600">CAMBIOS LOCALES PENDIENTES (3 archivos):</text>
+      
+      <g transform="translate(0, 24)">
+        <rect x="0" y="0" width="460" height="140" rx="8" fill="#0b0f17" stroke="#1e2535" stroke-width="1"/>
+
+        <!-- File 1: Modified -->
+        <g transform="translate(14, 16)">
+          <rect x="0" y="0" width="18" height="18" rx="4" fill="#854d0e"/>
+          <text x="9" y="13" text-anchor="middle" fill="#fef08a" font-size="10.5" font-weight="700">M</text>
+          <text x="28" y="13" fill="#f1f5f9" font-size="12" font-family="'SF Mono',Menlo,monospace">js/preview/cRunner.js</text>
+          <text x="360" y="13" fill="#64748b" font-size="10.5">+45 / -2</text>
+        </g>
+
+        <!-- File 2: Modified -->
+        <g transform="translate(14, 48)">
+          <rect x="0" y="0" width="18" height="18" rx="4" fill="#854d0e"/>
+          <text x="9" y="13" text-anchor="middle" fill="#fef08a" font-size="10.5" font-weight="700">M</text>
+          <text x="28" y="13" fill="#f1f5f9" font-size="12" font-family="'SF Mono',Menlo,monospace">js/ui/livePreviewModal.js</text>
+          <text x="360" y="13" fill="#64748b" font-size="10.5">+38 / -3</text>
+        </g>
+
+        <!-- File 3: Added -->
+        <g transform="translate(14, 80)">
+          <rect x="0" y="0" width="18" height="18" rx="4" fill="#14532d"/>
+          <text x="9" y="13" text-anchor="middle" fill="#86efac" font-size="10.5" font-weight="700">A</text>
+          <text x="28" y="13" fill="#f1f5f9" font-size="12" font-family="'SF Mono',Menlo,monospace">docs/MANUAL_DE_USUARIO.md</text>
+          <text x="360" y="13" fill="#64748b" font-size="10.5">+195</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Commit Box & Push Action -->
+    <g transform="translate(20, 344)">
+      <text x="0" y="12" fill="#94a3b8" font-size="11" font-weight="600">MENSAJE DE CONFIRMACIÓN (COMMIT):</text>
+      
+      <rect x="0" y="24" width="460" height="56" rx="6" fill="#0b0f17" stroke="#273247" stroke-width="1"/>
+      <text x="14" y="46" fill="#f8fafc" font-size="12" font-family="'SF Mono',Menlo,monospace">feat(preview): terminal c history, persistent html</text>
+      <text x="14" y="66" fill="#94a3b8" font-size="11">and interactive gcc error navigation</text>
+
+      <!-- Big Blue Commit + Push Button -->
+      <rect x="0" y="94" width="460" height="42" rx="8" fill="#2563eb"/>
+      <text x="230" y="120" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Sincronizar con GitHub (Commit + Push Atómico)</text>
+    </g>
+  </g>
+
+  <!-- RIGHT: ARCHITECTURE & SECURITY HIGHLIGHTS (w: 570) -->
+  <g transform="translate(570, 96)">
+    <rect x="0" y="0" width="570" height="540" rx="10" fill="#121723" stroke="#212838" stroke-width="1"/>
+
+    <!-- Header -->
+    <rect x="0" y="0" width="570" height="42" rx="10" fill="#171d2c"/>
+    <rect x="0" y="32" width="570" height="10" fill="#171d2c"/>
+    <line x1="0" y1="42" x2="570" y2="42" stroke="#212838" stroke-width="1"/>
+    <text x="20" y="26" fill="#f8fafc" font-size="12" font-weight="700">ARQUITECTURA DE SINCRONIZACIÓN Y SEGURIDAD</text>
+
+    <!-- Visual Architecture Flow Diagram -->
+    <g transform="translate(24, 64)">
+      
+      <!-- Step 1: IndexedDB Local -->
+      <rect x="0" y="0" width="150" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="75" y="26" text-anchor="middle" fill="#38bdf8" font-size="12" font-weight="700">1. Almacén Local</text>
+      <text x="75" y="46" text-anchor="middle" fill="#cbd5e1" font-size="11">IndexedDB +</text>
+      <text x="75" y="62" text-anchor="middle" fill="#cbd5e1" font-size="11">localStorage backup</text>
+      <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="9.5">100% Offline</text>
+
+      <!-- Arrow 1 -> 2 -->
+      <line x1="150" y1="45" x2="184" y2="45" stroke="#3b82f6" stroke-width="2"/>
+      <polygon points="184,41 192,45 184,49" fill="#3b82f6"/>
+
+      <!-- Step 2: Atomic Git Tree Creation -->
+      <rect x="192" y="0" width="150" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="267" y="26" text-anchor="middle" fill="#a855f7" font-size="12" font-weight="700">2. Árbol Git Atómico</text>
+      <text x="267" y="46" text-anchor="middle" fill="#cbd5e1" font-size="11">Base tree + Blobs</text>
+      <text x="267" y="62" text-anchor="middle" fill="#cbd5e1" font-size="11">Modos 100644 / 100755</text>
+      <text x="267" y="78" text-anchor="middle" fill="#64748b" font-size="9.5">Transacción única</text>
+
+      <!-- Arrow 2 -> 3 -->
+      <line x1="342" y1="45" x2="374" y2="45" stroke="#3b82f6" stroke-width="2"/>
+      <polygon points="374,41 382,45 374,49" fill="#3b82f6"/>
+
+      <!-- Step 3: Remote Push Octokit -->
+      <rect x="382" y="0" width="140" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="452" y="26" text-anchor="middle" fill="#10b981" font-size="12" font-weight="700">3. GitHub API v3</text>
+      <text x="452" y="46" text-anchor="middle" fill="#cbd5e1" font-size="11">Update Ref</text>
+      <text x="452" y="62" text-anchor="middle" fill="#cbd5e1" font-size="11">refs/heads/main</text>
+      <text x="452" y="78" text-anchor="middle" fill="#64748b" font-size="9.5">Directo sin backend</text>
+    </g>
+
+    <!-- Feature Description Cards -->
+    <g transform="translate(24, 180)" font-size="11.5" line-height="1.5">
+      
+      <!-- Feature 1 -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="522" height="74" rx="6" fill="#0b0f17" stroke="#1f2738" stroke-width="1"/>
+        <text x="16" y="22" fill="#38bdf8" font-size="12" font-weight="600">Descarga Perezosa (Lazy Hydration) para Repositorios Gigantes</text>
+        <text x="16" y="42" fill="#cbd5e1">Permite abrir repositorios con más de 3.000 archivos sin descargar todo en frío.</text>
+        <text x="16" y="60" fill="#94a3b8">Solo se bajan los archivos que abrís en el editor o ejecutás en la vista previa.</text>
+      </g>
+
+      <!-- Feature 2 -->
+      <g transform="translate(0, 86)">
+        <rect x="0" y="0" width="522" height="74" rx="6" fill="#0b0f17" stroke="#1f2738" stroke-width="1"/>
+        <text x="16" y="22" fill="#a855f7" font-size="12" font-weight="600">Detección de Divergencias Remotas (RemoteAheadError)</text>
+        <text x="16" y="42" fill="#cbd5e1">Si alguien más realizó un push al repositorio mientras editabas, Studio IDE</text>
+        <text x="16" y="60" fill="#94a3b8">te avisa antes de sobreescribir y te permite comparar diferencias para proteger tu código.</text>
+      </g>
+
+      <!-- Feature 3 -->
+      <g transform="translate(0, 172)">
+        <rect x="0" y="0" width="522" height="74" rx="6" fill="#0b0f17" stroke="#1f2738" stroke-width="1"/>
+        <text x="16" y="22" fill="#10b981" font-size="12" font-weight="600">Privacidad Absoluta y CSP Restrictiva</text>
+        <text x="16" y="42" fill="#cbd5e1">Tu token personal de GitHub (PAT) nunca pasa por ningún intermediario.</text>
+        <text x="16" y="60" fill="#94a3b8">Se almacena exclusivamente en tu navegador y viaja directo a api.github.com.</text>
+      </g>
+    </g>
+  </g>
+
+</svg>

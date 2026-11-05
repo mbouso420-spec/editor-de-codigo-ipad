@@ -1,0 +1,307 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="100%" height="100%" style="background:#0b0d13;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <filter id="shadow-lg" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="shadow-sm" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+    <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="accent-soft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shell Container -->
+  <rect x="16" y="16" width="1168" height="728" rx="14" fill="#0f131c" stroke="#232936" stroke-width="1.5" filter="url(#shadow-lg)"/>
+
+  <!-- Top App Bar -->
+  <rect x="16" y="16" width="1168" height="52" rx="14" fill="#141923"/>
+  <rect x="16" y="54" width="1168" height="14" fill="#141923"/>
+  <line x1="16" y1="68" x2="1184" y2="68" stroke="#232936" stroke-width="1"/>
+
+  <!-- Logo and App Title -->
+  <rect x="36" y="30" width="24" height="24" rx="6" fill="url(#primary-grad)"/>
+  <path d="M42 36 L54 36 L44 48 L54 48" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="70" y="47" fill="#f8fafc" font-size="15" font-weight="700" letter-spacing="0.3">Studio IDE</text>
+  <rect x="156" y="32" width="138" height="22" rx="5" fill="#1e2533" stroke="#2d3748" stroke-width="1"/>
+  <circle cx="168" cy="43" r="3.5" fill="#10b981"/>
+  <text x="178" y="48" fill="#94a3b8" font-size="11" font-weight="500">proyecto-demo (main)</text>
+
+  <!-- Top App Actions -->
+  <g transform="translate(860, 28)">
+    <rect x="0" y="0" width="112" height="28" rx="6" fill="#2563eb" filter="url(#shadow-sm)"/>
+    <polygon points="14,9 14,19 22,14" fill="#ffffff"/>
+    <text x="28" y="18" fill="#ffffff" font-size="12" font-weight="600">Vista previa</text>
+
+    <rect x="122" y="0" width="94" height="28" rx="6" fill="#1e2533" stroke="#2d3748" stroke-width="1"/>
+    <path d="M136 10 L144 10 L144 16 L148 16 L140 22 L132 16 L136 16 Z" fill="#94a3b8"/>
+    <text x="154" y="18" fill="#cbd5e1" font-size="12" font-weight="500">.zip</text>
+
+    <rect x="226" y="0" width="86" height="28" rx="6" fill="#1e2533" stroke="#2d3748" stroke-width="1"/>
+    <circle cx="238" cy="14" r="3" fill="#10b981"/>
+    <text x="248" y="18" fill="#cbd5e1" font-size="11" font-weight="500">Online</text>
+  </g>
+
+  <!-- ==================== 3 ISLANDS ==================== -->
+
+  <!-- 1. LEFT ISLAND: EXPLORER (x: 28, y: 80, w: 240, h: 648) -->
+  <rect x="28" y="80" width="240" height="648" rx="10" fill="#131822" stroke="#222836" stroke-width="1"/>
+  
+  <!-- Explorer Header -->
+  <rect x="28" y="80" width="240" height="40" rx="10" fill="#171d2a"/>
+  <rect x="28" y="110" width="240" height="10" fill="#171d2a"/>
+  <line x1="28" y1="120" x2="268" y2="120" stroke="#222836" stroke-width="1"/>
+  <text x="42" y="105" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="0.8">EXPLORADOR</text>
+  
+  <!-- Explorer Tools Icons -->
+  <g transform="translate(198, 93)" stroke="#64748b" stroke-width="1.6" fill="none" stroke-linecap="round">
+    <path d="M0 4 L8 4 M4 0 L4 8"/>
+    <path d="M18 4 L26 4"/>
+    <path d="M40 0 L40 8 M36 4 L40 0 L44 4"/>
+  </g>
+
+  <!-- File Tree Items -->
+  <g transform="translate(40, 140)">
+    <!-- Folder src -->
+    <path d="M0 3 L5 3 L7 5 L14 5 L14 12 L0 12 Z" fill="#60a5fa" opacity="0.85"/>
+    <text x="22" y="11" fill="#f1f5f9" font-size="13" font-weight="600">src/</text>
+
+    <!-- Sub-file header.h -->
+    <g transform="translate(16, 26)">
+      <rect x="0" y="1" width="10" height="12" rx="1" fill="#0284c7" opacity="0.8"/>
+      <text x="18" y="11" fill="#cbd5e1" font-size="12">header.h</text>
+    </g>
+
+    <!-- Sub-file calculadora.c (ACTIVE) -->
+    <g transform="translate(0, 48)">
+      <rect x="-8" y="-2" width="232" height="26" rx="5" fill="#1e293b" stroke="#3b82f6" stroke-width="1"/>
+      <rect x="16" y="5" width="10" height="12" rx="1" fill="#3b82f6"/>
+      <text x="34" y="15" fill="#60a5fa" font-size="12" font-weight="600">calculadora.c</text>
+      <circle cx="212" cy="11" r="3.5" fill="#3b82f6"/>
+    </g>
+
+    <!-- Sub-file util.c -->
+    <g transform="translate(16, 78)">
+      <rect x="0" y="1" width="10" height="12" rx="1" fill="#0284c7" opacity="0.8"/>
+      <text x="18" y="11" fill="#94a3b8" font-size="12">util.c</text>
+    </g>
+
+    <!-- Root file index.html -->
+    <g transform="translate(0, 106)">
+      <rect x="0" y="1" width="12" height="13" rx="1.5" fill="#ea580c" opacity="0.85"/>
+      <text x="22" y="12" fill="#cbd5e1" font-size="12.5">index.html</text>
+    </g>
+
+    <!-- Root file styles.css -->
+    <g transform="translate(0, 134)">
+      <rect x="0" y="1" width="12" height="13" rx="1.5" fill="#0284c7" opacity="0.85"/>
+      <text x="22" y="12" fill="#cbd5e1" font-size="12.5">styles.css</text>
+    </g>
+
+    <!-- Root file script.js -->
+    <g transform="translate(0, 162)">
+      <rect x="0" y="1" width="12" height="13" rx="1.5" fill="#eab308" opacity="0.85"/>
+      <text x="22" y="12" fill="#cbd5e1" font-size="12.5">app.js</text>
+    </g>
+
+    <!-- Root file database.sql -->
+    <g transform="translate(0, 190)">
+      <rect x="0" y="1" width="12" height="13" rx="1.5" fill="#10b981" opacity="0.85"/>
+      <text x="22" y="12" fill="#cbd5e1" font-size="12.5">datos.sql</text>
+    </g>
+
+    <!-- Root file README.md -->
+    <g transform="translate(0, 218)">
+      <rect x="0" y="1" width="12" height="13" rx="1.5" fill="#64748b" opacity="0.85"/>
+      <text x="22" y="12" fill="#94a3b8" font-size="12.5">README.md</text>
+    </g>
+  </g>
+
+  <!-- Explorer Storage Quota Footer -->
+  <line x1="28" y1="676" x2="268" y2="676" stroke="#222836" stroke-width="1"/>
+  <rect x="40" y="694" width="216" height="6" rx="3" fill="#1e2533"/>
+  <rect x="40" y="694" width="48" height="6" rx="3" fill="#3b82f6"/>
+  <text x="40" y="716" fill="#64748b" font-size="11">IndexedDB: 1.4 MB / 1.5 GB</text>
+
+
+  <!-- 2. CENTER ISLAND: EDITOR CODEMIRROR 6 (x: 280, y: 80, w: 580, h: 648) -->
+  <rect x="280" y="80" width="580" height="648" rx="10" fill="#0f131c" stroke="#222836" stroke-width="1"/>
+
+  <!-- Tab Bar -->
+  <rect x="280" y="80" width="580" height="38" rx="10" fill="#141923"/>
+  <rect x="280" y="108" width="580" height="10" fill="#141923"/>
+  <line x1="280" y1="118" x2="860" y2="118" stroke="#222836" stroke-width="1"/>
+
+  <!-- Active Tab: calculadora.c -->
+  <rect x="288" y="84" width="144" height="34" rx="6" fill="#0f131c" stroke="#222836" stroke-width="1"/>
+  <line x1="288" y1="84" x2="432" y2="84" stroke="#3b82f6" stroke-width="2.5"/>
+  <rect x="298" y="94" width="10" height="12" rx="1" fill="#3b82f6"/>
+  <text x="316" y="106" fill="#f8fafc" font-size="12" font-weight="600">calculadora.c</text>
+  <text x="416" y="105" fill="#64748b" font-size="12">×</text>
+
+  <!-- Inactive Tab: index.html -->
+  <rect x="436" y="84" width="112" height="34" rx="6" fill="#141923"/>
+  <rect x="446" y="94" width="10" height="12" rx="1" fill="#ea580c" opacity="0.6"/>
+  <text x="464" y="106" fill="#94a3b8" font-size="12">index.html</text>
+
+  <!-- Inactive Tab: styles.css -->
+  <rect x="552" y="84" width="104" height="34" rx="6" fill="#141923"/>
+  <rect x="562" y="94" width="10" height="12" rx="1" fill="#0284c7" opacity="0.6"/>
+  <text x="580" y="106" fill="#94a3b8" font-size="12">styles.css</text>
+
+  <!-- Editor Secondary Toolbar (Undo, Redo, Search, Font) -->
+  <rect x="280" y="118" width="580" height="30" fill="#121620"/>
+  <line x1="280" y1="148" x2="860" y2="148" stroke="#1e2430" stroke-width="1"/>
+  <text x="296" y="138" fill="#64748b" font-size="11" font-weight="500">C (GCC 14 / C17)</text>
+  <text x="730" y="138" fill="#64748b" font-size="11">Ln 14, Col 5  ·  UTF-8  ·  14px</text>
+
+  <!-- CodeMirror Editor Lines -->
+  <g transform="translate(294, 170)" font-family="'SF Mono','Cascadia Code','Fira Code',Menlo,monospace" font-size="12.5" line-height="1.6">
+    <!-- Line numbers gutter -->
+    <g fill="#475569" text-anchor="end">
+      <text x="24" y="0">1</text>
+      <text x="24" y="22">2</text>
+      <text x="24" y="44">3</text>
+      <text x="24" y="66">4</text>
+      <text x="24" y="88">5</text>
+      <text x="24" y="110">6</text>
+      <text x="24" y="132">7</text>
+      <text x="24" y="154">8</text>
+      <text x="24" y="176">9</text>
+      <text x="24" y="198">10</text>
+      <text x="24" y="220">11</text>
+      <text x="24" y="242">12</text>
+      <text x="24" y="264">13</text>
+      <text x="24" y="286">14</text>
+      <text x="24" y="308">15</text>
+      <text x="24" y="330">16</text>
+      <text x="24" y="352">17</text>
+      <text x="24" y="374">18</text>
+    </g>
+
+    <!-- Code Content -->
+    <g transform="translate(42, 0)">
+      <text y="0"><tspan fill="#ec4899">#include</tspan> <tspan fill="#38bdf8">&lt;stdio.h&gt;</tspan></text>
+      <text y="22"><tspan fill="#ec4899">#include</tspan> <tspan fill="#38bdf8">&quot;header.h&quot;</tspan></text>
+      <text y="44"><tspan fill="#64748b">// Calculadora interactiva paso a paso</tspan></text>
+      <text y="66"><tspan fill="#818cf8">int</tspan> <tspan fill="#60a5fa">main</tspan>() {</text>
+      <text y="88">    <tspan fill="#818cf8">int</tspan> opcion, a, b;</text>
+      <text y="110">    <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;=== CALCULADORA EN C ===\n&quot;</tspan>);</text>
+      <text y="132">    <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;1. Sumar  2. Restar  3. Salir\n&quot;</tspan>);</text>
+      <text y="154">    <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;Opcion: &quot;</tspan>);</text>
+      <text y="176">    <tspan fill="#ec4899">if</tspan> (<tspan fill="#60a5fa">scanf</tspan>(<tspan fill="#a5f3fc">&quot;%d&quot;</tspan>, &amp;opcion) != <tspan fill="#f59e0b">1</tspan>) <tspan fill="#ec4899">return</tspan> <tspan fill="#f59e0b">0</tspan>;</text>
+      <text y="198">    <tspan fill="#ec4899">switch</tspan> (opcion) {</text>
+      <text y="220">        <tspan fill="#ec4899">case</tspan> <tspan fill="#f59e0b">1</tspan>:</text>
+      <text y="242">            <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;[SUMA] Ingrese dos numeros: &quot;</tspan>);</text>
+      <text y="264">            <tspan fill="#60a5fa">scanf</tspan>(<tspan fill="#a5f3fc">&quot;%d %d&quot;</tspan>, &amp;a, &amp;b);</text>
+
+      <!-- Line 14: Highlighted Error Line with Red Background and Tooltip -->
+      <rect x="-6" y="271" width="500" height="22" rx="3" fill="#ef4444" fill-opacity="0.18" stroke="#ef4444" stroke-width="1"/>
+      <text y="286">            <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;Resultado: %d\n&quot;</tspan>, a + b)</text>
+      <!-- Tooltip -->
+      <g transform="translate(310, 271)">
+        <rect x="0" y="0" width="180" height="20" rx="4" fill="#991b1b" stroke="#f87171" stroke-width="1"/>
+        <text x="8" y="14" fill="#fee2e2" font-size="10.5" font-family="-apple-system,sans-serif">⚠ expected ';' before 'break'</text>
+      </g>
+
+      <text y="308">            <tspan fill="#ec4899">break</tspan>;</text>
+      <text y="330">        <tspan fill="#ec4899">default</tspan>:</text>
+      <text y="352">            <tspan fill="#60a5fa">printf</tspan>(<tspan fill="#a5f3fc">&quot;Saliendo...\n&quot;</tspan>);</text>
+      <text y="374">    }</text>
+    </g>
+  </g>
+
+  <!-- Bottom Virtual Touch Bar for iPad & Shortcuts (auto-wrap) -->
+  <rect x="280" y="678" width="580" height="50" rx="10" fill="#141924" stroke="#222836" stroke-width="1"/>
+  <g transform="translate(296, 688)" font-family="'SF Mono',Menlo,monospace" font-size="12">
+    <!-- Touch Symbol Pills -->
+    <g fill="#1e2636" stroke="#2f3b52" stroke-width="1">
+      <rect x="0" y="0" width="34" height="30" rx="6"/><text x="17" y="20" text-anchor="middle" fill="#93c5fd">( )</text>
+      <rect x="40" y="0" width="34" height="30" rx="6"/><text x="57" y="20" text-anchor="middle" fill="#93c5fd">{ }</text>
+      <rect x="80" y="0" width="34" height="30" rx="6"/><text x="97" y="20" text-anchor="middle" fill="#93c5fd">[ ]</text>
+      <rect x="120" y="0" width="30" height="30" rx="6"/><text x="135" y="20" text-anchor="middle" fill="#fcd34d">&quot; &quot;</text>
+      <rect x="156" y="0" width="30" height="30" rx="6"/><text x="171" y="20" text-anchor="middle" fill="#fcd34d">&#39; &#39;</text>
+      <rect x="192" y="0" width="34" height="30" rx="6"/><text x="209" y="20" text-anchor="middle" fill="#f472b6">```</text>
+      <rect x="232" y="0" width="28" height="30" rx="6"/><text x="246" y="20" text-anchor="middle" fill="#cbd5e1">;</text>
+      <rect x="266" y="0" width="28" height="30" rx="6"/><text x="280" y="20" text-anchor="middle" fill="#cbd5e1">=</text>
+      <rect x="300" y="0" width="28" height="30" rx="6"/><text x="314" y="20" text-anchor="middle" fill="#cbd5e1">&lt;</text>
+      <rect x="334" y="0" width="28" height="30" rx="6"/><text x="348" y="20" text-anchor="middle" fill="#cbd5e1">&gt;</text>
+      <rect x="368" y="0" width="28" height="30" rx="6"/><text x="382" y="20" text-anchor="middle" fill="#cbd5e1">+</text>
+      <rect x="402" y="0" width="28" height="30" rx="6"/><text x="416" y="20" text-anchor="middle" fill="#cbd5e1">-</text>
+      <rect x="436" y="0" width="28" height="30" rx="6"/><text x="450" y="20" text-anchor="middle" fill="#cbd5e1">&amp;</text>
+      <rect x="470" y="0" width="28" height="30" rx="6"/><text x="484" y="20" text-anchor="middle" fill="#cbd5e1">|</text>
+      <rect x="504" y="0" width="40" height="30" rx="6" fill="#2563eb" stroke="#3b82f6"/><text x="524" y="19" text-anchor="middle" fill="#ffffff" font-size="11" font-family="-apple-system,sans-serif">Tab</text>
+    </g>
+  </g>
+
+
+  <!-- 3. RIGHT ISLAND: AI ASSISTANT (x: 872, y: 80, w: 300, h: 648) -->
+  <rect x="872" y="80" width="300" height="648" rx="10" fill="#131822" stroke="#222836" stroke-width="1"/>
+
+  <!-- Assistant Header -->
+  <rect x="872" y="80" width="300" height="40" rx="10" fill="#171d2a"/>
+  <rect x="872" y="110" width="300" height="10" fill="#171d2a"/>
+  <line x1="872" y1="120" x2="1172" y2="120" stroke="#222836" stroke-width="1"/>
+  <circle cx="894" cy="100" r="4.5" fill="#a855f7"/>
+  <text x="906" y="105" fill="#f8fafc" font-size="12" font-weight="700">ASISTENTE IA</text>
+  <rect x="1066" y="90" width="92" height="20" rx="4" fill="#2e1065" stroke="#7e22ce" stroke-width="1"/>
+  <text x="1112" y="104" text-anchor="middle" fill="#d8b4fe" font-size="10" font-weight="600">Gemini 2.0</text>
+
+  <!-- Chat History Area -->
+  <g transform="translate(884, 134)">
+    <!-- User Message -->
+    <g transform="translate(30, 0)">
+      <rect x="0" y="0" width="246" height="46" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="12" y="18" fill="#f1f5f9" font-size="11.5">Corregí el fallo en la línea 14</text>
+      <text x="12" y="34" fill="#f1f5f9" font-size="11.5">y agregá la opción de resta.</text>
+    </g>
+
+    <!-- AI Response Message -->
+    <g transform="translate(0, 58)">
+      <rect x="0" y="0" width="276" height="340" rx="8" fill="#18202f" stroke="#273449" stroke-width="1"/>
+      <text x="12" y="20" fill="#93c5fd" font-size="11.5" font-weight="600">Solución Quirúrgica:</text>
+      <text x="12" y="38" fill="#cbd5e1" font-size="11" line-height="1.4">Te faltaba el punto y coma en el printf</text>
+      <text x="12" y="54" fill="#cbd5e1" font-size="11">y acá tenés el case 2 para la resta:</text>
+
+      <!-- Code Snippet Box inside Chat -->
+      <rect x="10" y="66" width="256" height="218" rx="6" fill="#0b0f17" stroke="#1e2738" stroke-width="1"/>
+      <g transform="translate(18, 86)" font-family="'SF Mono',Menlo,monospace" font-size="10.5">
+        <text y="0" fill="#64748b">// Caso 1 corregido:</text>
+        <text y="16" fill="#60a5fa">printf</text><text x="38" y="16" fill="#e2e8f0">(...);</text>
+        <text y="32" fill="#ec4899">break</text><text x="32" y="32" fill="#e2e8f0">;</text>
+        <text y="52" fill="#64748b">// Caso 2 resta:</text>
+        <text y="68" fill="#ec4899">case</text> <text x="30" y="68" fill="#f59e0b">2</text><text x="36" y="68" fill="#e2e8f0">:</text>
+        <text y="84" fill="#60a5fa">printf</text><text x="38" y="84" fill="#a5f3fc">&quot;[RESTA] Ingrese:...&quot;</text><text x="140" y="84" fill="#e2e8f0">;</text>
+        <text y="100" fill="#60a5fa">scanf</text><text x="32" y="100" fill="#a5f3fc">&quot;%d %d&quot;</text><text x="80" y="100" fill="#e2e8f0">, &amp;a, &amp;b);</text>
+        <text y="116" fill="#60a5fa">printf</text><text x="38" y="116" fill="#a5f3fc">&quot;Res: %d\n&quot;</text><text x="96" y="116" fill="#e2e8f0">, a - b);</text>
+        <text y="132" fill="#ec4899">break</text><text x="32" y="132" fill="#e2e8f0">;</text>
+      </g>
+
+      <!-- In-Chat Action Buttons -->
+      <g transform="translate(10, 292)">
+        <rect x="0" y="0" width="138" height="26" rx="5" fill="#2563eb"/>
+        <text x="69" y="17" text-anchor="middle" fill="#ffffff" font-size="10.5" font-weight="600">Reemplazar código</text>
+
+        <rect x="146" y="0" width="54" height="26" rx="5" fill="#222f44" stroke="#33435c" stroke-width="1"/>
+        <text x="173" y="17" text-anchor="middle" fill="#cbd5e1" font-size="10.5">Diff</text>
+
+        <rect x="206" y="0" width="50" height="26" rx="5" fill="#222f44" stroke="#33435c" stroke-width="1"/>
+        <text x="231" y="17" text-anchor="middle" fill="#cbd5e1" font-size="10.5">Copiar</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Chat Composer at Bottom -->
+  <rect x="872" y="660" width="300" height="68" rx="10" fill="#141924" stroke="#222836" stroke-width="1"/>
+  <rect x="884" y="670" width="276" height="48" rx="6" fill="#0f131c" stroke="#283244" stroke-width="1"/>
+  <text x="896" y="692" fill="#64748b" font-size="11.5">Preguntale a la IA sobre tu código...</text>
+  <text x="896" y="709" fill="#475569" font-size="9.5">Tokens estimados: ~280  ·  Enter para enviar</text>
+  <circle cx="1142" cy="694" r="12" fill="#2563eb"/>
+  <polygon points="1138,690 1147,694 1138,698" fill="#ffffff"/>
+
+</svg>
