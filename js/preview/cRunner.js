@@ -274,15 +274,38 @@ export function mountCRunnerView(containerEl, {
   const hasInteractiveInput = /\b(scanf|cin|getline|getchar|fgets|gets)\b/.test(activeFile.content || "");
   const stdinCard = document.createElement("div");
   stdinCard.className = "c-stdin-card";
+
+  const stdinHeader = document.createElement("div");
+  stdinHeader.className = "c-stdin-header";
   const stdinLabel = document.createElement("label");
   stdinLabel.className = "c-section-label";
   stdinLabel.textContent = "Entrada estándar (stdin para cin / scanf):";
+  const stdinHelp = document.createElement("span");
+  stdinHelp.className = "c-stdin-help";
+  stdinHelp.textContent = "Los datos se enviarán a tu programa al ejecutar";
+  stdinHeader.append(stdinLabel, stdinHelp);
+
   const stdinTextarea = document.createElement("textarea");
   stdinTextarea.className = "c-stdin-textarea code-font";
   stdinTextarea.placeholder = hasInteractiveInput
-    ? "Tu código usa scanf/cin. Escribí aquí los datos de entrada que solicitará (ej: 1\\n10 20\\n5)..."
+    ? "Escribí aquí las opciones y números de tu programa (ej: 1\\n10 20\\n5)..."
     : "Escribí aquí los datos de entrada que tu programa solicitará en tiempo de ejecución...";
-  stdinCard.append(stdinLabel, stdinTextarea);
+
+  const stdinFooter = document.createElement("div");
+  stdinFooter.className = "c-stdin-footer";
+
+  const btnClearStdin = document.createElement("button");
+  btnClearStdin.type = "button";
+  btnClearStdin.className = "btn btn-subtle btn-sm btn-c-clear-stdin";
+  btnClearStdin.textContent = "Limpiar";
+
+  const btnSendStdin = document.createElement("button");
+  btnSendStdin.type = "button";
+  btnSendStdin.className = "btn btn-primary btn-sm btn-c-send-stdin";
+  btnSendStdin.innerHTML = '<span data-icon="play"></span><span>Enviar entrada y Ejecutar</span> <span class="c-key-hint" style="opacity:0.75;font-size:11px;">(Ctrl+Enter)</span>';
+
+  stdinFooter.append(btnClearStdin, btnSendStdin);
+  stdinCard.append(stdinHeader, stdinTextarea, stdinFooter);
 
   // 3. Tarjeta Terminal
   const termCard = document.createElement("div");
@@ -311,6 +334,7 @@ export function mountCRunnerView(containerEl, {
     if (isCompiling) return;
     isCompiling = true;
     btnCompile.disabled = true;
+    btnSendStdin.disabled = true;
     termStatus.className = "c-term-status is-running";
     termStatus.textContent = "Compilando en Wandbox...";
     termBody.innerHTML = '<span class="c-term-hint">Conectando con GCC en Wandbox y compilando proyecto...</span>';
@@ -392,10 +416,24 @@ export function mountCRunnerView(containerEl, {
     } finally {
       isCompiling = false;
       btnCompile.disabled = false;
+      btnSendStdin.disabled = false;
     }
   }
 
   btnCompile.addEventListener("click", executeCompile);
+  btnSendStdin.addEventListener("click", executeCompile);
+
+  btnClearStdin.addEventListener("click", () => {
+    stdinTextarea.value = "";
+    stdinTextarea.focus();
+  });
+
+  stdinTextarea.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      executeCompile();
+    }
+  });
 
   function handleKeydown(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {

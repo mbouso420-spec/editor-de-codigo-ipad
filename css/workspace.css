@@ -1031,6 +1031,26 @@
   border-radius: var(--radius-card);
 }
 
+.c-stdin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.c-stdin-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-top: var(--space-2xs);
+}
+
+.c-stdin-help {
+  font-size: var(--text-2xs);
+  color: var(--color-muted);
+}
+
 .c-section-label {
   font-size: var(--text-xs);
   font-weight: 600;
