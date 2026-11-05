@@ -1219,7 +1219,40 @@
 
 .c-term-comp-err:hover {
   background: var(--color-error-soft);
+}
+
+.c-term-err-banner {
+  font-weight: 500;
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  margin-bottom: var(--space-2xs);
+}
+
+.c-term-err-line {
+  display: block;
+  cursor: pointer;
+  padding: var(--space-3xs) var(--space-2xs);
+  margin-block: 2px;
+  border-radius: var(--radius-control);
+  background: var(--color-error-soft);
+  color: var(--color-error);
+  transition: opacity var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.c-term-err-line:hover {
+  background: oklch(62% 0.18 25 / 0.25);
+  opacity: 0.95;
   text-decoration: underline;
+}
+
+.c-term-err-line:focus-visible {
+  outline: 2px solid var(--color-error);
+  outline-offset: 1px;
+}
+
+.c-term-err-raw-line {
+  color: var(--color-error);
+  opacity: 0.88;
 }
 
 .c-term-hint {

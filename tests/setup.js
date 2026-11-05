@@ -16,6 +16,34 @@ globalThis.localStorage = new MemoryStorage();
 globalThis.sessionStorage = new MemoryStorage();
 if (!globalThis.navigator) globalThis.navigator = {};
 
+if (!globalThis.Event) {
+  globalThis.Event = class Event {
+    constructor(type, init = {}) {
+      this.type = type;
+      Object.assign(this, init);
+    }
+  };
+}
+if (!globalThis.CustomEvent) {
+  globalThis.CustomEvent = class CustomEvent extends globalThis.Event {};
+}
+if (!globalThis.KeyboardEvent) {
+  globalThis.KeyboardEvent = class KeyboardEvent extends (globalThis.Event || Object) {
+    constructor(type, init = {}) {
+      super(type, init);
+      this.key = init.key || "";
+      this.code = init.code || "";
+      this.ctrlKey = Boolean(init.ctrlKey);
+      this.metaKey = Boolean(init.metaKey);
+      this.shiftKey = Boolean(init.shiftKey);
+      this.altKey = Boolean(init.altKey);
+    }
+  };
+}
+if (!globalThis.MouseEvent) {
+  globalThis.MouseEvent = class MouseEvent extends globalThis.Event {};
+}
+
 class MockElement {
   constructor(tagName = "div") {
     this.tagName = tagName.toUpperCase();
@@ -42,6 +70,7 @@ class MockElement {
     this._textContent = "";
     this.selectionStart = 0;
     this.selectionEnd = 0;
+    this._listeners = new Map();
   }
   get className() {
     return Array.from(this.classList._classes).join(" ");
@@ -58,8 +87,27 @@ class MockElement {
   append(...children) { children.forEach(c => this.appendChild(c)); }
   removeChild(child) { const i = this.children.indexOf(child); if (i !== -1) this.children.splice(i, 1); return child; }
   contains(child) { return this.children.includes(child); }
-  addEventListener() {}
-  removeEventListener() {}
+  addEventListener(type, fn) {
+    if (!this._listeners.has(type)) this._listeners.set(type, []);
+    this._listeners.get(type).push(fn);
+  }
+  removeEventListener(type, fn) {
+    if (this._listeners.has(type)) {
+      this._listeners.set(type, this._listeners.get(type).filter((f) => f !== fn));
+    }
+  }
+  dispatchEvent(event) {
+    const list = this._listeners.get(event?.type || "");
+    if (list) {
+      for (const fn of list) {
+        fn.call(this, event);
+      }
+    }
+    return true;
+  }
+  click() {
+    this.dispatchEvent({ type: "click", bubbles: true, target: this, stopPropagation: () => {} });
+  }
   setAttribute(k, v) { this.attributes.set(k, String(v)); }
   getAttribute(k) { return this.attributes.get(k) || null; }
   setRangeText(text, start, end) {
@@ -84,7 +132,12 @@ class MockElement {
   }
   querySelectorAll(sel) {
     const list = [];
-    if (sel === "iframe" && this.tagName === "IFRAME") list.push(this);
+    if (sel.startsWith(".")) {
+      const cls = sel.slice(1);
+      if (this.classList.contains(cls)) list.push(this);
+    } else if (sel.toLowerCase() === this.tagName.toLowerCase()) {
+      list.push(this);
+    }
     for (const ch of this.children) {
       if (ch instanceof MockElement) list.push(...ch.querySelectorAll(sel));
     }

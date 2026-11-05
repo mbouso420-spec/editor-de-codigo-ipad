@@ -23,7 +23,9 @@ const {
   IGNORED_PREVIEW_DIRS,
   extractReferencedAssetPaths,
   extractCssImportPaths,
-  buildWorkspaceAssetMap
+  buildWorkspaceAssetMap,
+  getSavedPreviewHtml,
+  savePreviewHtml
 } = await import("../js/ui/livePreviewModal.js");
 const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
 const {
@@ -35,7 +37,8 @@ const {
   sanitizeLoopOutput,
   extractNewOutputDelta,
   trimInitialMenuOutput,
-  trimPrematureMenuRepeat
+  trimPrematureMenuRepeat,
+  createTerminalHistory
 } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
@@ -951,6 +954,172 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         assert.ok(map.has("src/index.html"));
         assert.ok(map.has("src/app.js"));
         assert.ok(map.has("app.js"), "Debe tener alias por shortName para resolución tolerante");
+      });
+    });
+
+    describe("Evolución Terminal C/C++: Historial de Comandos con Flechas (createTerminalHistory)", () => {
+      test("createTerminalHistory agrega comandos válidos y omite duplicados consecutivos o vacíos", () => {
+        const history = createTerminalHistory();
+        history.push("1");
+        history.push("1"); // duplicado consecutivo
+        history.push("   "); // vacío
+        history.push("10 20");
+        history.push("5");
+
+        assert.deepEqual(history.getEntries(), ["1", "10 20", "5"]);
+      });
+
+      test("navegación con Flecha Arriba recupera comandos anteriores y preserva borrador inicial", () => {
+        const history = createTerminalHistory();
+        history.push("1");
+        history.push("10 20");
+        history.push("5");
+
+        // El usuario está escribiendo un borrador 'calc' y presiona Arriba
+        assert.equal(history.navigateUp("calc"), "5");
+        assert.equal(history.navigateUp(), "10 20");
+        assert.equal(history.navigateUp(), "1");
+        // No avanza más allá del primer comando
+        assert.equal(history.navigateUp(), "1");
+
+        // Navegación hacia abajo
+        assert.equal(history.navigateDown(), "10 20");
+        assert.equal(history.navigateDown(), "5");
+        // Al final, restaura el borrador que tenía el usuario
+        assert.equal(history.navigateDown(), "calc");
+      });
+
+      test("clear reinicia entradas y estado de navegación", () => {
+        const history = createTerminalHistory();
+        history.push("opcion 1");
+        history.navigateUp("borrador");
+        history.clear();
+
+        assert.deepEqual(history.getEntries(), []);
+        assert.equal(history.getIndex(), -1);
+      });
+
+      test("mountCRunnerView navega el historial con eventos de teclado ArrowUp y ArrowDown", async () => {
+        const container = document.createElement("div");
+        const instance = mountCRunnerView(container, {
+          activeFile: { path: "main.c", shortName: "main.c", content: "int main(){}" },
+          fetchFn: async () => new Response(JSON.stringify({ status: 0, program_output: "Ready" }), { status: 200 })
+        });
+
+        // Esperar a que finalice el paso 0 de inicialización
+        await new Promise((r) => setTimeout(r, 15));
+
+        const input = container.querySelector(".c-terminal-input");
+        const btnSend = container.querySelector(".btn-c-send-step");
+
+        // Enviar dos comandos esperando resolución de fetch
+        input.value = "1";
+        btnSend.click();
+        await new Promise((r) => setTimeout(r, 15));
+
+        input.value = "10 20";
+        btnSend.click();
+        await new Promise((r) => setTimeout(r, 15));
+
+        // Escribir un texto y presionar ArrowUp
+        input.value = "nuevo";
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+        assert.equal(input.value, "10 20", "Debe cargar el último comando enviado");
+
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+        assert.equal(input.value, "1", "Debe retroceder al comando previo");
+
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+        assert.equal(input.value, "10 20", "Debe avanzar hacia adelante");
+
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+        assert.equal(input.value, "nuevo", "Debe restaurar el borrador 'nuevo'");
+
+        instance.destroy();
+      });
+    });
+
+    describe("Evolución Vista Previa: Recordar último HTML por Proyecto (savePreviewHtml / getSavedPreviewHtml)", () => {
+      test("savePreviewHtml persiste y getSavedPreviewHtml recupera la ruta del HTML para cada proyecto", () => {
+        const projA = "proj-alpha";
+        const projB = "proj-beta";
+
+        savePreviewHtml(projA, "admin/dashboard.html");
+        savePreviewHtml(projB, "public/catalogo.html");
+
+        assert.equal(getSavedPreviewHtml(projA), "admin/dashboard.html");
+        assert.equal(getSavedPreviewHtml(projB), "public/catalogo.html");
+      });
+
+      test("findBestHtmlEntrypoint prioriza el HTML recordado del proyecto sobre index.html genérico", () => {
+        const allFiles = [
+          { path: "index.html", shortName: "index.html", content: "<html><body>Home</body></html>" },
+          { path: "catalogo.html", shortName: "catalogo.html", content: "<html><body>Catalogo</body></html>" },
+          { path: "contacto.html", shortName: "contacto.html", content: "<html><body>Contacto</body></html>" }
+        ];
+
+        // Sin preferencia, prioriza index.html
+        const defaultChoice = findBestHtmlEntrypoint(allFiles, { path: "styles/theme.css", shortName: "theme.css" });
+        assert.equal(defaultChoice.path, "index.html");
+
+        // Con preferencia recordada 'catalogo.html', prioriza catalogo.html
+        const preferredChoice = findBestHtmlEntrypoint(
+          allFiles,
+          { path: "styles/theme.css", shortName: "theme.css" },
+          "catalogo.html"
+        );
+        assert.equal(preferredChoice.path, "catalogo.html");
+      });
+    });
+
+    describe("Evolución Errores C/C++: Líneas de Error Interactivas con Salto al Editor", () => {
+      test("mountCRunnerView renderiza líneas de error clickeables y activa onGoToLine en la línea señalada", async () => {
+        const container = document.createElement("div");
+        let jumpedLine = null;
+
+        const fakeGccStderr = [
+          "prog.c: In function 'main':",
+          "prog.c:14:5: error: expected ';' before 'return'",
+          "   14 |     return 0;",
+          "      |     ^~~~~~",
+          "prog.c:22:9: warning: unused variable 'x' [-Wunused-variable]"
+        ].join("\n");
+
+        const instance = mountCRunnerView(container, {
+          activeFile: { path: "prog.c", shortName: "prog.c", content: "int main(){}" },
+          onGoToLine(line) {
+            jumpedLine = line;
+          },
+          fetchFn: async () =>
+            new Response(
+              JSON.stringify({
+                status: 1,
+                compiler_error: fakeGccStderr,
+                compiler_output: "",
+                program_output: ""
+              }),
+              { status: 200 }
+            )
+        });
+
+        // Esperar la ejecución inicial
+        await new Promise((r) => setTimeout(r, 20));
+
+        const banner = container.querySelector(".c-term-err-banner");
+        assert.ok(banner, "Debe mostrar el banner informativo de errores");
+
+        const errLines = container.querySelectorAll(".c-term-err-line");
+        assert.equal(errLines.length, 2, "Debe renderizar 2 líneas de error/warning interactivas");
+
+        // Simular clic en la segunda línea de error (línea 22)
+        errLines[1].click();
+        assert.equal(jumpedLine, 22, "Al hacer clic en el warning debe invocar onGoToLine(22)");
+
+        // Simular clic en la primera línea de error (línea 14)
+        errLines[0].click();
+        assert.equal(jumpedLine, 14, "Al hacer clic en el error debe invocar onGoToLine(14)");
+
+        instance.destroy();
       });
     });
   });

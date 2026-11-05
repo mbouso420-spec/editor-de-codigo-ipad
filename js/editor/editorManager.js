@@ -431,8 +431,13 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     const doc = view.state.doc;
     const targetLine = Math.min(Math.max(1, lineNo), doc.lines);
     const lineObj = doc.line(targetLine);
+    const effects = [];
+    if (EditorView && typeof EditorView.scrollIntoView === "function") {
+      effects.push(EditorView.scrollIntoView(lineObj.from, { y: "center" }));
+    }
     view.dispatch({
       selection: { anchor: lineObj.from },
+      effects,
       scrollIntoView: true
     });
     view.focus();
@@ -826,6 +831,13 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
       }
       textarea.focus();
       textarea.setSelectionRange(offset, offset);
+      const approxLineHeight = 20;
+      const targetScroll = Math.max(0, (boundedLine - 3) * approxLineHeight);
+      if (typeof textarea.scrollTo === "function") {
+        textarea.scrollTo({ top: targetScroll, behavior: "smooth" });
+      } else {
+        textarea.scrollTop = targetScroll;
+      }
       emitSel();
     },
     triggerUndo() {

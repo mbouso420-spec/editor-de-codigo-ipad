@@ -123,6 +123,61 @@ export function trimPrematureMenuRepeat(newChunk, initialOutput) {
 }
 
 /**
+ * Gestor del historial de comandos interactivos con soporte de flechas Arriba/Abajo.
+ * Permite recordar entradas anteriores de la sesión y preservar borradores en edición.
+ */
+export function createTerminalHistory() {
+  const history = [];
+  let index = -1;
+  let draft = "";
+
+  return {
+    push(cmd) {
+      if (!cmd || typeof cmd !== "string") return;
+      const trimmed = cmd.trim();
+      if (!trimmed) return;
+      if (history.length === 0 || history[history.length - 1] !== trimmed) {
+        history.push(trimmed);
+      }
+      index = -1;
+      draft = "";
+    },
+    navigateUp(currentValue = "") {
+      if (history.length === 0) return currentValue;
+      if (index === -1) {
+        draft = currentValue;
+        index = history.length - 1;
+      } else if (index > 0) {
+        index -= 1;
+      }
+      return history[index];
+    },
+    navigateDown() {
+      if (index === -1) return draft;
+      if (index < history.length - 1) {
+        index += 1;
+        return history[index];
+      }
+      index = -1;
+      const saved = draft;
+      draft = "";
+      return saved;
+    },
+    clear() {
+      history.length = 0;
+      index = -1;
+      draft = "";
+    },
+    getEntries() {
+      return [...history];
+    },
+    getIndex() {
+      return index;
+    }
+  };
+}
+
+/**
  * Genera el payload de compilación para la API de Wandbox con soporte multi-archivo.
  * Reglas de aislamiento estricto:
  * 1. Si el archivo activo es C (.c): JAMÁS incluye archivos C++ (.cpp, .hpp) para no romper el compilador gcc de C.
@@ -461,6 +516,7 @@ export function mountCRunnerView(containerEl, {
   shell.append(header, termCard, stdinDetails);
   containerEl.appendChild(shell);
 
+  const terminalHistory = createTerminalHistory();
   let sessionInputs = [];
   let lastRawStdout = "";
   let initialMenuSnapshot = "";
@@ -508,13 +564,56 @@ export function mountCRunnerView(containerEl, {
         termBody.innerHTML = "";
         const compBlock = document.createElement("div");
         compBlock.className = "c-term-comp-err";
-        compBlock.textContent = res.compilerErr || res.compilerOut || res.stderr;
+
+        const rawErrText = (res.compilerErr || res.compilerOut || res.stderr || "").trim();
+
         if (compilerErrors.length > 0) {
+          const banner = document.createElement("div");
+          banner.className = "c-term-err-banner";
+          banner.textContent = `⚠ Se detectaron ${compilerErrors.length} fallo(s) de compilación. Hacé clic en cualquier línea para saltar al editor:`;
+          compBlock.appendChild(banner);
+
+          const errLines = rawErrText ? rawErrText.split("\n") : [];
+          for (const lineText of errLines) {
+            const trimmed = lineText.trim();
+            const matched = compilerErrors.find(
+              (e) => trimmed.includes(`:${e.line}:`) && /(error|warning|fatal error):/i.test(trimmed)
+            );
+            if (matched) {
+              const errLineEl = document.createElement("div");
+              errLineEl.className = "c-term-err-line";
+              errLineEl.setAttribute("role", "button");
+              errLineEl.setAttribute("tabindex", "0");
+              errLineEl.title = `Saltar a línea ${matched.line} en el editor`;
+              errLineEl.textContent = lineText;
+              const jump = (evt) => {
+                evt.stopPropagation();
+                onGoToLine(matched.line);
+              };
+              errLineEl.addEventListener("click", jump);
+              errLineEl.addEventListener("keydown", (evt) => {
+                if (evt.key === "Enter" || evt.key === " ") {
+                  evt.preventDefault();
+                  jump(evt);
+                }
+              });
+              compBlock.appendChild(errLineEl);
+            } else {
+              const normalLine = document.createElement("div");
+              normalLine.className = "c-term-err-raw-line";
+              normalLine.textContent = lineText;
+              compBlock.appendChild(normalLine);
+            }
+          }
+
           compBlock.title = `Hacé clic para saltar a la línea ${compilerErrors[0].line} en el editor`;
           compBlock.addEventListener("click", () => {
             onGoToLine(compilerErrors[0].line);
           });
+        } else {
+          compBlock.textContent = rawErrText || "Error de compilación desconocido";
         }
+
         termBody.appendChild(compBlock);
         onCompilerResult({ success: false, errors: compilerErrors });
         return;
@@ -629,6 +728,7 @@ export function mountCRunnerView(containerEl, {
     sessionInputs = [];
     lastRawStdout = "";
     initialMenuSnapshot = "";
+    terminalHistory.clear();
     termInput.value = "";
     termBody.innerHTML = '<span class="c-term-hint">Reiniciando consola...</span>';
     executeStep(null);
@@ -637,6 +737,7 @@ export function mountCRunnerView(containerEl, {
   function handleSendInteractiveInput() {
     const text = termInput.value.trim();
     if (!text) return;
+    terminalHistory.push(text);
     termInput.value = "";
     executeStep(text);
   }
@@ -647,6 +748,24 @@ export function mountCRunnerView(containerEl, {
     if (e.key === "Enter") {
       e.preventDefault();
       handleSendInteractiveInput();
+    } else if (e.key === "ArrowUp") {
+      if (terminalHistory.getEntries().length > 0) {
+        e.preventDefault();
+        termInput.value = terminalHistory.navigateUp(termInput.value);
+        try {
+          const pos = termInput.value.length;
+          termInput.setSelectionRange(pos, pos);
+        } catch (_) {}
+      }
+    } else if (e.key === "ArrowDown") {
+      if (terminalHistory.getIndex() !== -1) {
+        e.preventDefault();
+        termInput.value = terminalHistory.navigateDown();
+        try {
+          const pos = termInput.value.length;
+          termInput.setSelectionRange(pos, pos);
+        } catch (_) {}
+      }
     }
   });
 

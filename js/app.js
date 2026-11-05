@@ -464,7 +464,8 @@ async function initApp() {
     getWorkspaceSnapshot() {
       return {
         files: filesOnly,
-        activeFileId
+        activeFileId,
+        projectId: activeProject?.id || null
       };
     },
     async ensureFileLoaded(fileOrPath) {

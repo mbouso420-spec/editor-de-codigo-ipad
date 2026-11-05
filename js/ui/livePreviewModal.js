@@ -154,6 +154,8 @@ export function initLivePreviewModal({
 
   pageSelect?.addEventListener("change", () => {
     if (pageSelect.value) {
+      const snap = getWorkspaceSnapshot();
+      savePreviewHtml(snap?.projectId, pageSelect.value);
       void navigateToHtml(pageSelect.value, true);
     }
   });
@@ -225,11 +227,12 @@ export function initLivePreviewModal({
   }
 
   async function navigateToHtml(targetPath, pushHistory = true) {
-    const { files } = getWorkspaceSnapshot();
+    const { files, projectId } = getWorkspaceSnapshot();
     const targetFile = files.find((f) => normalizePath(f.path) === normalizePath(targetPath));
     if (!targetFile) return;
 
     currentPreviewPath = targetFile.path;
+    savePreviewHtml(projectId, targetFile.path);
 
     if (pushHistory) {
       if (historyIndex < historyStack.length - 1) {
@@ -505,6 +508,8 @@ export function initLivePreviewModal({
           }
         },
         onGoToLine(lineNum) {
+          stopIframe();
+          dialog?.close();
           if (typeof onGoToLine === "function") {
             onGoToLine(lineNum);
           }
@@ -515,7 +520,7 @@ export function initLivePreviewModal({
   }
 
   async function renderActiveTabPreview() {
-    const { files, activeFileId } = getWorkspaceSnapshot();
+    const { files, activeFileId, projectId } = getWorkspaceSnapshot();
     const activeFile = activeFileId
       ? files.find((f) => normalizePath(f.path) === normalizePath(activeFileId)) || null
       : null;
@@ -540,6 +545,7 @@ export function initLivePreviewModal({
     // 1. Pestaña HTML: ensambla recursos relativos de todo el proyecto web
     if (HTML_EXTENSIONS.has(ext)) {
       currentPreviewPath = activeFile.path;
+      savePreviewHtml(projectId, activeFile.path);
       historyStack = [activeFile.path];
       historyIndex = 0;
       updateNavButtons();
@@ -558,7 +564,8 @@ export function initLivePreviewModal({
 
     // 2. Pestaña JS: ejecuta el archivo .js (asociado al HTML del proyecto o en sandbox aislado)
     if (JS_EXTENSIONS.has(ext)) {
-      const bestHtml = findBestHtmlEntrypoint(files, activeFile);
+      const savedHtml = getSavedPreviewHtml(projectId);
+      const bestHtml = findBestHtmlEntrypoint(files, activeFile, savedHtml);
 
       if (jsRunOverride === "auto") {
         jsRunOverride = bestHtml ? "folder" : "standalone";
@@ -605,7 +612,8 @@ export function initLivePreviewModal({
 
     // 3. Pestaña CSS: se previsualiza resolviendo de forma inteligente el HTML principal del proyecto
     if (CSS_EXTENSIONS.has(ext)) {
-      const bestHtml = findBestHtmlEntrypoint(files, activeFile);
+      const savedHtml = getSavedPreviewHtml(projectId);
+      const bestHtml = findBestHtmlEntrypoint(files, activeFile, savedHtml);
       if (bestHtml) {
         currentPreviewPath = bestHtml.path;
         historyStack = [bestHtml.path];
@@ -859,17 +867,45 @@ export function extractCssImportPaths(cssPath, cssContent) {
 }
 
 /**
+ * Obtiene la ruta del último archivo HTML visualizado en un proyecto específico.
+ * @param {string|null} projectId
+ * @returns {string|null}
+ */
+export function getSavedPreviewHtml(projectId) {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    return localStorage.getItem(`studio_preview_last_html:${projectId || "default"}`) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Guarda la ruta del último archivo HTML visualizado para un proyecto específico.
+ * @param {string|null} projectId
+ * @param {string} htmlPath
+ */
+export function savePreviewHtml(projectId, htmlPath) {
+  if (typeof localStorage === "undefined" || !htmlPath) return;
+  try {
+    localStorage.setItem(`studio_preview_last_html:${projectId || "default"}`, htmlPath);
+  } catch (_) {}
+}
+
+/**
  * Resuelve de forma inteligente el mejor archivo HTML de entrada para previsualizar
  * cuando la pestaña activa es un archivo .js o .css.
  * Prioridades:
  * 1. HTML que importe o referencie explícitamente ese archivo (<script src="..."> o <link href="...">).
+ * 1b. HTML preferido/recordado previamente por el usuario en este proyecto.
  * 2. index.html en la misma carpeta o en la raíz del proyecto.
  * 3. Cualquier index.html o archivo .html disponible en el workspace.
  * @param {Array<{ path: string, shortName?: string, content: string }>} allFiles
  * @param {{ path: string, shortName?: string, content?: string }} activeFile
+ * @param {string|null} [preferredHtmlPath=null]
  * @returns {{ path: string, shortName: string, content: string } | null}
  */
-export function findBestHtmlEntrypoint(allFiles, activeFile) {
+export function findBestHtmlEntrypoint(allFiles, activeFile, preferredHtmlPath = null) {
   const htmlFiles = (allFiles || []).filter((f) => {
     if (!f || !f.path) return false;
     const clean = normalizePath(f.path);
@@ -902,6 +938,13 @@ export function findBestHtmlEntrypoint(allFiles, activeFile) {
     const index = directRefs.find((f) => (f.shortName || "").toLowerCase() === "index.html");
     if (index) return index;
     return directRefs[0];
+  }
+
+  // 1b. Prioridad: HTML recordado o seleccionado previamente por el usuario en este proyecto
+  if (preferredHtmlPath) {
+    const cleanPref = normalizePath(preferredHtmlPath);
+    const preferred = htmlFiles.find((f) => normalizePath(f.path) === cleanPref);
+    if (preferred) return preferred;
   }
 
   // 2. Prioridad: index.html en la misma carpeta
