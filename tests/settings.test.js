@@ -4,6 +4,19 @@ import assert from "node:assert/strict";
 
 import { KEYBOARD_SHORTCUTS, initSettingsModal } from "../js/ui/settingsModal.js";
 import { keyboardRouter } from "../js/ui/keyboardRouter.js";
+import { inferFileMeta } from "../js/storage/workspaceDb.js";
+import { LANGUAGE_SYMBOLS } from "../js/ui/symbolBar.js";
+import {
+  buildWandboxPayload,
+  hasMainFunction,
+  parseGccErrors
+} from "../js/preview/cRunner.js";
+import {
+  getAiTemperature,
+  setAiTemperature,
+  getAiContextBudget,
+  setAiContextBudget
+} from "../js/ai/providers.js";
 
 function createMockEl(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
@@ -23,7 +36,7 @@ function createMockEl(tag, attrs = {}, children = []) {
   return el;
 }
 
-describe("SettingsModal y Ranura de Configuración del IDE", () => {
+describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas", () => {
   beforeEach(() => {
     localStorage.clear();
     if (document.documentElement.dataset) {
@@ -35,9 +48,10 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
     document.body.children = [];
 
     // Build DOM structure
-    const btnOpen = createMockEl("button", { id: "btn-open-settings" });
+    const btnOpen = createMockEl("button", { id: "btn-open-settings", class: "btn-status-action" });
     const btnWrap = createMockEl("button", { id: "btn-editor-wrap", "aria-pressed": "true" });
     const btnMinimap = createMockEl("button", { id: "btn-editor-minimap", "aria-pressed": "true" });
+    const btnSymbols = createMockEl("button", { id: "btn-toggle-symbols", "aria-pressed": "true" });
 
     const dialog = createMockEl("dialog", { id: "settings-dialog" });
     dialog.open = false;
@@ -51,9 +65,12 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
 
     const btnClose = createMockEl("button", { id: "btn-close-settings" });
     const tabAppearance = createMockEl("button", { class: "settings-tab-btn is-active", "data-tab": "appearance", "aria-selected": "true" });
+    const tabEditor = createMockEl("button", { class: "settings-tab-btn", "data-tab": "editor", "aria-selected": "false" });
+    const tabAi = createMockEl("button", { class: "settings-tab-btn", "data-tab": "ai", "aria-selected": "false" });
     const tabShortcuts = createMockEl("button", { class: "settings-tab-btn", "data-tab": "shortcuts", "aria-selected": "false" });
     const tabStorage = createMockEl("button", { class: "settings-tab-btn", "data-tab": "storage", "aria-selected": "false" });
 
+    // Panel 1: Apariencia
     const selectTheme = createMockEl("select", { id: "select-theme" });
     const chkWordWrap = createMockEl("input", { id: "setting-word-wrap", type: "checkbox", checked: true });
     const chkMinimap = createMockEl("input", { id: "setting-minimap", type: "checkbox", checked: true });
@@ -61,6 +78,22 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
       selectTheme, chkWordWrap, chkMinimap
     ]);
 
+    // Panel 2: Editor y Autoguardado
+    const selectAutosave = createMockEl("select", { id: "setting-autosave-delay" });
+    const panelEditor = createMockEl("section", { class: "settings-tab-panel", "data-tab": "editor" }, [
+      selectAutosave
+    ]);
+    panelEditor.hidden = true;
+
+    // Panel 3: Asistente IA
+    const selectAiTemp = createMockEl("select", { id: "setting-ai-temperature" });
+    const selectAiBudget = createMockEl("select", { id: "setting-ai-budget" });
+    const panelAi = createMockEl("section", { class: "settings-tab-panel", "data-tab": "ai" }, [
+      selectAiTemp, selectAiBudget
+    ]);
+    panelAi.hidden = true;
+
+    // Panel 4: Atajos
     const filterShortcuts = createMockEl("input", { id: "setting-shortcuts-filter", type: "search" });
     const listShortcuts = createMockEl("div", { id: "setting-shortcuts-list" });
     const panelShortcuts = createMockEl("section", { class: "settings-tab-panel", "data-tab": "shortcuts" }, [
@@ -68,6 +101,7 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
     ]);
     panelShortcuts.hidden = true;
 
+    // Panel 5: Almacenamiento
     const selectKeyStorage = createMockEl("select", { id: "setting-key-storage" });
     const quotaText = createMockEl("span", { id: "setting-quota-text" });
     const panelStorage = createMockEl("section", { class: "settings-tab-panel", "data-tab": "storage" }, [
@@ -77,15 +111,20 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
 
     dialog.appendChild(btnClose);
     dialog.appendChild(tabAppearance);
+    dialog.appendChild(tabEditor);
+    dialog.appendChild(tabAi);
     dialog.appendChild(tabShortcuts);
     dialog.appendChild(tabStorage);
     dialog.appendChild(panelAppearance);
+    dialog.appendChild(panelEditor);
+    dialog.appendChild(panelAi);
     dialog.appendChild(panelShortcuts);
     dialog.appendChild(panelStorage);
 
     document.body.appendChild(btnOpen);
     document.body.appendChild(btnWrap);
     document.body.appendChild(btnMinimap);
+    document.body.appendChild(btnSymbols);
     document.body.appendChild(dialog);
   });
 
@@ -205,6 +244,45 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
     assert.equal(btnMinimap.getAttribute("aria-pressed"), "false");
   });
 
+  test("Configuración de intervalo de autoguardado (240ms, 1000ms, manual)", () => {
+    initSettingsModal({ editor: null });
+    const select = document.getElementById("setting-autosave-delay");
+
+    select.value = "1000";
+    select.dispatchEvent(new Event("change"));
+    assert.equal(localStorage.getItem("studio_autosave_delay"), "1000");
+
+    select.value = "manual";
+    select.dispatchEvent(new Event("change"));
+    assert.equal(localStorage.getItem("studio_autosave_delay"), "manual");
+
+    select.value = "240";
+    select.dispatchEvent(new Event("change"));
+    assert.equal(localStorage.getItem("studio_autosave_delay"), "240");
+  });
+
+  test("Configuración avanzada de IA: Temperatura y Presupuesto de contexto", () => {
+    initSettingsModal({ editor: null });
+    const selectTemp = document.getElementById("setting-ai-temperature");
+    const selectBudget = document.getElementById("setting-ai-budget");
+
+    selectTemp.value = "0.2";
+    selectTemp.dispatchEvent(new Event("change"));
+    assert.equal(getAiTemperature(), 0.2);
+
+    selectTemp.value = "1.0";
+    selectTemp.dispatchEvent(new Event("change"));
+    assert.equal(getAiTemperature(), 1.0);
+
+    selectBudget.value = "compact";
+    selectBudget.dispatchEvent(new Event("change"));
+    assert.equal(getAiContextBudget(), 8000);
+
+    selectBudget.value = "large";
+    selectBudget.dispatchEvent(new Event("change"));
+    assert.equal(getAiContextBudget(), 40000);
+  });
+
   test("Filtrado interactivo de atajos de teclado", () => {
     const modal = initSettingsModal({ editor: null });
     modal.open();
@@ -224,19 +302,96 @@ describe("SettingsModal y Ranura de Configuración del IDE", () => {
     assert.ok(listEl.innerHTML.includes("No se encontraron atajos"));
   });
 
-  test("Cambio de pestaña actualiza clases y atributos aria-selected", () => {
+  test("Cambio de pestaña actualiza clases y atributos aria-selected en las 5 secciones", () => {
     initSettingsModal({ editor: null });
 
     const tabButtons = document.querySelectorAll(".settings-tab-btn");
-    const tabShortcuts = Array.from(tabButtons).find((b) => b.dataset.tab === "shortcuts");
-    const panelShortcuts = document.querySelector('.settings-tab-panel[data-tab="shortcuts"]');
+    const tabEditor = Array.from(tabButtons).find((b) => b.dataset.tab === "editor");
+    const tabAi = Array.from(tabButtons).find((b) => b.dataset.tab === "ai");
+    const panelEditor = document.querySelector('.settings-tab-panel[data-tab="editor"]');
+    const panelAi = document.querySelector('.settings-tab-panel[data-tab="ai"]');
     const panelAppearance = document.querySelector('.settings-tab-panel[data-tab="appearance"]');
 
-    tabShortcuts.click();
-
-    assert.equal(tabShortcuts.classList.contains("is-active"), true);
-    assert.equal(tabShortcuts.getAttribute("aria-selected"), "true");
-    assert.equal(panelShortcuts.hidden, false);
+    tabEditor.click();
+    assert.equal(tabEditor.classList.contains("is-active"), true);
+    assert.equal(panelEditor.hidden, false);
     assert.equal(panelAppearance.hidden, true);
+
+    tabAi.click();
+    assert.equal(tabAi.classList.contains("is-active"), true);
+    assert.equal(panelAi.hidden, false);
+    assert.equal(panelEditor.hidden, true);
+  });
+
+  test("Nuevos Lenguajes: inferFileMeta reconoce Rust (.rs) y Go (.go)", () => {
+    const rustMeta = inferFileMeta("src/main.rs");
+    assert.equal(rustMeta.lang, "rust");
+    assert.equal(rustMeta.badge, "RS");
+
+    const goMeta = inferFileMeta("server/app.go");
+    assert.equal(goMeta.lang, "go");
+    assert.equal(goMeta.badge, "GO");
+  });
+
+  test("Nuevos Lenguajes: LANGUAGE_SYMBOLS contiene teclas para Rust y Go", () => {
+    assert.ok(LANGUAGE_SYMBOLS.rust);
+    assert.equal(LANGUAGE_SYMBOLS.rust.label, "Rust");
+    assert.ok(LANGUAGE_SYMBOLS.rust.keys.some((k) => k.label === "fn"));
+    assert.ok(LANGUAGE_SYMBOLS.rust.keys.some((k) => k.label === "let mut"));
+
+    assert.ok(LANGUAGE_SYMBOLS.go);
+    assert.equal(LANGUAGE_SYMBOLS.go.label, "Go");
+    assert.ok(LANGUAGE_SYMBOLS.go.keys.some((k) => k.label === "func"));
+    assert.ok(LANGUAGE_SYMBOLS.go.keys.some((k) => k.label === ":="));
+  });
+
+  test("Nuevos Lenguajes: Wandbox payload y main() para Rust y Go", () => {
+    // Rust
+    const rustCode = "fn main() {\n    println!(\"Hello Rust\");\n}";
+    assert.equal(hasMainFunction(rustCode), true);
+
+    const rustPayload = buildWandboxPayload({
+      activeFile: { path: "main.rs", content: rustCode },
+      companionFiles: [{ path: "lib.rs", content: "pub fn add(a: i32, b: i32) -> i32 { a + b }" }]
+    });
+    assert.equal(rustPayload.compiler, "rust-head");
+    assert.equal(rustPayload.codes.length, 1);
+    assert.equal(rustPayload.codes[0].file, "lib.rs");
+
+    // Go
+    const goCode = "package main\nimport \"fmt\"\nfunc main() {\n    fmt.Println(\"Hello Go\")\n}";
+    assert.equal(hasMainFunction(goCode), true);
+
+    const goPayload = buildWandboxPayload({
+      activeFile: { path: "main.go", content: goCode },
+      companionFiles: [{ path: "helper.go", content: "package main\nvar Global = 10" }]
+    });
+    assert.equal(goPayload.compiler, "go-head");
+    assert.equal(goPayload.codes.length, 1);
+    assert.equal(goPayload.codes[0].file, "helper.go");
+  });
+
+  test("Nuevos Lenguajes: parseGccErrors reconoce salidas de error de rustc y go compiler", () => {
+    // Go compiler output
+    const goOutput = `main.go:5:2: undefined: fmt.Printlln`;
+    const goErrors = parseGccErrors(goOutput);
+    assert.equal(goErrors.length, 1);
+    assert.equal(goErrors[0].line, 5);
+    assert.equal(goErrors[0].column, 2);
+    assert.ok(goErrors[0].message.includes("undefined: fmt.Printlln"));
+
+    // Rustc output
+    const rustOutput = `
+error[E0425]: cannot find value 'x' in this scope
+  --> src/main.rs:14:5
+   |
+14 |     x + 1
+   |     ^ not found in this scope
+`;
+    const rustErrors = parseGccErrors(rustOutput);
+    assert.equal(rustErrors.length, 1);
+    assert.equal(rustErrors[0].line, 14);
+    assert.equal(rustErrors[0].column, 5);
+    assert.ok(rustErrors[0].message.includes("cannot find value"));
   });
 });

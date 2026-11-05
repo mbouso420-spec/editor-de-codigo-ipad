@@ -833,7 +833,7 @@ async function runSingleGeminiStream({ cleanModel, apiKey, systemPrompt, history
 
   const bodyPayload = {
     contents,
-    generationConfig: { temperature: 0.25 }
+    generationConfig: { temperature: getAiTemperature() }
   };
   if (!isGemma) {
     bodyPayload.systemInstruction = { parts: [{ text: systemPrompt }] };
@@ -891,7 +891,7 @@ async function runSingleOpenAiStream({ providerId, endpoint, model, apiKey, syst
       model,
       messages,
       stream: true,
-      temperature: 0.25
+      temperature: getAiTemperature()
     }),
     signal
   });
@@ -960,6 +960,38 @@ async function consumeSseStream(body, onDataPacket) {
   for (const tail of remainingLines) {
     processLine(tail.trim());
   }
+}
+
+export const AI_TEMP_STORAGE_KEY = "studio_ai_temp";
+export const AI_BUDGET_STORAGE_KEY = "studio_ai_budget";
+
+export function getAiTemperature() {
+  try {
+    const val = parseFloat(localStorage.getItem(AI_TEMP_STORAGE_KEY));
+    if (!isNaN(val) && val >= 0 && val <= 2) return val;
+  } catch (_) {}
+  return 0.25;
+}
+
+export function setAiTemperature(temp) {
+  try {
+    localStorage.setItem(AI_TEMP_STORAGE_KEY, String(temp));
+  } catch (_) {}
+}
+
+export function getAiContextBudget() {
+  try {
+    const val = localStorage.getItem(AI_BUDGET_STORAGE_KEY);
+    if (val === "compact") return 8000;
+    if (val === "large") return 40000;
+  } catch (_) {}
+  return 16000;
+}
+
+export function setAiContextBudget(mode) {
+  try {
+    localStorage.setItem(AI_BUDGET_STORAGE_KEY, String(mode));
+  } catch (_) {}
 }
 
 async function extractApiError(res, label) {

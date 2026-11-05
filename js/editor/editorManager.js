@@ -17,7 +17,7 @@ const DEFAULT_FONT_SIZE = 14;
  * @returns {number}
  */
 export function getIndentSize(lang) {
-  return lang === "python" || lang === "cpp" || lang === "c" || lang === "sql" ? 4 : 2;
+  return lang === "python" || lang === "cpp" || lang === "c" || lang === "sql" || lang === "rust" || lang === "go" ? 4 : 2;
 }
 
 /**
@@ -255,6 +255,8 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         return [];
       case "json":
         return langs.json ? langs.json() : langs.javascript();
+      case "rust":
+      case "go":
       case "cpp":
       case "c":
         return langs.cpp();

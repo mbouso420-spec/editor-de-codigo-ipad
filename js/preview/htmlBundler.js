@@ -9,6 +9,8 @@ export const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
 export const SQL_EXTENSIONS = new Set(["sql"]);
 export const C_EXTENSIONS = new Set(["c", "h"]);
 export const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp"]);
+export const RUST_EXTENSIONS = new Set(["rs"]);
+export const GO_EXTENSIONS = new Set(["go"]);
 
 export const MAX_PREVIEW_ASSET_BYTES = 512 * 1024; // 512 KB por recurso individual
 

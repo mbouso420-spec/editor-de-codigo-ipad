@@ -1,6 +1,13 @@
 import { keyboardRouter } from "./keyboardRouter.js";
 import { getStorageQuotaEstimate, formatStorageBytes } from "../storage/storageQuota.js";
-import { getKeyStorageMode, setKeyStorageMode } from "../ai/providers.js";
+import {
+  getKeyStorageMode,
+  setKeyStorageMode,
+  getAiTemperature,
+  setAiTemperature,
+  getAiContextBudget,
+  setAiContextBudget
+} from "../ai/providers.js";
 
 const THEME_STORAGE_KEY = "studio_theme";
 
@@ -40,6 +47,9 @@ export function initSettingsModal({ editor, onThemeChange }) {
   const chkWordWrap = document.getElementById("setting-word-wrap");
   const chkMinimap = document.getElementById("setting-minimap");
   const selectKeyStorage = document.getElementById("setting-key-storage");
+  const selectAutosave = document.getElementById("setting-autosave-delay");
+  const selectAiTemp = document.getElementById("setting-ai-temperature");
+  const selectAiBudget = document.getElementById("setting-ai-budget");
   const quotaTextEl = document.getElementById("setting-quota-text");
   const shortcutsFilter = document.getElementById("setting-shortcuts-filter");
   const shortcutsListEl = document.getElementById("setting-shortcuts-list");
@@ -88,6 +98,28 @@ export function initSettingsModal({ editor, onThemeChange }) {
 
     if (selectKeyStorage) {
       selectKeyStorage.value = getKeyStorageMode();
+    }
+
+    if (selectAutosave) {
+      try {
+        const stored = localStorage.getItem("studio_autosave_delay") || "240";
+        selectAutosave.value = stored;
+      } catch (_) {
+        selectAutosave.value = "240";
+      }
+    }
+
+    if (selectAiTemp) {
+      selectAiTemp.value = String(getAiTemperature());
+    }
+
+    if (selectAiBudget) {
+      try {
+        const stored = localStorage.getItem("studio_ai_budget") || "standard";
+        selectAiBudget.value = stored;
+      } catch (_) {
+        selectAiBudget.value = "standard";
+      }
     }
   }
 
@@ -195,6 +227,23 @@ export function initSettingsModal({ editor, onThemeChange }) {
     if (mode === "session" || mode === "local") {
       setKeyStorageMode(mode);
     }
+  });
+
+  selectAutosave?.addEventListener("change", (e) => {
+    const val = (e?.target ? e.target.value : selectAutosave?.value) || "240";
+    try {
+      localStorage.setItem("studio_autosave_delay", val);
+    } catch (_) {}
+  });
+
+  selectAiTemp?.addEventListener("change", (e) => {
+    const val = parseFloat((e?.target ? e.target.value : selectAiTemp?.value) || "0.7");
+    setAiTemperature(val);
+  });
+
+  selectAiBudget?.addEventListener("change", (e) => {
+    const val = (e?.target ? e.target.value : selectAiBudget?.value) || "standard";
+    setAiContextBudget(val);
   });
 
   shortcutsFilter?.addEventListener("input", (e) => {

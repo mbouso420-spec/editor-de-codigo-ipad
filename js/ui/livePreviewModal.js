@@ -41,6 +41,8 @@ import {
   SQL_EXTENSIONS,
   C_EXTENSIONS,
   CPP_EXTENSIONS,
+  RUST_EXTENSIONS,
+  GO_EXTENSIONS,
   MAX_PREVIEW_ASSET_BYTES,
   IGNORED_PREVIEW_DIRS,
   getFileExtension,
@@ -491,7 +493,11 @@ export function initLivePreviewModal({
     const ext = getFileExtension(activeFile.path);
     const isC = C_EXTENSIONS.has(ext);
     if (titleEl) {
-      if (ext === "h" || ext === "hpp") {
+      if (ext === "rs") {
+        titleEl.textContent = "Compilador Rust (rustc)";
+      } else if (ext === "go") {
+        titleEl.textContent = "Compilador Go (golang)";
+      } else if (ext === "h" || ext === "hpp") {
         titleEl.textContent = ext === "h" ? "Cabecera C (.h)" : "Cabecera C++ (.hpp)";
       } else {
         titleEl.textContent = isC ? "Compilador C (GCC)" : "Compilador C++ (G++)";
@@ -719,8 +725,8 @@ export function initLivePreviewModal({
       return;
     }
 
-    // 7. Pestaña C / C++ (.c, .cpp, .cxx, .cc, .h, .hpp): Runner C/C++ nativo sin iframe
-    if (C_EXTENSIONS.has(ext) || CPP_EXTENSIONS.has(ext)) {
+    // 7. Pestaña C / C++ / Rust / Go (.c, .cpp, .rs, .go, etc.): Runner nativo sin iframe
+    if (C_EXTENSIONS.has(ext) || CPP_EXTENSIONS.has(ext) || RUST_EXTENSIONS.has(ext) || GO_EXTENSIONS.has(ext)) {
       showCRunnerView(activeFile, sameFolderFiles);
       return;
     }

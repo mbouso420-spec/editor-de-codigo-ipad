@@ -561,7 +561,7 @@ async function initApp() {
     }
   });
 
-  const PREVIEWABLE_LANGS = new Set(["html", "js", "css", "python", "markdown", "c", "cpp", "sql"]);
+  const PREVIEWABLE_LANGS = new Set(["html", "js", "css", "python", "markdown", "c", "cpp", "sql", "rust", "go"]);
 
   initLivePreviewModal({
     getWorkspaceSnapshot() {
@@ -631,8 +631,8 @@ async function initApp() {
         if (activeFile.lang === "python") {
           return f.lang === "python";
         }
-        if (activeFile.lang === "c" || activeFile.lang === "cpp") {
-          return f.lang === "c" || f.lang === "cpp" || f.path.endsWith(".h") || f.path.endsWith(".hpp");
+        if (activeFile.lang === "c" || activeFile.lang === "cpp" || activeFile.lang === "rust" || activeFile.lang === "go") {
+          return f.lang === activeFile.lang || f.path.endsWith(".h") || f.path.endsWith(".hpp");
         }
         if (activeFile.lang === "sql") {
           return f.lang === "sql";
@@ -666,6 +666,12 @@ async function initApp() {
       case "cpp":
       case "c++":
         return "main.cpp";
+      case "rust":
+      case "rs":
+        return "main.rs";
+      case "go":
+      case "golang":
+        return "main.go";
       case "c":
         return "main.c";
       case "html":
@@ -850,8 +856,9 @@ async function initApp() {
   window.addEventListener("pagehide", backupAndFlush);
   window.addEventListener("beforeunload", backupAndFlush);
 
+  const btnToggleSymbols = document.getElementById("btn-toggle-symbols");
   syncToolbarState();
-  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp, btnMinimap]);
+  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp, btnMinimap, btnToggleSymbols]);
 
   btnUndo?.addEventListener("click", () => editor.triggerUndo());
   btnRedo?.addEventListener("click", () => editor.triggerRedo());
@@ -873,14 +880,33 @@ async function initApp() {
     if (zoomReadoutEl) zoomReadoutEl.textContent = `${size}px`;
   });
 
+  const AUTOSAVE_STORAGE_KEY = "studio_autosave_delay";
+  function getAutosaveDelay() {
+    try {
+      const stored = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+      if (stored === "manual") return -1;
+      if (stored === "1000") return 1000;
+      return 240;
+    } catch {
+      return 240;
+    }
+  }
+
   function scheduleAutosave(projectId, filePath, content) {
-    explorer.setAutosaveStatus("Guardando…");
+    const delay = getAutosaveDelay();
     const timerKey = `${projectId}::${filePath}`;
     const prev = saveTimers.get(timerKey);
     if (prev && prev.timerId) {
       window.clearTimeout(prev.timerId);
     }
 
+    if (delay < 0) {
+      saveTimers.set(timerKey, { timerId: 0, projectId, filePath, content });
+      explorer.setAutosaveStatus("Modificado (Guardar con Cmd+S)");
+      return;
+    }
+
+    explorer.setAutosaveStatus("Guardando…");
     const item = { timerId: 0, projectId, filePath, content };
     item.timerId = window.setTimeout(async () => {
       item.timerId = 0;
@@ -892,7 +918,7 @@ async function initApp() {
       }
       explorer.setAutosaveStatus("Autoguardado en IndexedDB");
       await github.refreshTopbarBadge();
-    }, 240);
+    }, delay);
 
     saveTimers.set(timerKey, item);
   }

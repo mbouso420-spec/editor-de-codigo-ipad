@@ -4,7 +4,7 @@ const SYMBOL_STORAGE_KEY = "ide.symbols.visible";
  * Mapas de símbolos táctiles adaptados al lenguaje activo.
  * Indentación inteligente: 4 espacios en C/C++ y SQL; 2 espacios en HTML, CSS y JS.
  */
-const LANGUAGE_SYMBOLS = {
+export const LANGUAGE_SYMBOLS = {
   cpp: {
     label: "C / C++",
     keys: [
@@ -20,6 +20,41 @@ const LANGUAGE_SYMBOLS = {
       { label: "*", insert: "*", cursorBack: 0 },
       { label: "&", insert: "&", cursorBack: 0 },
       { label: "=", insert: " = ", cursorBack: 0 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 }
+    ]
+  },
+  rust: {
+    label: "Rust",
+    keys: [
+      { label: "Tab", insert: "    ", cursorBack: 0 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: "fn", insert: "fn () {\n    \n}", cursorBack: 7 },
+      { label: "let mut", insert: "let mut ", cursorBack: 0 },
+      { label: "->", insert: " -> ", cursorBack: 0 },
+      { label: "::", insert: "::", cursorBack: 0 },
+      { label: "pub", insert: "pub ", cursorBack: 0 },
+      { label: "struct", insert: "struct {\n    \n}", cursorBack: 7 },
+      { label: "&", insert: "&", cursorBack: 0 },
+      { label: ";", insert: ";", cursorBack: 0 },
+      { label: "!=", insert: " != ", cursorBack: 0 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 }
+    ]
+  },
+  go: {
+    label: "Go",
+    keys: [
+      { label: "Tab", insert: "    ", cursorBack: 0 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: "func", insert: "func () {\n    \n}", cursorBack: 7 },
+      { label: ":=", insert: " := ", cursorBack: 0 },
+      { label: "package", insert: "package main\n\n", cursorBack: 0 },
+      { label: "import", insert: "import (\n\t\"\"\n)", cursorBack: 4 },
+      { label: "err != nil", insert: "if err != nil {\n    return \n}", cursorBack: 2 },
+      { label: "return", insert: "return ", cursorBack: 0 },
+      { label: "fmt.Println", insert: "fmt.Println()", cursorBack: 1 },
+      { label: ";", insert: ";", cursorBack: 0 },
       { label: "\" \"", insert: "\"\"", cursorBack: 1 }
     ]
   },

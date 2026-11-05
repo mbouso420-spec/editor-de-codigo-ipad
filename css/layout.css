@@ -463,6 +463,32 @@ body[data-symbols-visible="false"] .symbol-bar {
   font-weight: 500;
 }
 
+.btn-status-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  line-height: 1;
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.btn-status-action:hover {
+  color: var(--color-ink);
+  background-color: var(--color-selection);
+}
+
+.btn-status-action:focus-visible {
+  outline: 2px solid var(--color-focus);
+  color: var(--color-ink);
+}
+
 @media (max-width: 28rem) {
   .status-bar-tag {
     display: none;

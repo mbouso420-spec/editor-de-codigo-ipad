@@ -4,6 +4,7 @@ import {
   clearApiKey,
   exportKeysBundle,
   fetchLiveFreeModels,
+  getAiContextBudget,
   getApiKey,
   getKeyStorageMode,
   getSavedModel,
@@ -938,13 +939,14 @@ export function initChatController({
   }
 
   function buildSystemPrompt(snapshot) {
+    const budget = getAiContextBudget();
     const parts = [
       "Sos el asistente de programación integrado en Studio IDE (estilo Antigravity).",
-      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```python, ```cpp, ```html, ```css, ```js, ```sql, ```markdown) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad."
+      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```python, ```cpp, ```rust, ```go, ```html, ```css, ```js, ```sql, ```markdown) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad."
     ];
 
     if (snapshot.activeFile) {
-      const safeActiveContent = truncateCodeContent(snapshot.activeFile.content, 16000);
+      const safeActiveContent = truncateCodeContent(snapshot.activeFile.content, budget);
       parts.push(
         `\n--- ARCHIVO ACTIVO EN EL EDITOR: ${snapshot.activeFile.name} (${snapshot.activeFile.lang}) ---\n\`\`\`${snapshot.activeFile.lang}\n${safeActiveContent}\n\`\`\``
       );

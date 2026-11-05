@@ -8,13 +8,15 @@ export const C_SOURCE_EXTENSIONS = new Set(["c"]);
 export const C_HEADER_EXTENSIONS = new Set(["h"]);
 export const CPP_SOURCE_EXTENSIONS = new Set(["cpp", "cxx", "cc"]);
 export const CPP_HEADER_EXTENSIONS = new Set(["hpp", "hxx", "hh"]);
+export const RUST_SOURCE_EXTENSIONS = new Set(["rs"]);
+export const GO_SOURCE_EXTENSIONS = new Set(["go"]);
 
 export const ALL_HEADER_EXTENSIONS = new Set(["h", "hpp", "hxx", "hh"]);
 export const ALL_C_EXTENSIONS = new Set(["c", "h"]);
 export const ALL_CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp", "hxx", "hh"]);
 
 /**
- * Detecta si un código fuente en C o C++ define la función de punto de entrada main().
+ * Detecta si un código fuente en C, C++, Rust o Go define la función de punto de entrada main().
  * Descarta comentarios de bloque y de línea para prevenir falsos positivos.
  * @param {string} code
  * @returns {boolean}
@@ -24,7 +26,7 @@ export function hasMainFunction(code) {
   const stripped = code
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\/\/[^\r\n]*/g, " ");
-  return /\b(?:int|void|auto|signed)?\s*main\s*\([^)]*\)\s*(?:->\s*[a-zA-Z0-9_:<>]+\s*)?\{/m.test(stripped);
+  return /\b(?:int|void|auto|signed|fn|func)?\s*main\s*(?:\([^)]*\)|!\s*\(|\(\s*\))\s*(?:->\s*[a-zA-Z0-9_:<>]+\s*)?\{/m.test(stripped);
 }
 
 /**
@@ -199,12 +201,25 @@ export function createTerminalHistory() {
  */
 export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "" }) {
   const ext = getFileExtension(activeFile.path);
+  const isRust = RUST_SOURCE_EXTENSIONS.has(ext);
+  const isGo = GO_SOURCE_EXTENSIONS.has(ext);
   const isCSource = C_SOURCE_EXTENSIONS.has(ext);
   const isCHeader = C_HEADER_EXTENSIONS.has(ext);
   const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
 
-  const compiler = isC ? "gcc-head-c" : "gcc-head";
-  const options = isC ? "c17,warning" : "c++20,warning";
+  let compiler = "gcc-head";
+  let options = "c++20,warning";
+
+  if (isRust) {
+    compiler = "rust-head";
+    options = "";
+  } else if (isGo) {
+    compiler = "go-head";
+    options = "";
+  } else if (isC) {
+    compiler = "gcc-head-c";
+    options = "c17,warning";
+  }
 
   const cleanActivePath = normalizePath(activeFile.path);
   const activeBaseDir = getParentFolder(cleanActivePath);
@@ -221,10 +236,11 @@ export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "
     const compExt = getFileExtension(comp.path);
 
     // 1. REGLA ESTRICTA DE LENGUAJE:
-    // Si estamos compilando un archivo C (gcc-head-c):
-    // JAMÁS incluir archivos de código fuente C++ (.cpp, .cxx, .cc) ni cabeceras C++ (.hpp).
-    // El compilador GCC de C no puede procesar C++ ni enlazar con libstdc++.
-    if (isC) {
+    if (isRust) {
+      if (!RUST_SOURCE_EXTENSIONS.has(compExt)) continue;
+    } else if (isGo) {
+      if (!GO_SOURCE_EXTENSIONS.has(compExt)) continue;
+    } else if (isC) {
       if (!C_SOURCE_EXTENSIONS.has(compExt) && !C_HEADER_EXTENSIONS.has(compExt)) {
         continue;
       }
@@ -338,7 +354,7 @@ export async function compileAndRunWandbox(payload, fetchFn = (typeof window !==
 export function parseGccErrors(output) {
   if (!output || typeof output !== "string") return [];
   const errors = [];
-  const regex = /(?:^|\n)(?:[^\s:]+):(\d+)(?::(\d+))?:\s*(fatal error|error|warning)?:\s*([^\r\n]+)/gi;
+  const regex = /(?:^|\n)(?:[^\s:]+):(\d+)(?::(\d+))?:\s*(?:(fatal error|error|warning):\s*)?([^\r\n]+)/gi;
   let match;
   while ((match = regex.exec(output)) !== null) {
     const line = parseInt(match[1], 10);
@@ -355,6 +371,25 @@ export function parseGccErrors(output) {
       });
     }
   }
+
+  // Soporte para formato de error de Rust: error[E...]: mensaje \n  --> archivo:linea:columna
+  const rustRegex = /(?:^|\n)(error(?:\[[^\]]+\])?|warning(?:\[[^\]]+\])?):\s*([^\r\n]+)\s*\n\s*-->\s*(?:[^\s:]+):(\d+):(\d+)/gi;
+  while ((match = rustRegex.exec(output)) !== null) {
+    const severity = match[1].toLowerCase().startsWith("warning") ? "warning" : "error";
+    const rawMessage = match[2].trim();
+    const line = parseInt(match[3], 10);
+    const column = parseInt(match[4], 10);
+    if (!isNaN(line)) {
+      errors.push({
+        line,
+        column,
+        severity,
+        message: rawMessage,
+        raw: match[0].trim()
+      });
+    }
+  }
+
   return errors;
 }
 
@@ -382,11 +417,19 @@ export function mountCRunnerView(containerEl, {
   containerEl.innerHTML = "";
 
   const ext = getFileExtension(activeFile.path);
+  const isRust = RUST_SOURCE_EXTENSIONS.has(ext);
+  const isGo = GO_SOURCE_EXTENSIONS.has(ext);
   const isCSource = C_SOURCE_EXTENSIONS.has(ext);
   const isCHeader = C_HEADER_EXTENSIONS.has(ext);
   const isHeader = ALL_HEADER_EXTENSIONS.has(ext);
   const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
-  const langLabel = isHeader ? (isC ? "C Header (.h)" : "C++ Header (.hpp)") : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
+  const langLabel = isRust
+    ? "Rust (Wandbox / rustc)"
+    : isGo
+    ? "Go (Wandbox / golang)"
+    : isHeader
+    ? (isC ? "C Header (.h)" : "C++ Header (.hpp)")
+    : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
   const initialPayload = buildWandboxPayload({ activeFile, companionFiles, stdin: "" });
   const companionCount = initialPayload.codes.length;
   const companionLabel = companionCount > 0
@@ -845,11 +888,19 @@ function escapeHtml(str) {
  */
 export function buildCRunnerPreview(activeFile, companionFiles = []) {
   const ext = getFileExtension(activeFile.path);
+  const isRust = RUST_SOURCE_EXTENSIONS.has(ext);
+  const isGo = GO_SOURCE_EXTENSIONS.has(ext);
   const isCSource = C_SOURCE_EXTENSIONS.has(ext);
   const isCHeader = C_HEADER_EXTENSIONS.has(ext);
   const isHeader = ALL_HEADER_EXTENSIONS.has(ext);
   const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
-  const langLabel = isHeader ? (isC ? "C Header (.h)" : "C++ Header (.hpp)") : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
+  const langLabel = isRust
+    ? "Rust (Wandbox / rustc)"
+    : isGo
+    ? "Go (Wandbox / golang)"
+    : isHeader
+    ? (isC ? "C Header (.h)" : "C++ Header (.hpp)")
+    : (isC ? "C (GCC 14 / C17)" : "C++ (GCC 14 / C++20)");
   const safeTitle = escapeHtml(activeFile.shortName || activeFile.path);
 
   const initialPayload = buildWandboxPayload({ activeFile, companionFiles, stdin: "" });

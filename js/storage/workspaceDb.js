@@ -65,6 +65,10 @@ export function inferFileMeta(path) {
     case "c":
     case "h":
       return { lang: "c", badge: "C", icon: "fileCode" };
+    case "rs":
+      return { lang: "rust", badge: "RS", icon: "fileCode" };
+    case "go":
+      return { lang: "go", badge: "GO", icon: "fileCode" };
     case "html":
     case "htm":
       return { lang: "html", badge: "HTML", icon: "fileText" };

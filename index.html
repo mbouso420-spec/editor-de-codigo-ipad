@@ -75,17 +75,6 @@
 
         <button
           type="button"
-          id="btn-toggle-symbols"
-          class="btn btn-ghost"
-          aria-pressed="true"
-          title="Mostrar u ocultar barra de símbolos para iPad"
-        >
-          <span data-icon="keyboard"></span>
-          <span class="topbar-label-collapsible">Símbolos</span>
-        </button>
-
-        <button
-          type="button"
           id="btn-toggle-right"
           class="btn btn-ghost"
           aria-expanded="true"
@@ -94,17 +83,6 @@
         >
           <span data-icon="panelRight"></span>
           <span class="topbar-label-collapsible">Asistente</span>
-        </button>
-
-        <button
-          type="button"
-          id="btn-open-settings"
-          class="btn btn-ghost"
-          aria-haspopup="dialog"
-          title="Configuración y atajos de teclado (Cmd/Ctrl + ,)"
-        >
-          <span data-icon="settings"></span>
-          <span class="topbar-label-collapsible">Configuración</span>
         </button>
 
         <button type="button" id="btn-open-github" class="btn btn-primary" title="Sincronizar repositorios de GitHub y publicar commits">
@@ -232,6 +210,16 @@
             </button>
             <button
               type="button"
+              id="btn-toggle-symbols"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-pressed="true"
+              aria-label="Alternar barra de símbolos"
+              title="Mostrar u ocultar barra de símbolos para iPad"
+            >
+              <span data-icon="keyboard"></span>
+            </button>
+            <button
+              type="button"
               id="btn-editor-minimap"
               class="btn btn-ghost btn-sm btn-icon"
               aria-pressed="true"
@@ -287,6 +275,15 @@
           <div class="status-bar-group">
             <span id="status-cursor-pos" class="status-bar-cursor num">Línea 1, Col 1</span>
             <span id="status-network-state" class="status-bar-net" aria-live="polite">En línea</span>
+            <button
+              type="button"
+              id="btn-open-settings"
+              class="btn-status-action"
+              aria-haspopup="dialog"
+              title="Configuración y atajos de teclado (Cmd/Ctrl + ,)"
+            >
+              <span data-icon="settings"></span>
+            </button>
           </div>
         </footer>
       </main>
@@ -845,6 +842,8 @@
       <div class="dialog-body">
         <div class="settings-tabs-bar" role="tablist" aria-label="Secciones de configuración">
           <button type="button" class="settings-tab-btn is-active" data-tab="appearance" role="tab" aria-selected="true">Apariencia</button>
+          <button type="button" class="settings-tab-btn" data-tab="editor" role="tab" aria-selected="false">Editor</button>
+          <button type="button" class="settings-tab-btn" data-tab="ai" role="tab" aria-selected="false">Asistente IA</button>
           <button type="button" class="settings-tab-btn" data-tab="shortcuts" role="tab" aria-selected="false">Atajos de Teclado</button>
           <button type="button" class="settings-tab-btn" data-tab="storage" role="tab" aria-selected="false">Almacenamiento</button>
         </div>
@@ -872,6 +871,39 @@
                 <input type="checkbox" id="setting-minimap" checked>
                 <span class="setting-toggle-label">Minimapa visual lateral (vista de pájaro para archivos extensos)</span>
               </label>
+            </div>
+          </div>
+
+          <!-- Pestaña 2: Editor y Autoguardado -->
+          <div class="settings-tab-panel" data-tab="editor" hidden>
+            <div class="setting-field">
+              <label for="setting-autosave-delay" class="setting-label">Frecuencia de autoguardado en almacenamiento local</label>
+              <select id="setting-autosave-delay" class="field-control">
+                <option value="240">Tiempo real (240 ms - recomendado para iPad y resiliencia)</option>
+                <option value="1000">Pausado (1 segundo - menor frecuencia de escritura)</option>
+                <option value="manual">Manual únicamente (guardar con Cmd/Ctrl + S)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Pestaña 3: Asistente IA -->
+          <div class="settings-tab-panel" data-tab="ai" hidden>
+            <div class="setting-field">
+              <label for="setting-ai-temperature" class="setting-label">Temperatura de generación de la IA</label>
+              <select id="setting-ai-temperature" class="field-control">
+                <option value="0.2">Preciso / Código estricto (0.2)</option>
+                <option value="0.7">Equilibrado (0.7 - recomendado)</option>
+                <option value="1.0">Creativo y exploratorio (1.0)</option>
+              </select>
+            </div>
+
+            <div class="setting-field">
+              <label for="setting-ai-budget" class="setting-label">Presupuesto de contexto de código por mensaje</label>
+              <select id="setting-ai-budget" class="field-control">
+                <option value="compact">Compacto (~2,000 tokens / 8 KB - ideal conexiones lentas)</option>
+                <option value="standard">Estándar (~4,000 tokens / 16 KB - recomendado)</option>
+                <option value="large">Extenso (~10,000 tokens / 40 KB - proyectos amplios)</option>
+              </select>
             </div>
           </div>
 
