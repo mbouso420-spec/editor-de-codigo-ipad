@@ -521,12 +521,16 @@ export async function pushAtomicCommit({
         throw new Error("El repositorio remoto está vacío; creá al menos un archivo para inicializarlo.");
       }
       const firstFile = remainingChanges[firstAddedIdx];
+      const isBin = firstFile.isBinary || firstFile.encoding === "base64" || Boolean(firstFile.base64);
+      const contentPayload = isBin
+        ? (firstFile.base64 || firstFile.content)
+        : encodeUtf8Base64(firstFile.content);
       const initRes = await client.request("PUT /repos/{owner}/{repo}/contents/{path}", {
         owner,
         repo,
         path: firstFile.path,
         message: cleanMsg,
-        content: encodeUtf8Base64(firstFile.content),
+        content: contentPayload,
         branch
       });
       latestCommitSha = initRes?.commit?.sha || null;
@@ -556,23 +560,43 @@ export async function pushAtomicCommit({
     throw new RemoteAheadError(latestCommitSha, expectedBaseSha);
   }
 
-  const treeItems = remainingChanges.map((change) => {
+  const treeItems = [];
+  for (const change of remainingChanges) {
     if (change.status === "deleted") {
-      return {
+      treeItems.push({
         path: change.path,
         mode: "100644",
         type: "blob",
         sha: null
-      };
+      });
+      continue;
     }
-    return {
-      path: change.path,
-      // Conserva el bit de ejecución (100755) de scripts existentes; el resto se publica como archivo normal.
-      mode: change.mode === "100755" ? "100755" : "100644",
-      type: "blob",
-      content: change.content
-    };
-  });
+    const mode = change.mode === "100755" ? "100755" : "100644";
+    if (change.isBinary || change.encoding === "base64" || (change.base64 && typeof change.base64 === "string")) {
+      const b64 = change.base64 || (typeof change.content === "string" ? change.content : "");
+      const createdBlob = await client.request("POST /repos/{owner}/{repo}/git/blobs", {
+        owner,
+        repo,
+        content: b64,
+        encoding: "base64"
+      });
+      const blobSha = createdBlob?.sha || createdBlob?.data?.sha || null;
+      treeItems.push({
+        path: change.path,
+        mode,
+        type: "blob",
+        sha: blobSha
+      });
+    } else {
+      treeItems.push({
+        path: change.path,
+        // Conserva el bit de ejecución (100755) de scripts existentes; el resto se publica como archivo normal.
+        mode,
+        type: "blob",
+        content: typeof change.content === "string" ? change.content : ""
+      });
+    }
+  }
 
   const createdTree = await client.request("POST /repos/{owner}/{repo}/git/trees", {
     owner,
@@ -793,6 +817,8 @@ export async function publishProjectAsNewRepository(token, { repoName, isPrivate
       changes: fileEntries.map((f) => ({
         path: f.path,
         content: typeof f.content === "string" ? f.content : "",
+        isBinary: Boolean(f.isBinary),
+        base64: f.base64 || null,
         mode: f.mode || null,
         status: "added"
       }))
@@ -806,4 +832,19 @@ export async function publishProjectAsNewRepository(token, { repoName, isPrivate
     fullName: createdRepo.full_name,
     url: createdRepo.html_url
   };
+}
+
+/**
+ * Crea un blob Git en el repositorio remoto usando GitHub REST API.
+ * @param {{ token: string, owner: string, repo: string, content: string, encoding?: "utf-8" | "base64" }} options
+ */
+export async function createGitBlob({ token, owner, repo, content, encoding = "utf-8" }) {
+  const client = await createGithubClient(token);
+  const res = await client.request("POST /repos/{owner}/{repo}/git/blobs", {
+    owner,
+    repo,
+    content,
+    encoding
+  });
+  return res?.sha || res?.data?.sha || "";
 }

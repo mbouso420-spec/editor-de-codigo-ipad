@@ -1,7 +1,6 @@
 /**
- * Decide si un archivo elegido para importar es texto editable.
- * Los binarios (imágenes, PDFs, ZIP…) convertidos a texto quedarían corruptos y, si se publicaran
- * con un commit, dañarían el original en GitHub; por eso se rechazan con un motivo claro.
+ * Decide si un archivo elegido para importar es texto editable o un recurso binario soportado.
+ * Los binarios no soportados (ZIP, ejecutables, audio masivo…) se rechazan para evitar corrupciones.
  */
 const BINARY_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "tif", "tiff", "heic", "psd",
@@ -12,20 +11,45 @@ const BINARY_EXTENSIONS = new Set([
   "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "sqlite", "db"
 ]);
 
+export const SUPPORTED_BINARY_ASSET_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "pdf", "ico", "svg"
+]);
+
 export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const SNIFF_BYTES = 8000;
+
+export function uint8ArrayToBase64(bytes) {
+  if (!bytes) return "";
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 /**
  * @param {Uint8Array} bytes
  * @param {string} fileName
- * @returns {{ ok: true, text: string } | { ok: false, reason: string }}
+ * @param {{ allowBinaryAssets?: boolean }} [options]
+ * @returns {{ ok: true, text?: string, isBinary?: boolean, base64?: string } | { ok: false, reason: string }}
  */
-export function decodeImportedFile(bytes, fileName) {
+export function decodeImportedFile(bytes, fileName, options = {}) {
   if (bytes && bytes.length > MAX_IMPORT_FILE_BYTES) {
     return { ok: false, reason: "supera el límite de 5 MB por archivo" };
   }
   const base = String(fileName || "").split("/").pop() || "";
   const ext = base.includes(".") ? base.split(".").pop().toLowerCase() : "";
+
+  if (options.allowBinaryAssets && SUPPORTED_BINARY_ASSET_EXTENSIONS.has(ext)) {
+    return {
+      ok: true,
+      isBinary: true,
+      base64: uint8ArrayToBase64(bytes),
+      fileName: base
+    };
+  }
+
   if (BINARY_EXTENSIONS.has(ext)) {
     return { ok: false, reason: "es un archivo binario: imagen, documento o comprimido" };
   }

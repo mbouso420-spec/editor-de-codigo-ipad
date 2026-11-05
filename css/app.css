@@ -80,6 +80,32 @@
   border: var(--rule-hair) solid var(--color-rule);
 }
 
+.select-theme {
+  height: var(--control-height-sm);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+  border: var(--rule-hair) solid var(--color-rule);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color var(--dur-micro) var(--ease-out),
+    background-color var(--dur-micro) var(--ease-out);
+}
+
+.select-theme:hover {
+  background: var(--color-paper-3);
+  border-color: var(--color-rule-strong);
+}
+
+.select-theme:focus-visible {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px var(--color-accent-soft);
+}
+
 /* Controles y botones amigables al tacto en iPad */
 .btn {
   display: inline-flex;

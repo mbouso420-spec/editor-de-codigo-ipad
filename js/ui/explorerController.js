@@ -289,12 +289,19 @@ export function initExplorerController({
         rejected.push(`${file.name} (el nombre tiene caracteres no permitidos)`);
         continue;
       }
-      const decoded = decodeImportedFile(new Uint8Array(await file.arrayBuffer()), file.name);
+      const decoded = decodeImportedFile(new Uint8Array(await file.arrayBuffer()), file.name, {
+        allowBinaryAssets: true
+      });
       if (!decoded.ok) {
         rejected.push(`${file.name} (${decoded.reason})`);
         continue;
       }
-      imported.push({ path: cleanPath, content: decoded.text });
+      imported.push({
+        path: cleanPath,
+        content: decoded.text,
+        isBinary: Boolean(decoded.isBinary),
+        base64: decoded.base64 || null
+      });
     }
 
     const rejectedMsg = rejected.length > 0 ? `No se importó: ${rejected.join(", ")}` : "";

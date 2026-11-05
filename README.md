@@ -190,3 +190,8 @@ npx serve .
 ```
 
 Abrí `http://localhost:8080` en tu navegador. Para más información, consultá el [**Manual de Usuario (`MANUAL_DE_USUARIO.md`)**](./MANUAL_DE_USUARIO.md).
+
+## Licencia
+
+Este proyecto está bajo la Licencia MIT. Consultá el archivo [`LICENSE`](./LICENSE) para más detalles.  
+Copyright (c) 2026 Mateo Bouso.

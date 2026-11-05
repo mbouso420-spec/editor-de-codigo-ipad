@@ -369,6 +369,42 @@ export async function entryExists(projectId, rawPath) {
   return Boolean(record && !record.deleted);
 }
 
+let syncChannel = null;
+if (typeof BroadcastChannel !== "undefined") {
+  try {
+    syncChannel = new BroadcastChannel("studio_ide_workspace_sync");
+    syncChannel.unref?.();
+  } catch (_) {}
+}
+
+export function closeWorkspaceBroadcast() {
+  if (syncChannel) {
+    try {
+      syncChannel.close();
+    } catch (_) {}
+    syncChannel = null;
+  }
+}
+
+export function broadcastWorkspaceChange(event) {
+  if (syncChannel && event) {
+    try {
+      syncChannel.postMessage(event);
+    } catch (_) {}
+  }
+}
+
+export function onWorkspaceBroadcast(listener) {
+  if (!syncChannel || typeof listener !== "function") return () => {};
+  const handler = (ev) => {
+    if (ev && ev.data) {
+      listener(ev.data);
+    }
+  };
+  syncChannel.addEventListener("message", handler);
+  return () => syncChannel.removeEventListener("message", handler);
+}
+
 export async function upsertEntry(
   projectId,
   path,
@@ -380,7 +416,9 @@ export async function upsertEntry(
     allowOverwrite = true,
     blobSha = null,
     contentLoaded = true,
-    mode = null
+    mode = null,
+    isBinary = false,
+    base64 = null
   } = {}
 ) {
   const cleanPath = normalizePath(path);
@@ -466,11 +504,14 @@ export async function upsertEntry(
     contentLoaded: isFolder ? true : Boolean(contentLoaded),
     trackedInGithub: Boolean(fromGithub || existing?.trackedInGithub),
     forceModified: recreatedOverUnloaded || Boolean(!fromGithub && existing?.forceModified),
+    isBinary: Boolean(isBinary ?? existing?.isBinary),
+    base64: base64 ?? existing?.base64 ?? null,
     deleted: false,
     updatedAt: Date.now()
   };
 
   await putRecord(STORE_FILES, record);
+  broadcastWorkspaceChange({ type: "ENTRY_UPSERTED", projectId, path: cleanPath, isFolder });
   return record;
 }
 
@@ -486,6 +527,7 @@ export async function updateFileContent(projectId, path, newContent) {
   existing.deleted = false;
   existing.updatedAt = Date.now();
   await putRecord(STORE_FILES, existing);
+  broadcastWorkspaceChange({ type: "FILE_UPDATED", projectId, path: cleanPath });
   return existing;
 }
 
@@ -535,6 +577,7 @@ export async function renameProjectEntry(projectId, oldPath, newPath, isFolder) 
 
     await removeOrSoftDeleteRecord(item);
   }
+  broadcastWorkspaceChange({ type: "ENTRY_RENAMED", projectId, oldPath: fromPath, newPath: toPath, isFolder });
 }
 
 export async function deleteProjectEntry(projectId, targetPath, isFolder) {
@@ -547,6 +590,7 @@ export async function deleteProjectEntry(projectId, targetPath, isFolder) {
   for (const item of affected) {
     await removeOrSoftDeleteRecord(item);
   }
+  broadcastWorkspaceChange({ type: "ENTRY_DELETED", projectId, path: cleanPath, isFolder });
 }
 
 async function removeOrSoftDeleteRecord(item) {
@@ -798,7 +842,9 @@ export async function getPendingGithubChanges(projectId) {
         status: "added",
         content: item.content,
         baseContent: "",
-        mode: item.mode || null
+        mode: item.mode || null,
+        isBinary: Boolean(item.isBinary),
+        base64: item.base64 || (item.isBinary ? item.content : null)
       });
     } else if (!item.deleted && (item.forceModified || item.content !== item.baseContent)) {
       changes.push({
@@ -806,7 +852,9 @@ export async function getPendingGithubChanges(projectId) {
         status: "modified",
         content: item.content,
         baseContent: item.baseContent || "",
-        mode: item.mode || null
+        mode: item.mode || null,
+        isBinary: Boolean(item.isBinary),
+        base64: item.base64 || (item.isBinary ? item.content : null)
       });
     }
   }

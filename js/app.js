@@ -37,6 +37,7 @@ import {
   listProjects,
   markProjectOfflineCached,
   normalizePath,
+  onWorkspaceBroadcast,
   readCredentialsBackup,
   renameProjectEntry,
   requestPersistentStorage,
@@ -47,6 +48,7 @@ import {
   updateFileContent,
   upsertEntry
 } from "./storage/workspaceDb.js";
+import { keyboardRouter } from "./ui/keyboardRouter.js";
 import {
   clearEmergencyBackup,
   restoreEmergencyBackup,
@@ -57,6 +59,32 @@ async function initApp() {
   hydrateIcons(document);
   registerPwaServiceWorker();
   void requestPersistentStorage();
+  keyboardRouter.attach();
+
+  // Inicializar Tema visual (persistido en localStorage)
+  const THEME_STORAGE_KEY = "studio_theme";
+  const selectThemeEl = document.getElementById("select-theme");
+  try {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || "default";
+    if (savedTheme && savedTheme !== "default") {
+      document.documentElement.dataset.theme = savedTheme;
+    }
+    if (selectThemeEl) {
+      selectThemeEl.value = savedTheme;
+      selectThemeEl.addEventListener("change", (e) => {
+        const chosen = e.target.value;
+        if (chosen === "default") {
+          delete document.documentElement.dataset.theme;
+          localStorage.removeItem(THEME_STORAGE_KEY);
+        } else {
+          document.documentElement.dataset.theme = chosen;
+          localStorage.setItem(THEME_STORAGE_KEY, chosen);
+        }
+      });
+    }
+  } catch {
+    // Entorno restringido o sin localStorage
+  }
 
   // Restaurar credenciales (claves IA y token GitHub) desde IndexedDB si Safari/iPadOS vació localStorage
   try {
@@ -305,7 +333,9 @@ async function initApp() {
         for (const item of importedList) {
           await upsertEntry(activeProject.id, item.path, {
             isFolder: false,
-            content: item.content
+            content: item.content,
+            isBinary: Boolean(item.isBinary),
+            base64: item.base64 || null
           });
           editor.dropFileState(item.path);
           lastPath = item.path;
@@ -756,6 +786,27 @@ async function initApp() {
     }
   });
 
+  // Sincronización multi-pestaña en vivo vía BroadcastChannel
+  onWorkspaceBroadcast(async (event) => {
+    if (!event || !activeProject || event.projectId !== activeProject.id) return;
+
+    if (event.action === "update_content" && event.path && event.path === activeFileId) {
+      if (!saveTimers.has(event.path)) {
+        await reloadProjectEntries();
+        const updated = filesOnly.find((f) => f.id === event.path);
+        if (updated) {
+          editor.dropFileState(event.path);
+          editor.openFile(updated);
+          renderTabs();
+        }
+      }
+      return;
+    }
+
+    await reloadProjectEntries();
+    renderWorkspaceView();
+  });
+
   // Autoguardado inmediato si Safari en iPad suspende la app o cambia en Stage Manager.
   // Primero se escribe un respaldo SÍNCRONO (localStorage): si la página muere antes de que IndexedDB
   // termine, lo pendiente se recupera en la próxima apertura.
@@ -1083,6 +1134,7 @@ async function initApp() {
     }
 
     const cleanup = () => {
+      keyboardRouter.popModal("confirm-dialog");
       cancelBtn?.removeEventListener("click", onCancel);
       closeBtn?.removeEventListener("click", onCancel);
       actionBtn?.removeEventListener("click", onProceed);
@@ -1108,6 +1160,15 @@ async function initApp() {
     closeBtn?.addEventListener("click", onCancel);
     actionBtn?.addEventListener("click", onProceed);
     dialog.addEventListener("close", onDialogClose);
+
+    keyboardRouter.pushModal({
+      id: "confirm-dialog",
+      onEscape: () => onCancel(),
+      onEnter: () => {
+        onProceed();
+        return true;
+      }
+    });
 
     dialog.showModal();
   }
