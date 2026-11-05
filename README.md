@@ -8,7 +8,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 290 tests unitarios pasando al 100% (56 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 298 tests unitarios pasando al 100% (58 suites, 0 fallos).
 
 ---
 

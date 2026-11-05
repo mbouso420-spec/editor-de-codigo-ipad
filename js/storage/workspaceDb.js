@@ -977,3 +977,72 @@ export async function readCredentialsBackup() {
     return "";
   }
 }
+
+/**
+ * Crea un proyecto local en IndexedDB a partir de un respaldo de Gist de GitHub.
+ * @param {{ projectName: string, entries: Array<{ path: string, content: string, mode?: string|null }> }} options
+ */
+export async function createProjectFromGistBackup({ projectName, entries }) {
+  const cleanName = String(projectName || "proyecto-restaurado").trim();
+  const slug = cleanName
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const id = `${slug || "proyecto"}-gist-${Date.now().toString(36)}`;
+  const now = Date.now();
+
+  const fileEntries = (entries || []).filter((e) => !e.isFolder && e.path);
+  const firstFile = fileEntries[0]?.path || "main.cpp";
+
+  const project = {
+    id,
+    name: cleanName,
+    kind: "local",
+    github: null,
+    openTabIds: [firstFile],
+    activeFileId: firstFile,
+    chatHistory: [],
+    updatedAt: now
+  };
+
+  await putRecord(STORE_PROJECTS, project);
+
+  for (const entry of fileEntries) {
+    await upsertEntry(id, entry.path, entry.content || "", {
+      allowOverwrite: true,
+      mode: entry.mode || null
+    });
+  }
+
+  return project;
+}
+
+/**
+ * Convierte un proyecto local a un proyecto vinculado con un repositorio de GitHub.
+ * @param {string} projectId
+ * @param {{ owner: string, repo: string, branch: string }} githubMeta
+ */
+export async function convertLocalProjectToGithub(projectId, githubMeta) {
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Proyecto no encontrado.");
+  project.kind = "github";
+  project.github = {
+    owner: githubMeta.owner,
+    repo: githubMeta.repo,
+    branch: githubMeta.branch || "main"
+  };
+  project.updatedAt = Date.now();
+  await putRecord(STORE_PROJECTS, project);
+
+  const entries = await getAllRawProjectEntries(projectId);
+  for (const entry of entries) {
+    if (!entry.isFolder) {
+      entry.trackedInGithub = true;
+      entry.baseContent = entry.content;
+      entry.deleted = false;
+      await putRecord(STORE_FILES, entry);
+    }
+  }
+
+  return project;
+}

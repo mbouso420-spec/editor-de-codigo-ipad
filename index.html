@@ -149,6 +149,15 @@
             <div class="panel-actions">
               <button
                 type="button"
+                id="btn-cloud-backup"
+                class="btn btn-ghost btn-sm btn-icon"
+                aria-label="Respaldar proyecto en Gist Privado de GitHub"
+                title="Respaldar en Gist Privado de GitHub"
+              >
+                <span data-icon="cloudUpload"></span>
+              </button>
+              <button
+                type="button"
                 id="btn-offline-repo"
                 class="btn btn-ghost btn-sm btn-icon"
                 aria-label="Guardar copia completa del repositorio para usar sin internet"
@@ -568,6 +577,44 @@
                 <span>Forzar igual</span>
               </button>
             </div>
+          </div>
+        </section>
+
+        <!-- Sección 3 (Alternativa): Respaldo y Publicación en GitHub para Proyectos Locales -->
+        <section id="gh-local-backup-section" class="gh-section" aria-labelledby="gh-local-backup-heading" hidden>
+          <div class="gh-section-head">
+            <h3 id="gh-local-backup-heading" class="gh-section-title">3. Respaldo en la Nube (Proyecto Local)</h3>
+            <span id="gh-local-project-name" class="gh-user-tag">espacio-local</span>
+          </div>
+          <p class="field-hint">Guardá este proyecto en tu nube de GitHub para que nunca se borre si Safari o el iPad limpian el almacenamiento local.</p>
+
+          <div class="field-group">
+            <span class="field-label">Acciones de respaldo en la nube</span>
+            <div class="field-row gh-open-actions">
+              <button type="button" id="btn-gh-backup-gist" class="btn btn-primary" title="Crea o actualiza una copia secreta de este proyecto en tus Gists de GitHub">
+                <span data-icon="cloudUpload"></span>
+                <span id="btn-gh-backup-gist-text">Respaldar en Gist Privado</span>
+              </button>
+              <button type="button" id="btn-gh-publish-repo" class="btn" title="Crea un nuevo repositorio en tu cuenta de GitHub y sube los archivos">
+                <span data-icon="gitBranch"></span>
+                <span>Publicar como Repositorio</span>
+              </button>
+            </div>
+            <p id="gh-local-backup-status" class="gh-status-msg"></p>
+          </div>
+
+          <div class="field-group">
+            <label for="gh-gist-select" class="field-label">Restaurar proyectos guardados en tus Gists</label>
+            <div class="field-row">
+              <select id="gh-gist-select" class="field-control">
+                <option value="">Tocá para listar tus respaldos en Gists…</option>
+              </select>
+              <button type="button" id="btn-gh-restore-gist" class="btn btn-sm" disabled>
+                <span data-icon="cloudDownload"></span>
+                <span>Restaurar</span>
+              </button>
+            </div>
+            <p id="gh-gist-restore-status" class="gh-status-msg"></p>
           </div>
         </section>
       </div>

@@ -13,7 +13,8 @@ import {
   downloadBatchBlobs,
   fetchRepoTreeIndex,
   fetchSingleRepoBlob,
-  getGithubToken
+  getGithubToken,
+  saveProjectToGist
 } from "./github/githubService.js";
 import {
   exportKeysBundle,
@@ -476,6 +477,28 @@ async function initApp() {
         explorer.setAutosaveStatus(
           error instanceof Error ? error.message : "No se pudo completar la copia offline"
         );
+      }
+    },
+    async onCloudBackupProject() {
+      const token = getGithubToken();
+      if (!token) {
+        document.getElementById("btn-open-github")?.click();
+        return;
+      }
+      try {
+        explorer.setAutosaveStatus("Respaldando en Gist privado…");
+        await flushPendingSaves();
+        const entries = await getProjectEntries(activeProject.id);
+        const res = await saveProjectToGist(token, {
+          projectName: activeProject.name,
+          entries,
+          existingGistId: activeProject.gistId || null
+        });
+        activeProject.gistId = res.id;
+        await saveProjectState(activeProject);
+        explorer.setAutosaveStatus(`¡Respaldado en Gist! (${res.id.slice(0, 6)})`);
+      } catch (err) {
+        explorer.setAutosaveStatus(`Error: ${err?.message || "al respaldar en Gist"}`);
       }
     }
   });

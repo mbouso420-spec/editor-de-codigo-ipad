@@ -4,19 +4,25 @@ import {
   compareRemoteCommits,
   createRepoBranch,
   downloadRepoFiles,
+  fetchGistBackupContent,
   fetchGithubUser,
   fetchRepoTreeIndex,
   fetchRepositoryBranches,
   fetchSingleRepoBlob,
+  fetchUserGistBackups,
   fetchUserRepositories,
   getCachedUserRepositories,
   getGithubToken,
+  publishProjectAsNewRepository,
   pushAtomicCommit,
   RemoteAheadError,
   saveGithubToken,
+  saveProjectToGist,
   verifyGithubToken
 } from "./githubService.js";
 import {
+  convertLocalProjectToGithub,
+  createProjectFromGistBackup,
   getPendingGithubChanges,
   getProjectEntries,
   hydrateGithubProject,
@@ -78,6 +84,16 @@ export function initGithubController({
   const conflictList = document.getElementById("gh-conflict-list");
   const conflictViewBtn = document.getElementById("btn-gh-conflict-view");
   const conflictForceBtn = document.getElementById("btn-gh-conflict-force");
+
+  const localBackupSection = document.getElementById("gh-local-backup-section");
+  const localProjectNameEl = document.getElementById("gh-local-project-name");
+  const backupGistBtn = document.getElementById("btn-gh-backup-gist");
+  const backupGistText = document.getElementById("btn-gh-backup-gist-text");
+  const publishRepoBtn = document.getElementById("btn-gh-publish-repo");
+  const localBackupStatus = document.getElementById("gh-local-backup-status");
+  const gistSelect = document.getElementById("gh-gist-select");
+  const restoreGistBtn = document.getElementById("btn-gh-restore-gist");
+  const gistRestoreStatus = document.getElementById("gh-gist-restore-status");
 
   const tokenWarning = document.getElementById("explorer-token-warning");
   const tokenWarningText = document.getElementById("explorer-token-warning-text");
@@ -737,14 +753,184 @@ export function initGithubController({
     }
   }
 
+  async function refreshLocalBackupSection(project) {
+    if (!project) return;
+    if (localProjectNameEl) {
+      localProjectNameEl.textContent = project.name;
+    }
+    if (backupGistText) {
+      backupGistText.textContent = project.gistId ? "Actualizar Gist Privado" : "Respaldar en Gist Privado";
+    }
+    if (localBackupStatus) {
+      localBackupStatus.textContent = project.gistId
+        ? "Este proyecto ya tiene un Gist vinculado. Podés actualizarlo con un toque."
+        : "";
+      localBackupStatus.className = "gh-status-msg";
+    }
+
+    const token = getGithubToken();
+    if (gistSelect) {
+      if (!token) {
+        gistSelect.innerHTML = '<option value="">Conectá tu token arriba para listar tus respaldos en Gists</option>';
+        if (restoreGistBtn) restoreGistBtn.disabled = true;
+        return;
+      }
+
+      fetchUserGistBackups(token)
+        .then((backups) => {
+          gistSelect.innerHTML = "";
+          if (backups.length === 0) {
+            gistSelect.innerHTML = '<option value="">No tenés respaldos de Studio IDE en tus Gists</option>';
+            if (restoreGistBtn) restoreGistBtn.disabled = true;
+            return;
+          }
+          const defaultOpt = document.createElement("option");
+          defaultOpt.value = "";
+          defaultOpt.textContent = `Elegí un proyecto para restaurar (${backups.length} disponibles)…`;
+          gistSelect.appendChild(defaultOpt);
+
+          for (const b of backups) {
+            const opt = document.createElement("option");
+            opt.value = b.id;
+            const dateStr = b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : "";
+            opt.textContent = `${b.name} ${dateStr ? `(${dateStr})` : ""}`;
+            gistSelect.appendChild(opt);
+          }
+          if (restoreGistBtn) restoreGistBtn.disabled = true;
+        })
+        .catch(() => {
+          gistSelect.innerHTML = '<option value="">No se pudieron listar los Gists (revisá tu conexión)</option>';
+          if (restoreGistBtn) restoreGistBtn.disabled = true;
+        });
+    }
+  }
+
+  backupGistBtn?.addEventListener("click", async () => {
+    const token = getGithubToken();
+    if (!token) {
+      setStatus(localBackupStatus, "Conectá tu token de GitHub arriba primero.", "error");
+      tokenInput?.focus();
+      return;
+    }
+
+    const project = getActiveProject();
+    if (!project) return;
+
+    backupGistBtn.disabled = true;
+    setStatus(localBackupStatus, "Guardando copia en Gist privado de GitHub…", "neutral");
+
+    try {
+      await onFlushPendingSaves?.();
+      const entries = await getProjectEntries(project.id);
+      const result = await saveProjectToGist(token, {
+        projectName: project.name,
+        entries,
+        existingGistId: project.gistId || null
+      });
+
+      project.gistId = result.id;
+      await saveProjectState(project);
+
+      setStatus(
+        localBackupStatus,
+        `¡Proyecto respaldado con éxito en tu Gist privado! (ID: ${result.id.slice(0, 8)})`,
+        "ok"
+      );
+      if (backupGistText) {
+        backupGistText.textContent = "Actualizar Gist Privado";
+      }
+    } catch (err) {
+      const msg = err?.message || "No se pudo guardar el Gist.";
+      setStatus(localBackupStatus, `Error al respaldar en Gist: ${msg}`, "error");
+    } finally {
+      backupGistBtn.disabled = false;
+    }
+  });
+
+  publishRepoBtn?.addEventListener("click", async () => {
+    const token = getGithubToken();
+    if (!token) {
+      setStatus(localBackupStatus, "Conectá tu token de GitHub arriba primero.", "error");
+      tokenInput?.focus();
+      return;
+    }
+
+    const project = getActiveProject();
+    if (!project) return;
+
+    const repoName = window.prompt("Nombre para el nuevo repositorio privado en GitHub:", project.name);
+    if (!repoName || !repoName.trim()) return;
+
+    publishRepoBtn.disabled = true;
+    setStatus(localBackupStatus, "Creando repositorio privado y subiendo archivos a GitHub…", "neutral");
+
+    try {
+      await onFlushPendingSaves?.();
+      const entries = await getProjectEntries(project.id);
+      const res = await publishProjectAsNewRepository(token, {
+        repoName: repoName.trim(),
+        isPrivate: true,
+        entries
+      });
+
+      await convertLocalProjectToGithub(project.id, {
+        owner: res.owner,
+        repo: res.repo,
+        branch: res.branch
+      });
+
+      setStatus(localBackupStatus, `¡Publicado con éxito como ${res.fullName}!`, "ok");
+      await onProjectClonedOrSynced?.(project.id);
+      await refreshSyncPanel();
+    } catch (err) {
+      const msg = err?.message || "No se pudo crear el repositorio en GitHub.";
+      setStatus(localBackupStatus, `Error al publicar repositorio: ${msg}`, "error");
+    } finally {
+      publishRepoBtn.disabled = false;
+    }
+  });
+
+  gistSelect?.addEventListener("change", () => {
+    if (restoreGistBtn) {
+      restoreGistBtn.disabled = !gistSelect.value;
+    }
+  });
+
+  restoreGistBtn?.addEventListener("click", async () => {
+    const token = getGithubToken();
+    const gistId = gistSelect?.value;
+    if (!token || !gistId) return;
+
+    restoreGistBtn.disabled = true;
+    setStatus(gistRestoreStatus, "Descargando y restaurando proyecto desde Gist…", "neutral");
+
+    try {
+      const gistData = await fetchGistBackupContent(token, gistId);
+      const newProject = await createProjectFromGistBackup(gistData);
+      setStatus(gistRestoreStatus, `¡Proyecto '${newProject.name}' restaurado con éxito!`, "ok");
+      await onProjectClonedOrSynced?.(newProject.id);
+      dialog?.close();
+    } catch (err) {
+      const msg = err?.message || "No se pudo restaurar el Gist.";
+      setStatus(gistRestoreStatus, `Error al restaurar: ${msg}`, "error");
+    } finally {
+      restoreGistBtn.disabled = false;
+    }
+  });
+
   async function refreshSyncPanel() {
     const project = getActiveProject();
     if (!project || project.kind !== "github" || !project.github) {
       if (syncSection) syncSection.hidden = true;
+      if (localBackupSection) {
+        localBackupSection.hidden = false;
+        void refreshLocalBackupSection(project);
+      }
       await refreshTopbarBadge();
       return;
     }
 
+    if (localBackupSection) localBackupSection.hidden = true;
     if (syncSection) syncSection.hidden = false;
     if (syncRepoTitle) {
       syncRepoTitle.textContent = `${project.github.owner}/${project.github.repo} (${project.github.branch})`;

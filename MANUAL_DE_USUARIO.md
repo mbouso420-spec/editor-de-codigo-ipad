@@ -219,3 +219,9 @@ En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu p
 3. Podés tocar **Diff** al lado de cualquier archivo para revisar línea por línea las modificaciones en verde y rojo.
 4. Escribí un mensaje descriptivo y presioná **Commit y Push a GitHub**.
 5. Se generará un commit atómico en el servidor de GitHub preservando permisos de ejecución de scripts y garantizando la integridad de tu código.
+
+### Respaldo en la Nube para Proyectos Locales (Gists Privados y Publicación)
+Si estás trabajando en un proyecto local (guardado en el almacenamiento del iPad) y no querés correr ningún riesgo de perderlo ante limpiezas de caché de Safari:
+* **Respaldo en un toque desde el Explorador:** Tocá el botón con la flecha hacia arriba y la nube (`Respaldar en Gist Privado`) en la barra inferior del explorador. El sistema creará o actualizará automáticamente un **Gist Secreto** en tu cuenta de GitHub con todos los archivos de tu proyecto.
+* **Publicar como nuevo Repositorio Privado:** Al abrir la ventana **Repositorio** estando parado en un proyecto local, contás con el botón **Publicar como Repositorio**. Le asignás un nombre y el IDE creará el repositorio privado en tu cuenta de GitHub, subirá todos los archivos en un commit inicial y lo dejará listo para sincronizar con Git.
+* **Restaurar proyectos en cualquier dispositivo:** Si abrís el IDE desde tu PC o desde otro iPad, en la ventana **Repositorio** podés desplegar la lista de tus **Gists respaldados** y tocar **Restaurar** para tener tu proyecto abierto y listo para seguir programando al instante.

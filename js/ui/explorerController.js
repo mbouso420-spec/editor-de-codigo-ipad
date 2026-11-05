@@ -54,13 +54,15 @@ export function initExplorerController({
   onImportFiles,
   onDownloadActiveFile,
   onExportProjectZip,
-  onSaveRepoOffline
+  onSaveRepoOffline,
+  onCloudBackupProject
 }) {
   const projectSelect = document.getElementById("explorer-project-select");
   const btnNewProject = document.getElementById("btn-new-project");
   const btnDeleteProject = document.getElementById("btn-delete-project");
   const btnNewFile = document.getElementById("btn-new-file");
   const btnNewFolder = document.getElementById("btn-new-folder");
+  const btnCloudBackup = document.getElementById("btn-cloud-backup");
   const btnOfflineRepo = document.getElementById("btn-offline-repo");
   const btnImport = document.getElementById("btn-import-files");
   const importInput = document.getElementById("explorer-import-input");
@@ -374,6 +376,10 @@ export function initExplorerController({
 
   btnExportZip?.addEventListener("click", () => {
     onExportProjectZip?.();
+  });
+
+  btnCloudBackup?.addEventListener("click", () => {
+    onCloudBackupProject?.();
   });
 
   btnOfflineRepo?.addEventListener("click", () => {
@@ -829,6 +835,9 @@ export function initExplorerController({
   }
 
   function setOfflineRepoState({ visible, isOfflineReady = false, pendingCount = 0, busy = false }) {
+    if (btnCloudBackup) {
+      btnCloudBackup.hidden = Boolean(visible);
+    }
     if (!btnOfflineRepo) return;
     btnOfflineRepo.hidden = !visible;
     if (!visible) return;

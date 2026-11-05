@@ -616,3 +616,191 @@ function encodeUtf8Base64(text) {
   }
   return window.btoa(binary);
 }
+
+/**
+ * Guarda o actualiza una copia de respaldo completa de un proyecto local en un Gist privado de GitHub.
+ * @param {string} token
+ * @param {{ projectName: string, entries: Array<any>, existingGistId?: string|null }} options
+ */
+export async function saveProjectToGist(token, { projectName, entries, existingGistId = null }) {
+  if (!token) throw new Error("Conectá tu token de GitHub para respaldar en Gists.");
+  const client = await createGithubClient(token);
+  const cleanName = String(projectName || "proyecto").trim();
+
+  const manifest = {
+    schema: "studio_ide_gist_backup_v1",
+    projectName: cleanName,
+    backedUpAt: Date.now(),
+    entries: (entries || [])
+      .filter((e) => !e.isFolder && !e.deleted)
+      .map((e) => ({
+        path: e.path,
+        content: typeof e.content === "string" ? e.content : "",
+        mode: e.mode || null
+      }))
+  };
+
+  const filesPayload = {
+    "studio_project.json": {
+      content: JSON.stringify(manifest, null, 2)
+    }
+  };
+
+  // Agregar hasta 10 archivos principales con nombres planos para previsualización directa en gist.github.com
+  manifest.entries.slice(0, 10).forEach((entry) => {
+    const flatName = entry.path.replace(/[/\\:]/g, "__");
+    if (flatName && flatName !== "studio_project.json") {
+      filesPayload[flatName] = { content: entry.content || "// vacío" };
+    }
+  });
+
+  const description = `[Studio IDE Backup] ${cleanName}`;
+
+  if (existingGistId) {
+    try {
+      const res = await client.request("PATCH /gists/{gist_id}", {
+        gist_id: existingGistId,
+        description,
+        files: filesPayload
+      });
+      return {
+        id: res.id,
+        url: res.html_url || `https://gist.github.com/${res.id}`,
+        updatedAt: res.updated_at || new Date().toISOString()
+      };
+    } catch (err) {
+      if (err?.status !== 404) {
+        throw err;
+      }
+      // Si el Gist previo fue borrado en GitHub, se crea uno nuevo abajo
+    }
+  }
+
+  const res = await client.request("POST /gists", {
+    description,
+    public: false,
+    files: filesPayload
+  });
+
+  return {
+    id: res.id,
+    url: res.html_url || `https://gist.github.com/${res.id}`,
+    updatedAt: res.updated_at || new Date().toISOString()
+  };
+}
+
+/**
+ * Obtiene la lista de proyectos respaldados en Gists privados de GitHub del usuario.
+ * @param {string} token
+ */
+export async function fetchUserGistBackups(token) {
+  if (!token) return [];
+  const client = await createGithubClient(token);
+  const list = await client.request("GET /gists", { per_page: 50 });
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .filter((g) => {
+      const desc = String(g.description || "");
+      return desc.startsWith("[Studio IDE Backup]") || Boolean(g.files && g.files["studio_project.json"]);
+    })
+    .map((g) => {
+      const rawName = String(g.description || "").replace(/^\[Studio IDE Backup\]\s*/i, "").trim();
+      const name = rawName || g.id.slice(0, 8);
+      return {
+        id: g.id,
+        name,
+        description: g.description,
+        updatedAt: g.updated_at,
+        url: g.html_url
+      };
+    });
+}
+
+/**
+ * Descarga y extrae los archivos de un Gist de respaldo de Studio IDE.
+ * @param {string} token
+ * @param {string} gistId
+ */
+export async function fetchGistBackupContent(token, gistId) {
+  if (!token) throw new Error("Conectá tu token de GitHub.");
+  const client = await createGithubClient(token);
+  const gist = await client.request("GET /gists/{gist_id}", { gist_id: gistId });
+  const manifestFile = gist.files && gist.files["studio_project.json"];
+
+  if (manifestFile && manifestFile.content) {
+    try {
+      const parsed = JSON.parse(manifestFile.content);
+      return {
+        projectName: parsed.projectName || gist.description || "proyecto-restaurado",
+        entries: Array.isArray(parsed.entries) ? parsed.entries : []
+      };
+    } catch {
+      // Fallback a archivos planos
+    }
+  }
+
+  const entries = [];
+  for (const [filename, fileObj] of Object.entries(gist.files || {})) {
+    if (filename === "studio_project.json") continue;
+    const realPath = filename.replace(/__/g, "/");
+    entries.push({
+      path: realPath,
+      content: fileObj.content || "",
+      isFolder: false
+    });
+  }
+
+  return {
+    projectName: gist.description ? gist.description.replace(/^\[Studio IDE Backup\]\s*/i, "") : "proyecto-restaurado",
+    entries
+  };
+}
+
+/**
+ * Publica un proyecto local como un repositorio privado o público nuevo en GitHub.
+ * @param {string} token
+ * @param {{ repoName: string, isPrivate?: boolean, entries?: Array<any> }} options
+ */
+export async function publishProjectAsNewRepository(token, { repoName, isPrivate = true, entries = [] }) {
+  if (!token) throw new Error("Conectá tu token de GitHub.");
+  const client = await createGithubClient(token);
+  const cleanName = String(repoName || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/^-+|-+$/g, "");
+  if (!cleanName) throw new Error("Nombre de repositorio inválido.");
+
+  const createdRepo = await client.request("POST /user/repos", {
+    name: cleanName,
+    description: "Proyecto creado y sincronizado desde Studio IDE para iPad",
+    private: Boolean(isPrivate),
+    auto_init: false
+  });
+
+  const owner = createdRepo.owner?.login;
+  const repo = createdRepo.name;
+  const branch = createdRepo.default_branch || "main";
+
+  const fileEntries = entries.filter((e) => !e.isFolder && !e.deleted && e.path);
+  if (fileEntries.length > 0) {
+    await pushAtomicCommit({
+      token,
+      owner,
+      repo,
+      branch,
+      message: "Initial commit from Studio IDE",
+      changes: fileEntries.map((f) => ({
+        path: f.path,
+        content: typeof f.content === "string" ? f.content : "",
+        mode: f.mode || null,
+        status: "added"
+      }))
+    });
+  }
+
+  return {
+    owner,
+    repo,
+    branch,
+    fullName: createdRepo.full_name,
+    url: createdRepo.html_url
+  };
+}

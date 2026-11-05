@@ -218,3 +218,130 @@ describe("Token de GitHub en almacenamiento", () => {
     localStorage.clear();
   });
 });
+
+
+describe("Respaldo en la Nube con GitHub (Gists y Repositorios)", () => {
+  test("saveProjectToGist crea un Gist secreto con studio_project.json", async () => {
+    const calls = installFakeGithub({
+      "POST /gists": () => [201, {
+        id: "gist123",
+        html_url: "https://gist.github.com/gist123",
+        updated_at: "2026-11-04T23:00:00Z"
+      }]
+    });
+
+    const entries = [
+      { path: "src/main.cpp", content: "int main() {}", isFolder: false },
+      { path: "README.md", content: "# Demo", isFolder: false }
+    ];
+
+    const res = await gh.saveProjectToGist("token-test", {
+      projectName: "mi-proyecto-local",
+      entries
+    });
+
+    assert.equal(res.id, "gist123");
+    assert.equal(res.url, "https://gist.github.com/gist123");
+    const call = calls.find((c) => c.key === "POST /gists");
+    assert.ok(call);
+    assert.equal(call.body.public, false, "El Gist debe ser secreto/privado");
+    assert.ok(call.body.files["studio_project.json"], "Debe contener el archivo de proyecto");
+    const manifest = JSON.parse(call.body.files["studio_project.json"].content);
+    assert.equal(manifest.projectName, "mi-proyecto-local");
+    assert.equal(manifest.entries.length, 2);
+  });
+
+  test("saveProjectToGist con existingGistId actualiza via PATCH", async () => {
+    const calls = installFakeGithub({
+      "PATCH /gists/gist123": () => [200, {
+        id: "gist123",
+        html_url: "https://gist.github.com/gist123",
+        updated_at: "2026-11-04T23:30:00Z"
+      }]
+    });
+
+    const res = await gh.saveProjectToGist("token-test", {
+      projectName: "mi-proyecto-local",
+      entries: [{ path: "a.js", content: "console.log(1)", isFolder: false }],
+      existingGistId: "gist123"
+    });
+
+    assert.equal(res.id, "gist123");
+    const patchCall = calls.find((c) => c.key === "PATCH /gists/gist123");
+    assert.ok(patchCall, "Debe invocar PATCH sobre el gist existente");
+  });
+
+  test("fetchUserGistBackups lista y filtra gists de Studio IDE", async () => {
+    installFakeGithub({
+      "GET /gists": () => [200, [
+        { id: "g1", description: "[Studio IDE Backup] Calculadora C++", updated_at: "2026-11-04T12:00:00Z", html_url: "https://gist.github.com/g1", files: { "studio_project.json": {} } },
+        { id: "g2", description: "Snippet suelto de python", updated_at: "2026-11-04T10:00:00Z", html_url: "https://gist.github.com/g2", files: { "test.py": {} } },
+        { id: "g3", description: "[Studio IDE Backup] Web App", updated_at: "2026-11-04T14:00:00Z", html_url: "https://gist.github.com/g3", files: { "studio_project.json": {} } }
+      ]]
+    });
+
+    const list = await gh.fetchUserGistBackups("token-test");
+    assert.equal(list.length, 2, "Debe filtrar solo los 2 gists de Studio IDE");
+    assert.equal(list[0].name, "Calculadora C++");
+    assert.equal(list[1].name, "Web App");
+  });
+
+  test("fetchGistBackupContent extrae las entradas del manifest", async () => {
+    const manifestJson = JSON.stringify({
+      schema: "studio_ide_gist_backup_v1",
+      projectName: "App Restaurada",
+      entries: [
+        { path: "main.py", content: "print(42)" },
+        { path: "utils/helper.py", content: "def foo() {}" }
+      ]
+    });
+
+    installFakeGithub({
+      "GET /gists/g1": () => [200, {
+        id: "g1",
+        description: "[Studio IDE Backup] App Restaurada",
+        files: {
+          "studio_project.json": { content: manifestJson }
+        }
+      }]
+    });
+
+    const data = await gh.fetchGistBackupContent("token-test", "g1");
+    assert.equal(data.projectName, "App Restaurada");
+    assert.equal(data.entries.length, 2);
+    assert.equal(data.entries[0].path, "main.py");
+  });
+
+  test("createProjectFromGistBackup y convertLocalProjectToGithub en IndexedDB", async () => {
+    const { createProjectFromGistBackup, convertLocalProjectToGithub, getProject, getProjectEntries } = await import("../js/storage/workspaceDb.js");
+
+    const created = await createProjectFromGistBackup({
+      projectName: "Proyecto Gist Demo",
+      entries: [
+        { path: "src/index.js", content: "console.log('hola');" },
+        { path: "README.md", content: "# Leeme" }
+      ]
+    });
+
+    assert.ok(created.id);
+    assert.equal(created.name, "Proyecto Gist Demo");
+    assert.equal(created.kind, "local");
+
+    const entries = await getProjectEntries(created.id);
+    assert.equal(entries.filter((e) => !e.isFolder).length, 2);
+
+    // Convertir a GitHub
+    const converted = await convertLocalProjectToGithub(created.id, {
+      owner: "mi-usuario",
+      repo: "mi-repo",
+      branch: "main"
+    });
+
+    assert.equal(converted.kind, "github");
+    assert.equal(converted.github.owner, "mi-usuario");
+    assert.equal(converted.github.repo, "mi-repo");
+
+    const stored = await getProject(created.id);
+    assert.equal(stored.kind, "github");
+  });
+});
