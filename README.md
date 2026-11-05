@@ -45,7 +45,7 @@
 - **Inlining recursivo de `@import url(...)` en CSS:** empaqueta hojas de estilo CSS modulares complejas de forma recursiva dentro de etiquetas `<style>` protegidas, permitiendo previsualizar aplicaciones que estructuran sus estilos en múltiples subarchivos.
 - **Selector de páginas HTML optimizado y sin duplicados:** exclusión de carpetas de dependencias y artefactos de empaquetado (`node_modules`, `.git`, `dist`, `build`, `.next`, `.cache`, `out`, etc.), deduplicación por ruta normalizada y desambiguación automática de nombres con rutas relativas para evitar opciones triplicadas.
 - **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
-- **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal (sin capas iframe HTML intermedias) con terminal de salida en tiempo real, panel de estado, entrada interactiva `stdin` para `cin`/`scanf`, atajo `Ctrl + Enter` y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
+- **Aislamiento y Runner nativo de C y C++ (.c, .cpp, .h):** ejecución en un shell nativo del modal con **Terminal Interactiva Paso a Paso** (con línea de comando `>`, envío interactivo de respuestas paso a paso con `Enter` sin amontonar entradas previas, y botón de reinicio), panel de estado, entrada opcional por lotes (`batch stdin`), y compilación multi-archivo en Wandbox (GCC 14 C17/C++20).
 - **Detección y señalización de errores GCC (Línea roja y Tooltip):** parseo automático de las líneas de error del compilador (`file:line:col: error: ...`), marcación visual con fondo rojo en CodeMirror 6 (`addErrorMarker`) y tooltip flotante con el mensaje del compilador, más salto interactivo al hacer clic sobre el error en la terminal.
 - **Optimización para repositorios gigantes:** empaquetado perezoso con filtrado de directorios pesados (`node_modules`, `.git`, `dist`, `build`, etc.) y umbral máximo de tamaño por archivo (512 KB) para prevenir congelamientos en proyectos masivos.
 - **Selector de medidas responsivas (Device Switcher):** botones de alternancia en la cabecera del visor para probar el diseño en **Móvil (390px)**, **Tablet / iPad (820px)** y **Escritorio (100%)** con transiciones suaves.
@@ -145,10 +145,10 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **282 pruebas unitarias ejecutadas.**
+- **283 pruebas unitarias ejecutadas.**
 - **53 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
-- Tiempo de ejecución: **~1.3 segundos.**
+- Tiempo de ejecución: **~1.2 segundos.**
 
 ---
 

@@ -26,7 +26,15 @@ const {
   buildWorkspaceAssetMap
 } = await import("../js/ui/livePreviewModal.js");
 const { convertResultsToCsv, convertResultsToJson } = await import("../js/preview/sqlRunner.js");
-const { buildWandboxPayload, compileAndRunWandbox, parseGccErrors, mountCRunnerView, hasMainFunction } = await import("../js/preview/cRunner.js");
+const {
+  buildWandboxPayload,
+  compileAndRunWandbox,
+  parseGccErrors,
+  mountCRunnerView,
+  hasMainFunction,
+  sanitizeLoopOutput,
+  extractNewOutputDelta
+} = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
 describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
@@ -736,9 +744,23 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         assert.ok(container.querySelector(".c-runner-shell"), "Debe montar el shell nativo de C Runner");
         assert.ok(container.querySelector(".c-stdin-textarea"), "Debe incluir el textarea de entrada estándar stdin");
         assert.ok(container.querySelector(".c-terminal-card"), "Debe incluir la terminal de ejecución");
+        assert.ok(container.querySelector(".c-terminal-input-bar"), "Debe incluir la barra de comandos interactiva paso a paso");
+        assert.ok(container.querySelector(".c-terminal-input"), "Debe incluir el input interactivo");
+        assert.ok(container.querySelector(".btn-c-send-step"), "Debe incluir el botón de enviar paso");
+        assert.ok(container.querySelector(".btn-c-reset-step"), "Debe incluir el botón de reiniciar sesión");
         assert.equal(container.querySelectorAll("iframe").length, 0, "No debe contener ningún iframe HTML");
 
         instance.destroy();
+      });
+
+      test("sanitizeLoopOutput trunca bucles infinitos por EOF y extractNewOutputDelta calcula salida incremental", () => {
+        const loopText = "=== MENU ===\nOpcion: \n".repeat(40);
+        const sanitized = sanitizeLoopOutput(loopText);
+        assert.ok(sanitized.length < loopText.length, "Debe truncar la repetición masiva");
+        assert.ok(sanitized.includes("espera tu respuesta"), "Debe incluir el aviso pedagógico");
+
+        const delta = extractNewOutputDelta("Hola mundo\n", "Hola mundo\nNueva linea\n");
+        assert.equal(delta, "Nueva linea\n");
       });
 
       test("hasMainFunction detecta firmas de main e ignora comentarios y prototipos", () => {

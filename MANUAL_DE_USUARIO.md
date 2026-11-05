@@ -127,7 +127,9 @@ En la barra superior del modal de vista previa podés alternar el tamaño de pan
   - El editor CodeMirror 6 pinta el fondo de la línea en **rojo** y muestra un **tooltip explicativo flotante** con el detalle exacto del error.
   - Además, podés hacer clic sobre el error en la terminal del modal para saltar inmediatamente a esa línea en el editor.
 - **Soporte multi-archivo automático:** si tu proyecto incluye archivos de cabecera (`.h`, `.hpp`) o archivos fuente complementarios (`.c`, `.cpp`) en la misma carpeta o proyecto, se empaquetan y compilan juntos automáticamente sin configuraciones engorrosas.
-- **Entrada estándar (`stdin`):** contás con un área de texto dedicada para ingresar los datos que tu programa solicitará mediante `scanf` o `cin`.
+- **Consola Interactiva Paso a Paso (Línea de comando `>`):** al abrir un programa que solicita datos (`scanf`, `cin`), la terminal te presenta una línea de entrada interactiva en la parte inferior. Podés tipear tu respuesta (por ejemplo la opción `1`) y presionar `Enter` (o tocar **Enviar**). La terminal avanza mostrando tu respuesta y el siguiente mensaje del programa (ej. *'Ingrese dos números:'*). Luego ingresás los números y volvés a presionar `Enter`, interactuando paso a paso de forma natural sin tener que amontonar todas las entradas de antemano.
+- **Botón Reiniciar:** para reiniciar la sesión interactiva desde el principio en cualquier momento con un solo toque.
+- **Entrada estándar por lotes (Batch opcional):** sección colapsable avanzada para cuando quieras alimentar el programa con un conjunto masivo de datos predefinidos de una sola pasada.
 - **Compilación en un toque (`Ctrl + Enter`):** botón **Compilar y Ejecutar** con atajo de teclado rápido.
 - **Terminal de ejecución:** muestra el estado de compilación, advertencias (`-Wall`), errores en rojo, salida estándar (`stdout`), salida de error (`stderr`) y código de salida con tiempo de ejecución en milisegundos.
 - **Optimización en repositorios gigantes:** filtrado automático de directorios pesados y descarte de archivos masivos (>512 KB) para garantizar una experiencia fluida sin cuelgues.

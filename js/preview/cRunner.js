@@ -28,6 +28,54 @@ export function hasMainFunction(code) {
 }
 
 /**
+ * Detecta y trunca repeticiones masivas de texto causadas por bucles interactivos
+ * que llegan a EOF antes de que el usuario envíe su entrada.
+ * @param {string} text
+ * @returns {string}
+ */
+export function sanitizeLoopOutput(text) {
+  if (!text || typeof text !== "string") return "";
+  const lines = text.split("\n");
+  if (lines.length > 20) {
+    for (let p = 1; p <= 8; p++) {
+      let consecutiveMatches = 0;
+      for (let i = 0; i + p < lines.length; i++) {
+        if (lines[i].trim() && lines[i] === lines[i + p]) {
+          consecutiveMatches++;
+          if (consecutiveMatches >= p * 3) {
+            const trimmed = lines.slice(0, Math.min(12, p * 2)).join("\n");
+            return `${trimmed}\n\n💡 (El programa espera tu respuesta en la barra inferior para continuar)`;
+          }
+        } else {
+          consecutiveMatches = 0;
+        }
+      }
+    }
+  }
+  return text;
+}
+
+/**
+ * Extrae la nueva porción de salida generada en el paso actual frente a la salida previa.
+ * @param {string} prev
+ * @param {string} next
+ * @returns {string}
+ */
+export function extractNewOutputDelta(prev, next) {
+  if (!next) return "";
+  if (!prev) return next;
+  if (next.startsWith(prev)) {
+    return next.slice(prev.length);
+  }
+  let commonLen = 0;
+  const maxCheck = Math.min(prev.length, next.length);
+  while (commonLen < maxCheck && prev[commonLen] === next[commonLen]) {
+    commonLen++;
+  }
+  return next.slice(commonLen);
+}
+
+/**
  * Genera el payload de compilación para la API de Wandbox con soporte multi-archivo.
  * Reglas de aislamiento estricto:
  * 1. Si el archivo activo es C (.c): JAMÁS incluye archivos C++ (.cpp, .hpp) para no romper el compilador gcc de C.
@@ -270,8 +318,15 @@ export function mountCRunnerView(containerEl, {
 
   header.append(meta, btnCompile);
 
-  // 2. Tarjeta stdin
+  // 2. Modo avanzado: Tarjeta stdin colapsable para lote
   const hasInteractiveInput = /\b(scanf|cin|getline|getchar|fgets|gets)\b/.test(activeFile.content || "");
+  const stdinDetails = document.createElement("details");
+  stdinDetails.className = "c-stdin-details";
+  const stdinSummary = document.createElement("summary");
+  stdinSummary.className = "c-section-label c-stdin-summary";
+  stdinSummary.textContent = "Entrada estándar por lotes (avanzado / batch stdin)";
+  stdinDetails.appendChild(stdinSummary);
+
   const stdinCard = document.createElement("div");
   stdinCard.className = "c-stdin-card";
 
@@ -279,17 +334,17 @@ export function mountCRunnerView(containerEl, {
   stdinHeader.className = "c-stdin-header";
   const stdinLabel = document.createElement("label");
   stdinLabel.className = "c-section-label";
-  stdinLabel.textContent = "Entrada estándar (stdin para cin / scanf):";
+  stdinLabel.textContent = "Entrada estándar preconfigurada (lote completo):";
   const stdinHelp = document.createElement("span");
   stdinHelp.className = "c-stdin-help";
-  stdinHelp.textContent = "Los datos se enviarán a tu programa al ejecutar";
+  stdinHelp.textContent = "Para enviar todas las entradas de antemano";
   stdinHeader.append(stdinLabel, stdinHelp);
 
   const stdinTextarea = document.createElement("textarea");
   stdinTextarea.className = "c-stdin-textarea code-font";
   stdinTextarea.placeholder = hasInteractiveInput
-    ? "Escribí aquí las opciones y números de tu programa (ej: 1\\n10 20\\n5)..."
-    : "Escribí aquí los datos de entrada que tu programa solicitará en tiempo de ejecución...";
+    ? "Opcional: Si querés enviar todo junto de una sola vez (ej: 1\\n10 20\\n5)..."
+    : "Escribí aquí los datos de entrada por lotes...";
 
   const stdinFooter = document.createElement("div");
   stdinFooter.className = "c-stdin-footer";
@@ -302,19 +357,20 @@ export function mountCRunnerView(containerEl, {
   const btnSendStdin = document.createElement("button");
   btnSendStdin.type = "button";
   btnSendStdin.className = "btn btn-primary btn-sm btn-c-send-stdin";
-  btnSendStdin.innerHTML = '<span data-icon="play"></span><span>Enviar entrada y Ejecutar</span> <span class="c-key-hint" style="opacity:0.75;font-size:11px;">(Ctrl+Enter)</span>';
+  btnSendStdin.innerHTML = '<span data-icon="play"></span><span>Ejecutar por lotes</span>';
 
   stdinFooter.append(btnClearStdin, btnSendStdin);
   stdinCard.append(stdinHeader, stdinTextarea, stdinFooter);
+  stdinDetails.appendChild(stdinCard);
 
-  // 3. Tarjeta Terminal
+  // 3. Tarjeta Terminal Interactiva (Paso a Paso)
   const termCard = document.createElement("div");
   termCard.className = "c-terminal-card";
   const termHeader = document.createElement("div");
   termHeader.className = "c-terminal-header";
   const termTitle = document.createElement("span");
   termTitle.className = "c-section-label";
-  termTitle.textContent = "Terminal de Ejecución";
+  termTitle.textContent = "Terminal Interactiva";
   const termStatus = document.createElement("span");
   termStatus.className = "c-term-status is-idle";
   termStatus.textContent = "Listo para compilar";
@@ -324,50 +380,87 @@ export function mountCRunnerView(containerEl, {
   termBody.className = "c-terminal-body code-font";
   termBody.textContent = "Iniciando compilador GCC en Wandbox...";
 
-  termCard.append(termHeader, termBody);
-  shell.append(header, stdinCard, termCard);
+  // 4. Barra de Entrada Interactiva (Paso a Paso)
+  const termInputBar = document.createElement("div");
+  termInputBar.className = "c-terminal-input-bar";
+
+  const termPrompt = document.createElement("span");
+  termPrompt.className = "c-terminal-prompt-sym";
+  termPrompt.textContent = ">";
+
+  const termInput = document.createElement("input");
+  termInput.type = "text";
+  termInput.className = "c-terminal-input code-font";
+  termInput.placeholder = hasInteractiveInput
+    ? "Escribí tu respuesta aquí y presioná Enter..."
+    : "Escribí un comando o datos y presioná Enter...";
+  termInput.autocomplete = "off";
+  termInput.spellcheck = false;
+
+  const btnSendStep = document.createElement("button");
+  btnSendStep.type = "button";
+  btnSendStep.className = "btn btn-primary btn-sm btn-c-send-step";
+  btnSendStep.innerHTML = '<span data-icon="play"></span><span>Enviar</span>';
+
+  const btnReset = document.createElement("button");
+  btnReset.type = "button";
+  btnReset.className = "btn btn-subtle btn-sm btn-c-reset-step";
+  btnReset.title = "Reiniciar la terminal interactiva desde el principio";
+  btnReset.textContent = "Reiniciar";
+
+  termInputBar.append(termPrompt, termInput, btnSendStep, btnReset);
+  termCard.append(termHeader, termBody, termInputBar);
+
+  shell.append(header, termCard, stdinDetails);
   containerEl.appendChild(shell);
 
+  let sessionInputs = [];
+  let lastRawStdout = "";
   let isCompiling = false;
 
-  async function executeCompile() {
+  async function executeStep(userInput = null) {
     if (isCompiling) return;
+
+    if (userInput !== null && String(userInput).trim() !== "") {
+      sessionInputs.push(String(userInput).trim());
+    }
+
     isCompiling = true;
     btnCompile.disabled = true;
     btnSendStdin.disabled = true;
+    btnSendStep.disabled = true;
+    termInput.disabled = true;
     termStatus.className = "c-term-status is-running";
-    termStatus.textContent = "Compilando en Wandbox...";
-    termBody.innerHTML = '<span class="c-term-hint">Conectando con GCC en Wandbox y compilando proyecto...</span>';
+    termStatus.textContent = sessionInputs.length === 0 ? "Compilando en Wandbox..." : "Ejecutando paso...";
+
+    const batchValue = (stdinTextarea.value || "").trim();
+    let effectiveStdin = "";
+    if (sessionInputs.length > 0) {
+      effectiveStdin = sessionInputs.join("\n") + "\n";
+    } else if (batchValue) {
+      effectiveStdin = batchValue + "\n";
+    }
 
     const payload = buildWandboxPayload({
       activeFile,
       companionFiles,
-      stdin: stdinTextarea.value || ""
+      stdin: effectiveStdin
     });
 
     const t0 = performance.now();
     try {
       const res = await compileAndRunWandbox(payload, fetchFn);
       const ms = Math.round(performance.now() - t0);
-      termBody.innerHTML = "";
 
       const compilerErrors = parseGccErrors(`${res.compilerErr}\n${res.compilerOut}\n${res.stderr}`);
 
-      if (res.success && compilerErrors.length === 0) {
-        termStatus.className = "c-term-status is-ok";
-        termStatus.textContent = `Código de salida: 0 (Éxito) — ${ms} ms`;
-        onCompilerResult({ success: true, errors: [] });
-      } else {
+      if (compilerErrors.length > 0 || !res.success) {
         termStatus.className = "c-term-status is-err";
         termStatus.textContent = `Falló compilación / ejecución (código ${res.status}) — ${ms} ms`;
-        onCompilerResult({ success: false, errors: compilerErrors });
-      }
-
-      // Si hubo advertencias o errores del compilador
-      if (res.compilerErr || res.compilerOut) {
+        termBody.innerHTML = "";
         const compBlock = document.createElement("div");
-        compBlock.className = res.compilerErr ? "c-term-comp-err" : "c-term-comp-warn";
-        compBlock.textContent = res.compilerErr || res.compilerOut;
+        compBlock.className = "c-term-comp-err";
+        compBlock.textContent = res.compilerErr || res.compilerOut || res.stderr;
         if (compilerErrors.length > 0) {
           compBlock.title = `Hacé clic para saltar a la línea ${compilerErrors[0].line} en el editor`;
           compBlock.addEventListener("click", () => {
@@ -375,53 +468,132 @@ export function mountCRunnerView(containerEl, {
           });
         }
         termBody.appendChild(compBlock);
+        onCompilerResult({ success: false, errors: compilerErrors });
+        return;
       }
 
-      // Salida estándar stdout
-      if (res.stdout) {
-        const outDiv = document.createElement("div");
-        outDiv.className = "c-term-stdout";
-        outDiv.textContent = res.stdout;
-        termBody.appendChild(outDiv);
+      onCompilerResult({ success: true, errors: [] });
+
+      // PASO 0: Primer arranque
+      if (sessionInputs.length === 0) {
+        termBody.innerHTML = "";
+        lastRawStdout = res.stdout || "";
+        const cleanStdout = sanitizeLoopOutput(lastRawStdout);
+
+        if (cleanStdout) {
+          const outDiv = document.createElement("div");
+          outDiv.className = "c-term-stdout";
+          outDiv.textContent = cleanStdout;
+          termBody.appendChild(outDiv);
+        } else {
+          const emptyDiv = document.createElement("div");
+          emptyDiv.className = "c-term-hint";
+          emptyDiv.textContent = "(El programa terminó sin producir salida en stdout ni stderr).";
+          termBody.appendChild(emptyDiv);
+        }
+
+        if (res.stderr) {
+          const errDiv = document.createElement("div");
+          errDiv.className = "c-term-stderr";
+          errDiv.textContent = res.stderr;
+          termBody.appendChild(errDiv);
+        }
+      } else {
+        // PASO N: Interacción del usuario
+        const userLine = document.createElement("div");
+        userLine.className = "c-term-user-line";
+        userLine.innerHTML = `<span class="c-term-user-prompt">&gt;</span> <span class="c-term-user-text">${escapeHtml(userInput)}</span>`;
+        termBody.appendChild(userLine);
+
+        const fullStdout = res.stdout || "";
+        let newChunk = "";
+        if (fullStdout.startsWith(lastRawStdout)) {
+          newChunk = fullStdout.slice(lastRawStdout.length);
+        } else {
+          newChunk = extractNewOutputDelta(lastRawStdout, fullStdout);
+        }
+        lastRawStdout = fullStdout;
+
+        const cleanNewChunk = sanitizeLoopOutput(newChunk);
+        if (cleanNewChunk) {
+          const outDiv = document.createElement("div");
+          outDiv.className = "c-term-stdout";
+          outDiv.textContent = cleanNewChunk;
+          termBody.appendChild(outDiv);
+        }
+
+        if (res.stderr) {
+          const errDiv = document.createElement("div");
+          errDiv.className = "c-term-stderr";
+          errDiv.textContent = res.stderr;
+          termBody.appendChild(errDiv);
+        }
       }
 
-      // Salida de error stderr
-      if (res.stderr) {
-        const errDiv = document.createElement("div");
-        errDiv.className = "c-term-stderr";
-        errDiv.textContent = res.stderr;
-        termBody.appendChild(errDiv);
-      }
+      termBody.scrollTop = termBody.scrollHeight;
 
-      if (!res.stdout && !res.stderr && !res.compilerErr && !res.compilerOut) {
-        const emptyDiv = document.createElement("div");
-        emptyDiv.className = "c-term-hint";
-        emptyDiv.textContent = "(El programa terminó sin producir salida en stdout ni stderr).";
-        termBody.appendChild(emptyDiv);
-      }
-
-      const isStdinEmpty = !(stdinTextarea.value || "").trim();
-      if (hasInteractiveInput && isStdinEmpty) {
-        const hintDiv = document.createElement("div");
-        hintDiv.className = "c-term-hint c-term-stdin-tip";
-        hintDiv.style.cssText = "margin-top: 10px; padding: 8px 12px; background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; color: #bae6fd; font-size: 12px; border-radius: 4px; line-height: 1.4;";
-        hintDiv.textContent = "💡 Consejo: Tu programa solicita datos con scanf/cin y la caja de Entrada estándar está vacía. Si ves que el menú se repite en bucle o termina de golpe, ingresá las opciones y números en la caja de 'Entrada estándar' arriba y volvé a presionar 'Compilar y Ejecutar'.";
-        termBody.appendChild(hintDiv);
+      if (res.status === 0 && !hasInteractiveInput) {
+        termStatus.className = "c-term-status is-ok";
+        termStatus.textContent = `Código de salida: 0 (Éxito) — ${ms} ms`;
+        termInput.placeholder = "Programa finalizado. Tocá 'Reiniciar' para volver a ejecutar.";
+      } else {
+        termStatus.className = "c-term-status is-ok";
+        termStatus.textContent = `Paso ${sessionInputs.length} — Ejecutando (${ms} ms)`;
+        termInput.placeholder = "Escribí tu siguiente respuesta y presioná Enter...";
+        setTimeout(() => termInput.focus(), 60);
       }
     } catch (err) {
       termStatus.className = "c-term-status is-err";
       termStatus.textContent = "Error de red / API";
-      termBody.innerHTML = `<span class="c-term-stderr">Error al conectar con la API de compilación: ${escapeHtml(err.message)}</span>`;
+      const errDiv = document.createElement("div");
+      errDiv.className = "c-term-stderr";
+      errDiv.textContent = `Error al conectar con la API de compilación: ${escapeHtml(err.message)}`;
+      termBody.appendChild(errDiv);
       onCompilerResult({ success: false, errors: [] });
     } finally {
       isCompiling = false;
       btnCompile.disabled = false;
       btnSendStdin.disabled = false;
+      btnSendStep.disabled = false;
+      termInput.disabled = false;
     }
   }
 
-  btnCompile.addEventListener("click", executeCompile);
-  btnSendStdin.addEventListener("click", executeCompile);
+  btnCompile.addEventListener("click", () => {
+    sessionInputs = [];
+    lastRawStdout = "";
+    executeStep(null);
+  });
+
+  btnSendStdin.addEventListener("click", () => {
+    sessionInputs = [];
+    lastRawStdout = "";
+    executeStep(null);
+  });
+
+  btnReset.addEventListener("click", () => {
+    sessionInputs = [];
+    lastRawStdout = "";
+    termInput.value = "";
+    termBody.innerHTML = '<span class="c-term-hint">Reiniciando consola...</span>';
+    executeStep(null);
+  });
+
+  function handleSendInteractiveInput() {
+    const text = termInput.value.trim();
+    if (!text) return;
+    termInput.value = "";
+    executeStep(text);
+  }
+
+  btnSendStep.addEventListener("click", handleSendInteractiveInput);
+
+  termInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSendInteractiveInput();
+    }
+  });
 
   btnClearStdin.addEventListener("click", () => {
     stdinTextarea.value = "";
@@ -431,14 +603,18 @@ export function mountCRunnerView(containerEl, {
   stdinTextarea.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
-      executeCompile();
+      sessionInputs = [];
+      lastRawStdout = "";
+      executeStep(null);
     }
   });
 
   function handleKeydown(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
-      executeCompile();
+      sessionInputs = [];
+      lastRawStdout = "";
+      executeStep(null);
     }
   }
   if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -446,7 +622,7 @@ export function mountCRunnerView(containerEl, {
   }
 
   // Ejecución inicial automática al montar
-  executeCompile();
+  executeStep(null);
 
   return {
     destroy() {
@@ -454,7 +630,7 @@ export function mountCRunnerView(containerEl, {
         window.removeEventListener("keydown", handleKeydown);
       }
     },
-    run: executeCompile
+    run: () => executeStep(null)
   };
 }
 

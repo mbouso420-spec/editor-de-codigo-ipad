@@ -1021,14 +1021,30 @@
   color: var(--color-muted);
 }
 
+.c-stdin-details {
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+  padding: var(--space-xs) var(--space-md);
+}
+
+.c-stdin-summary {
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 4px 0;
+}
+
 .c-stdin-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--color-paper-2);
-  border: var(--rule-hair) solid var(--color-rule);
-  border-radius: var(--radius-card);
+  padding: var(--space-xs) 0;
+  background: transparent;
+  border: none;
 }
 
 .c-stdin-header {
@@ -1088,6 +1104,58 @@
   padding: var(--space-xs) var(--space-md);
   background: var(--color-paper);
   border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.c-terminal-input-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-paper);
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+.c-terminal-prompt-sym {
+  font-family: var(--font-code);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-brand);
+  user-select: none;
+}
+
+.c-terminal-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-paper-2);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-control);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  padding: 6px var(--space-xs);
+  outline: none;
+}
+
+.c-terminal-input:focus-visible {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 2px var(--color-brand-glow);
+}
+
+.c-term-user-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #38bdf8;
+  font-weight: 600;
+  margin: 6px 0;
+  padding: 3px 6px;
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 2px solid #38bdf8;
+  border-radius: var(--radius-control);
+}
+
+.c-term-user-prompt {
+  color: #38bdf8;
+  user-select: none;
 }
 
 .c-term-status {
