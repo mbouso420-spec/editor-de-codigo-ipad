@@ -161,6 +161,9 @@ async function createRawGithubClient(token) {
         } catch {
           // Ignorar
         }
+        if (detail.includes("Resource not accessible by personal access token")) {
+          detail = "Tu token de GitHub no tiene permiso para este recurso. Para Gists, activá 'Account permissions -> Gists (Read and write)' en GitHub o usá un Token Classic con la casilla 'gist'.";
+        }
         const err = new Error(`GitHub API: ${detail}`);
         err.status = res.status;
         throw err;

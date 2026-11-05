@@ -200,8 +200,14 @@ En el panel **Asistente**, tocá el icono del **engranaje** para configurar tu p
 </p>
 
 ### Conectar tu cuenta con Personal Access Token (PAT)
-1. En GitHub, creá un token en **Settings** -> **Developer settings** -> **Personal access tokens** -> **Fine-grained tokens**.
-2. Concedele permisos de lectura y escritura a **Contents** y copialo (`github_pat_...`).
+Podés usar cualquiera de los dos tipos de token de GitHub:
+1. **Opción A (Recomendada — Token Classic sin restricciones):**
+   - En GitHub: **Settings** -> **Developer settings** -> **Personal access tokens** -> **Tokens (classic)** -> **Generate new token (classic)**.
+   - Marcá las casillas **`repo`** (para repositorios) y **`gist`** (para respaldos en la nube).
+2. **Opción B (Fine-grained token):**
+   - En **Personal access tokens** -> **Fine-grained tokens**.
+   - En **Repository permissions**: **Contents: Read and write**.
+   - En **Account permissions**: **Gists: Read and write**.
 3. En el IDE, tocá **Repositorio**, pegá el token y tocá **Conectar**.
 
 ### Carga bajo demanda y modo offline

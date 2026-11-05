@@ -498,7 +498,12 @@ async function initApp() {
         await saveProjectState(activeProject);
         explorer.setAutosaveStatus(`¡Respaldado en Gist! (${res.id.slice(0, 6)})`);
       } catch (err) {
-        explorer.setAutosaveStatus(`Error: ${err?.message || "al respaldar en Gist"}`);
+        const msg = err?.message || "al respaldar en Gist";
+        if (msg.includes("Resource not accessible") || msg.includes("permiso para Gists") || msg.includes("token no tiene permiso")) {
+          explorer.setAutosaveStatus("Error: el token necesita permiso 'Gists: Read and write'");
+        } else {
+          explorer.setAutosaveStatus(`Error: ${msg}`);
+        }
       }
     }
   });

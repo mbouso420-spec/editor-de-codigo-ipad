@@ -841,7 +841,15 @@ export function initGithubController({
       }
     } catch (err) {
       const msg = err?.message || "No se pudo guardar el Gist.";
-      setStatus(localBackupStatus, `Error al respaldar en Gist: ${msg}`, "error");
+      if (msg.includes("Resource not accessible") || msg.includes("permiso para Gists")) {
+        setStatus(
+          localBackupStatus,
+          "Tu token actual no tiene permiso de Gists. Para habilitarlo en GitHub: editá tu token y marcá 'Account permissions -> Gists: Read and write' (o creá un Token Classic con la casilla 'gist').",
+          "error"
+        );
+      } else {
+        setStatus(localBackupStatus, `Error al respaldar en Gist: ${msg}`, "error");
+      }
     } finally {
       backupGistBtn.disabled = false;
     }
@@ -884,7 +892,15 @@ export function initGithubController({
       await refreshSyncPanel();
     } catch (err) {
       const msg = err?.message || "No se pudo crear el repositorio en GitHub.";
-      setStatus(localBackupStatus, `Error al publicar repositorio: ${msg}`, "error");
+      if (msg.includes("Resource not accessible")) {
+        setStatus(
+          localBackupStatus,
+          "Tu token no tiene permiso para crear repositorios. Usá un Token Classic con permiso 'repo' o un Fine-Grained con 'All repositories'.",
+          "error"
+        );
+      } else {
+        setStatus(localBackupStatus, `Error al publicar repositorio: ${msg}`, "error");
+      }
     } finally {
       publishRepoBtn.disabled = false;
     }
