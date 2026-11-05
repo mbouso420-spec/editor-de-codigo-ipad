@@ -8,7 +8,7 @@ import { createEditorManager, wrapTextWithDelimiters } from "../js/editor/editor
 import { truncateCodeContent, estimateTokens, formatInlineMarkdown } from "../js/ai/chatController.js";
 import { findBestHtmlEntrypoint, findTargetHtmlFile } from "../js/ui/livePreviewModal.js";
 import { parseGccErrors, buildWandboxPayload, hasMainFunction } from "../js/preview/cRunner.js";
-import { convertResultsToCsv, convertResultsToJson } from "../js/preview/sqlRunner.js";
+import { convertResultsToCsv, convertResultsToJson, buildSqlRunnerPreview } from "../js/preview/sqlRunner.js";
 
 describe("[STRESS LOOP #1] Ciclo de Vida, Persistencia y Cuota", () => {
   test("formatStorageBytes formatea adecuadamente desde B hasta TB", () => {
@@ -142,6 +142,34 @@ describe("[STRESS LOOP #1] Gestión de Memoria y Reemplazo Invariante de Código
     editor.clearActiveFile();
     editor.clearErrorMarkers();
     assert.equal(editor.getErrorMarkers().length, 0);
+  });
+
+  test("editor-error-ruler sincroniza pills con addErrorMarker y limpia con clearErrorMarkers", async () => {
+    const ruler = document.createElement("div");
+    ruler.id = "editor-error-ruler";
+    ruler.hidden = true;
+    document.body.appendChild(ruler);
+
+    const mount = document.createElement("div");
+    const editor = await createEditorManager({
+      mountEl: mount,
+      onDocChange: () => {},
+      onSelectionChange: () => {}
+    });
+
+    editor.openFile({ id: "demo.c", path: "demo.c", lang: "c", content: "int main() {\n  return 0;\n}" });
+    editor.addErrorMarker(2, "expected ';' before 'return'");
+
+    assert.equal(ruler.hidden, false);
+    const pills = ruler.querySelectorAll(".editor-error-marker-pill");
+    assert.equal(pills.length, 1);
+    assert.match(pills[0].getAttribute("aria-label"), /Línea 2/);
+
+    editor.clearErrorMarkers();
+    assert.equal(ruler.hidden, true);
+    assert.equal(ruler.children.length, 0);
+
+    ruler.remove();
   });
 });
 
@@ -298,5 +326,13 @@ describe("[STRESS LOOP #1] Motor SQLite en Vivo y Exportación CSV/JSON", () => 
     assert.equal(json[0].precio, 120.5);
     assert.equal(json[1].precio, null);
     assert.equal(json[2].id, 3);
+  });
+
+  test("buildSqlRunnerPreview incluye controles de paginación de 50 filas por página", () => {
+    const sqlFile = { path: "schema.sql", content: "SELECT * FROM users;" };
+    const html = buildSqlRunnerPreview(sqlFile);
+    assert.ok(html.includes("sql-pagination-bar"));
+    assert.ok(html.includes("sql-pagination-info"));
+    assert.ok(html.includes("PAGE_SIZE = 50"));
   });
 });

@@ -341,6 +341,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       statesByFile.set(activeFileId, view.state);
     }
     activeFileId = null;
+    clearErrorMarkers();
     onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
   }
 
@@ -348,6 +349,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     statesByFile.delete(fileId);
     if (activeFileId === fileId) {
       activeFileId = null;
+      clearErrorMarkers();
     }
   }
 
@@ -498,6 +500,8 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         goToLine(num);
       }
     }
+    const totalLines = view?.state?.doc?.lines || 1;
+    renderErrorRuler(activeErrorMarkers, totalLines, goToLine);
   }
 
   function clearErrorMarkers() {
@@ -507,6 +511,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         effects: clearErrorEffect.of(null)
       });
     }
+    renderErrorRuler([], 1, goToLine);
   }
 
   function getErrorMarkers() {
@@ -659,6 +664,35 @@ async function loadCodeMirrorModules() {
   };
 }
 
+function renderErrorRuler(markers, totalLines, onJump) {
+  const rulerEl = typeof document !== "undefined" ? document.getElementById("editor-error-ruler") : null;
+  if (!rulerEl) return;
+  if (!markers || markers.length === 0) {
+    rulerEl.hidden = true;
+    rulerEl.innerHTML = "";
+    return;
+  }
+  rulerEl.hidden = false;
+  rulerEl.innerHTML = "";
+  const linesCount = Math.max(1, totalLines || 1);
+
+  for (const m of markers) {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    const isWarn = /warning/i.test(m.errorMessage || "");
+    pill.className = isWarn ? "editor-error-marker-pill is-warning" : "editor-error-marker-pill";
+    pill.title = `Línea ${m.lineNum}: ${m.errorMessage} (tocá para ir a la línea)`;
+    pill.setAttribute("aria-label", `Línea ${m.lineNum}: ${m.errorMessage}`);
+    const pct = Math.min(97, Math.max(3, (m.lineNum / linesCount) * 100));
+    pill.style.top = `${pct}%`;
+    pill.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onJump?.(m.lineNum);
+    });
+    rulerEl.appendChild(pill);
+  }
+}
+
 /**
  * Respaldo local ligero por si el usuario abre el IDE sin conexión antes del cacheo PWA.
  */
@@ -751,11 +785,13 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     },
     clearActiveFile() {
       activeFileId = null;
+      this.clearErrorMarkers();
       onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     },
     dropFileState(fileId) {
       if (activeFileId === fileId) {
         activeFileId = null;
+        this.clearErrorMarkers();
       }
     },
     renameFileStates(oldPath, newPath, isFolder) {
@@ -812,11 +848,13 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         offset += lines[i].length + 1;
       }
       textarea.setSelectionRange(offset, offset);
+      renderErrorRuler(fallbackErrorMarkers, lines.length, (l) => this.goToLine(l));
     },
     clearErrorMarkers() {
       fallbackErrorMarkers.length = 0;
       textarea.classList.remove("has-error");
       textarea.title = "";
+      renderErrorRuler([], 1, () => {});
     },
     getErrorMarkers() {
       return [...fallbackErrorMarkers];

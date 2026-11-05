@@ -47,7 +47,9 @@ if (!globalThis.MouseEvent) {
 class MockElement {
   constructor(tagName = "div") {
     this.tagName = tagName.toUpperCase();
+    this.id = "";
     this.children = [];
+    this.parentElement = null;
     this.classList = {
       _classes: new Set(),
       add: (c) => this.classList._classes.add(c),
@@ -80,12 +82,31 @@ class MockElement {
     String(v || "").trim().split(/\s+/).filter(Boolean).forEach(c => this.classList._classes.add(c));
   }
   get innerHTML() { return this._innerHTML; }
-  set innerHTML(v) { this._innerHTML = String(v); }
+  set innerHTML(v) {
+    this._innerHTML = String(v);
+    if (v === "") this.children = [];
+  }
   get textContent() { return this._textContent; }
   set textContent(v) { this._textContent = String(v); }
-  appendChild(child) { this.children.push(child); return child; }
+  appendChild(child) {
+    if (child) child.parentElement = this;
+    this.children.push(child);
+    return child;
+  }
   append(...children) { children.forEach(c => this.appendChild(c)); }
-  removeChild(child) { const i = this.children.indexOf(child); if (i !== -1) this.children.splice(i, 1); return child; }
+  removeChild(child) {
+    const i = this.children.indexOf(child);
+    if (i !== -1) {
+      this.children.splice(i, 1);
+      if (child) child.parentElement = null;
+    }
+    return child;
+  }
+  remove() {
+    if (this.parentElement) {
+      this.parentElement.removeChild(this);
+    }
+  }
   contains(child) { return this.children.includes(child); }
   addEventListener(type, fn) {
     if (!this._listeners.has(type)) this._listeners.set(type, []);
@@ -149,11 +170,22 @@ const htmlElement = new MockElement("html");
 const bodyElement = new MockElement("body");
 htmlElement.appendChild(bodyElement);
 
+function findElementById(node, id) {
+  if (node.id === id) return node;
+  for (const ch of node.children || []) {
+    if (ch instanceof MockElement) {
+      const found = findElementById(ch, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 globalThis.document = {
   documentElement: htmlElement,
   body: bodyElement,
   createElement: (tag) => new MockElement(tag),
-  getElementById: () => null,
+  getElementById: (id) => findElementById(htmlElement, id),
   querySelector: () => null,
   querySelectorAll: () => []
 };

@@ -318,6 +318,35 @@ export function buildSqlRunnerPreview(sqlFile, sameFolderFiles = []) {
     .status-loading {
       color: var(--warn);
     }
+    .sql-pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--card-alt);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .sql-pagination-info {
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+    .sql-pagination-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sql-pagination-actions .btn {
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+    .sql-pagination-actions .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js"></script>
 </head>
@@ -439,18 +468,76 @@ export function buildSqlRunnerPreview(sqlFile, sameFolderFiles = []) {
           table.appendChild(thead);
 
           var tbody = document.createElement("tbody");
-          res.values.forEach(function (row) {
-            var tr = document.createElement("tr");
-            row.forEach(function (cell) {
-              var td = document.createElement("td");
-              td.textContent = cell !== null && cell !== undefined ? cell : "NULL";
-              tr.appendChild(td);
-            });
-            tbody.appendChild(tr);
-          });
           table.appendChild(tbody);
           tableWrap.appendChild(table);
           card.appendChild(tableWrap);
+
+          var PAGE_SIZE = 50;
+          if (res.values.length > PAGE_SIZE) {
+            var currentPage = 1;
+            var totalPages = Math.ceil(res.values.length / PAGE_SIZE);
+
+            var pagBar = document.createElement("div");
+            pagBar.className = "sql-pagination-bar";
+
+            var pageInfo = document.createElement("span");
+            pageInfo.className = "sql-pagination-info";
+
+            var btnPrev = document.createElement("button");
+            btnPrev.type = "button";
+            btnPrev.className = "btn";
+            btnPrev.textContent = "‹ Anterior";
+
+            var btnNext = document.createElement("button");
+            btnNext.type = "button";
+            btnNext.className = "btn";
+            btnNext.textContent = "Siguiente ›";
+
+            function renderPage(page) {
+              currentPage = Math.max(1, Math.min(page, totalPages));
+              tbody.innerHTML = "";
+              var startIdx = (currentPage - 1) * PAGE_SIZE;
+              var endIdx = Math.min(res.values.length, startIdx + PAGE_SIZE);
+              pageInfo.textContent = "Página " + currentPage + " de " + totalPages + " (filas " + (startIdx + 1) + " a " + endIdx + " de " + res.values.length + ")";
+              btnPrev.disabled = currentPage === 1;
+              btnNext.disabled = currentPage === totalPages;
+
+              for (var i = startIdx; i < endIdx; i++) {
+                var row = res.values[i];
+                var tr = document.createElement("tr");
+                row.forEach(function (cell) {
+                  var td = document.createElement("td");
+                  td.textContent = cell !== null && cell !== undefined ? cell : "NULL";
+                  tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+              }
+            }
+
+            btnPrev.addEventListener("click", function () { renderPage(currentPage - 1); });
+            btnNext.addEventListener("click", function () { renderPage(currentPage + 1); });
+
+            var actionsWrap = document.createElement("div");
+            actionsWrap.className = "sql-pagination-actions";
+            actionsWrap.appendChild(btnPrev);
+            actionsWrap.appendChild(btnNext);
+
+            pagBar.appendChild(pageInfo);
+            pagBar.appendChild(actionsWrap);
+            card.appendChild(pagBar);
+
+            renderPage(1);
+          } else {
+            res.values.forEach(function (row) {
+              var tr = document.createElement("tr");
+              row.forEach(function (cell) {
+                var td = document.createElement("td");
+                td.textContent = cell !== null && cell !== undefined ? cell : "NULL";
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
+            });
+          }
 
           resultsArea.appendChild(card);
         });
