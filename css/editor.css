@@ -393,3 +393,55 @@
   background: var(--color-warn, #f59e0b);
   box-shadow: 0 0 3px rgba(245, 158, 11, 0.7);
 }
+
+/* ==========================================================================
+   Minimap — Vista previa visual lateral del documento
+   ========================================================================== */
+
+.editor-minimap-container {
+  width: 54px;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  right: 14px;
+  background: var(--color-paper-2);
+  border-left: var(--rule-hair) solid var(--color-rule);
+  z-index: 5;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  opacity: 0.85;
+  transition:
+    opacity var(--dur-micro) var(--ease-out),
+    background-color var(--dur-micro) var(--ease-out);
+}
+
+.editor-minimap-container:hover {
+  opacity: 1;
+  background: var(--color-paper-3);
+}
+
+.editor-minimap-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.editor-minimap-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 14px;
+  background: var(--color-selection);
+  border: 1px solid var(--color-accent-text);
+  border-radius: var(--radius-control);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+@media (max-width: 48rem) {
+  .editor-minimap-container {
+    display: none;
+  }
+}

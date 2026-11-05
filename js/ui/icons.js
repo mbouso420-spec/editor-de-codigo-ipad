@@ -45,7 +45,9 @@ const ICONS = {
   terminal: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line>',
   chevronDown: '<path d="m6 9 6 6 6-6"></path>',
   chevronLeft: '<path d="m15 18-6-6 6-6"></path>',
-  chevronRight: '<path d="m9 18 6-6-6-6"></path>'
+  chevronRight: '<path d="m9 18 6-6-6-6"></path>',
+  layout: '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path>',
+  fileSearch: '<path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M4.268 21a2 2 0 0 0 1.732 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"></path><circle cx="5" cy="14" r="3"></circle><path d="m9 18-1.5-1.5"></path>'
 };
 
 /**

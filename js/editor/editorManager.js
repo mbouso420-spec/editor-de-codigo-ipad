@@ -1,4 +1,5 @@
 import { inferFileMeta } from "../storage/workspaceDb.js";
+import { createMinimapController } from "./minimap.js";
 
 const PREF_KEYS = {
   wordWrap: "ide.editor.wordWrap",
@@ -111,6 +112,38 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
 
   const wrapCompartment = new Compartment();
   const statesByFile = new Map();
+
+  const minimap = createMinimapController({
+    mountEl: mountEl.parentElement || mountEl,
+    getDocLines: () => {
+      if (view?.state?.doc) {
+        const doc = view.state.doc;
+        const lines = [];
+        for (let i = 1; i <= doc.lines; i++) {
+          lines.push(doc.line(i).text);
+        }
+        return lines;
+      }
+      return [];
+    },
+    getViewport: () => {
+      const scroller = view?.scrollDOM;
+      if (scroller) {
+        return {
+          top: scroller.scrollTop,
+          height: scroller.clientHeight,
+          totalHeight: scroller.scrollHeight
+        };
+      }
+      return { top: 0, height: 100, totalHeight: 100 };
+    },
+    onScrollToRatio: (ratio) => {
+      const scroller = view?.scrollDOM;
+      if (scroller) {
+        scroller.scrollTop = ratio * (scroller.scrollHeight - scroller.clientHeight);
+      }
+    }
+  });
 
   // Marcadores de error de sintaxis / compilación (GCC / Clang / Linters)
   const addErrorEffect = StateEffect?.define ? StateEffect.define() : null;
@@ -275,6 +308,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         EditorView.updateListener.of((update) => {
           if (update.docChanged && activeFileId) {
             onDocChange(activeFileId, update.state.doc.toString());
+            minimap?.render();
           }
           if (update.selectionSet || update.docChanged) {
             emitSelection(update.state);
@@ -329,10 +363,17 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         state: nextState,
         parent: mountEl
       });
+      if (view.scrollDOM) {
+        view.scrollDOM.addEventListener("scroll", () => {
+          minimap?.updateSlider();
+        }, { passive: true });
+      }
     } else {
       view.setState(nextState);
     }
 
+    minimap?.render();
+    minimap?.updateSlider();
     emitSelection(view.state);
   }
 
@@ -578,7 +619,9 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     toggleWordWrap,
     isWordWrapEnabled: () => wordWrap,
     stepFontSize,
-    getFontSize: () => fontSize
+    getFontSize: () => fontSize,
+    toggleMinimap: (force) => minimap?.toggle(force),
+    isMinimapVisible: () => (minimap ? minimap.isVisible() : false)
   };
 }
 
@@ -712,10 +755,35 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
   mountEl.innerHTML = "";
   mountEl.appendChild(textarea);
 
+  const fallbackMinimap = createMinimapController({
+    mountEl: mountEl.parentElement || mountEl,
+    getDocLines: () => (textarea ? textarea.value.split("\n") : []),
+    getViewport: () => {
+      if (textarea) {
+        return {
+          top: textarea.scrollTop,
+          height: textarea.clientHeight,
+          totalHeight: textarea.scrollHeight
+        };
+      }
+      return { top: 0, height: 100, totalHeight: 100 };
+    },
+    onScrollToRatio: (ratio) => {
+      if (textarea) {
+        textarea.scrollTop = ratio * (textarea.scrollHeight - textarea.clientHeight);
+      }
+    }
+  });
+
+  textarea.addEventListener("scroll", () => {
+    fallbackMinimap?.updateSlider();
+  }, { passive: true });
+
   textarea.addEventListener("input", () => {
     if (activeFileId) {
       onDocChange(activeFileId, textarea.value);
     }
+    fallbackMinimap?.render();
     emitSel();
   });
 
@@ -781,6 +849,8 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         mountEl.appendChild(textarea);
       }
       textarea.value = file.content;
+      fallbackMinimap?.render();
+      fallbackMinimap?.updateSlider();
       onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     },
     clearActiveFile() {
@@ -902,7 +972,9 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
       applyFontSize(fontSize);
       return fontSize;
     },
-    getFontSize: () => fontSize
+    getFontSize: () => fontSize,
+    toggleMinimap: (force) => fallbackMinimap?.toggle(force),
+    isMinimapVisible: () => (fallbackMinimap ? fallbackMinimap.isVisible() : false)
   };
 }
 

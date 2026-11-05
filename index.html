@@ -121,8 +121,11 @@
             <h2 class="panel-title">Explorador</h2>
           </div>
           <div class="panel-actions">
-            <button type="button" id="btn-quick-open" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar archivo en el proyecto" title="Buscar archivo rápido (Cmd/Ctrl + P)">
+            <button type="button" id="btn-quick-open" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar archivo en el proyecto" title="Abrir archivo rápido (Cmd/Ctrl + P)">
               <span data-icon="search"></span>
+            </button>
+            <button type="button" id="btn-global-search" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar texto en todo el proyecto" title="Buscar en archivos (Cmd/Ctrl + Shift + F)">
+              <span data-icon="fileSearch"></span>
             </button>
             <button type="button" id="btn-new-file" class="btn btn-ghost btn-sm btn-icon" aria-label="Nuevo archivo" title="Nuevo archivo">
               <span data-icon="plus"></span>
@@ -222,6 +225,16 @@
             </button>
             <button type="button" id="btn-editor-search" class="btn btn-ghost btn-sm btn-icon" aria-label="Buscar en archivo" title="Buscar y reemplazar (Cmd/Ctrl + F)">
               <span data-icon="search"></span>
+            </button>
+            <button
+              type="button"
+              id="btn-editor-minimap"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-pressed="true"
+              aria-label="Alternar minimapa"
+              title="Alternar vista previa en minimapa"
+            >
+              <span data-icon="layout"></span>
             </button>
             <button
               type="button"
@@ -770,6 +783,44 @@
           </div>
           <div id="preview-console-list" class="preview-console-list code-font"></div>
         </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Búsqueda Global en Archivos del Proyecto (Cmd/Ctrl + Shift + F) -->
+  <dialog id="global-search-dialog" class="ide-dialog ide-dialog-wide" aria-labelledby="global-search-title">
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div class="panel-title-group">
+          <span data-icon="fileSearch"></span>
+          <h2 id="global-search-title" class="dialog-title">Buscar en archivos del proyecto</h2>
+        </div>
+        <button type="button" id="btn-close-global-search" class="btn btn-ghost btn-sm btn-icon" aria-label="Cerrar búsqueda">
+          <span data-icon="x"></span>
+        </button>
+      </div>
+
+      <div class="dialog-body">
+        <div class="search-dialog-header">
+          <div class="search-input-row">
+            <input
+              type="search"
+              id="global-search-input"
+              class="field-control"
+              placeholder="Escribí para buscar texto en todos los archivos del proyecto…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="search-options-group" role="group" aria-label="Opciones de búsqueda">
+              <button type="button" id="btn-search-case" class="btn-toggle-search" title="Coincidir mayúsculas y minúsculas (Case Sensitive)" aria-pressed="false">Aa</button>
+              <button type="button" id="btn-search-word" class="btn-toggle-search" title="Solo palabras completas" aria-pressed="false">\b</button>
+              <button type="button" id="btn-search-regex" class="btn-toggle-search" title="Usar expresión regular" aria-pressed="false">.*</button>
+            </div>
+          </div>
+          <div id="global-search-stats" class="search-stats-bar"></div>
+        </div>
+
+        <div id="global-search-results" class="search-results-viewport"></div>
       </div>
     </div>
   </dialog>

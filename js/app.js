@@ -6,6 +6,7 @@ import { buildZipArchive, downloadZip } from "./storage/zipExporter.js";
 import { initDiffModal } from "./ui/diffModal.js";
 import { initLivePreviewModal } from "./ui/livePreviewModal.js";
 import { initQuickOpenModal } from "./ui/quickOpenModal.js";
+import { initGlobalSearchModal } from "./ui/globalSearchModal.js";
 import { createEditorManager } from "./editor/editorManager.js";
 import { initChatController } from "./ai/chatController.js";
 import { initGithubController } from "./github/githubController.js";
@@ -114,6 +115,7 @@ async function initApp() {
   const btnRedo = document.getElementById("btn-editor-redo");
   const btnSearch = document.getElementById("btn-editor-search");
   const btnWrap = document.getElementById("btn-editor-wrap");
+  const btnMinimap = document.getElementById("btn-editor-minimap");
   const btnFontDown = document.getElementById("btn-font-down");
   const btnFontUp = document.getElementById("btn-font-up");
   const btnExportFile = document.getElementById("btn-export-file");
@@ -183,6 +185,19 @@ async function initApp() {
       }
     }
   });
+
+  const globalSearchModal = initGlobalSearchModal({
+    getFiles: () => filesOnly,
+    async onSelectMatch({ path, line }) {
+      await openOrFocusFile(path);
+      if (typeof line === "number" && line > 0) {
+        editor.goToLine(line);
+      }
+    }
+  });
+
+  keyboardRouter.registerGlobalShortcut("ctrl+shift+f", () => globalSearchModal.open());
+  keyboardRouter.registerGlobalShortcut("meta+shift+f", () => globalSearchModal.open());
 
   const symbolBar = initSymbolBar({
     onInsert(text, cursorBack) {
@@ -828,7 +843,7 @@ async function initApp() {
   window.addEventListener("beforeunload", backupAndFlush);
 
   syncToolbarState();
-  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp]);
+  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp, btnMinimap]);
 
   btnUndo?.addEventListener("click", () => editor.triggerUndo());
   btnRedo?.addEventListener("click", () => editor.triggerRedo());
@@ -836,6 +851,10 @@ async function initApp() {
   btnWrap?.addEventListener("click", () => {
     const enabled = editor.toggleWordWrap();
     btnWrap.setAttribute("aria-pressed", String(enabled));
+  });
+  btnMinimap?.addEventListener("click", () => {
+    const visible = editor.toggleMinimap();
+    btnMinimap.setAttribute("aria-pressed", String(visible));
   });
   btnFontDown?.addEventListener("click", () => {
     const size = editor.stepFontSize(-1);
