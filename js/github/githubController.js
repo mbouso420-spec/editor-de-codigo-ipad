@@ -203,6 +203,13 @@ export function initGithubController({
     }
   });
 
+  tokenInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      connectBtn?.click();
+    }
+  });
+
   connectBtn?.addEventListener("click", async () => {
     const token = (tokenInput?.value || "").trim();
     if (!token) {
@@ -261,6 +268,13 @@ export function initGithubController({
     }
     if (fullName) {
       await loadBranchesForRepo(fullName);
+    }
+  });
+
+  manualRepoInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      manualRepoInput.dispatchEvent(new Event("change"));
     }
   });
 
@@ -523,6 +537,13 @@ export function initGithubController({
     setStatus(pushStatusEl, "Hay commits nuevos en GitHub que no tenés localmente.", "error");
   }
 
+  commitMsgInput?.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void executePush(false);
+    }
+  });
+
   pushBtn?.addEventListener("click", () => executePush(false));
 
   conflictForceBtn?.addEventListener("click", () => executePush(true));
@@ -629,6 +650,16 @@ export function initGithubController({
       if (newBranchInput) newBranchInput.value = "";
     }
     if (branchStatusEl) branchStatusEl.hidden = true;
+  });
+
+  newBranchInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      btnCreateBranch?.click();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      btnCancelBranch?.click();
+    }
   });
 
   btnCreateBranch?.addEventListener("click", async () => {
@@ -895,6 +926,16 @@ export function initGithubController({
 
   cancelPublishBtn?.addEventListener("click", () => {
     hidePublishRepoBox();
+  });
+
+  publishNameInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      confirmPublishBtn?.click();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      hidePublishRepoBox();
+    }
   });
 
   confirmPublishBtn?.addEventListener("click", async () => {
