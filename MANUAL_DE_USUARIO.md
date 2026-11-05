@@ -60,6 +60,8 @@ La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
 | `Ctrl + Z` / `Cmd + Z` | Deshacer en el archivo actual |
 | `Ctrl + Espacio` | Abre manualmente el menú de autocompletado inteligente |
 | `Enter` (en el chat IA) | Envía el prompt (`Shift + Enter` inserta salto de línea) |
+| `Enter` (en modales Git) | Confirma y envía el formulario activo (conectar token, clonar, rama) |
+| `Ctrl + Enter` / `Cmd + Enter` | En modal Git: realiza el commit y push inmediato. En SQL/C++: compila/ejecuta |
 | `Escape` | Cierra cualquier diálogo modal, menú contextual o paleta |
 
 <p align="center">
@@ -77,8 +79,14 @@ La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
 2. **Auto-Wrap de selecciones con la barra de símbolos:**
    - Seleccioná con el dedo o cursor una palabra o bloque de texto en el editor y tocá cualquiera de los delimitadores en la barra inferior: `( )`, `{ }`, `[ ]`, `" "`, `' '` o ```` ``` ````.
    - En lugar de sobrescribir el texto, el editor **lo envolverá automáticamente conservando la selección interna**.
-3. **Protección al cerrar pestañas:**
+3. **Regla de errores en el scrollbar (Error Overview Ruler):**
+   - Al lado derecho del editor (sobre la barra de desplazamiento) contás con una regla visual interactiva.
+   - Si GCC o el analizador detectan un error o advertencia, se ubica una píldora roja o amarilla a la altura porcentual exacta del código.
+   - Tocando o haciendo clic sobre la píldora, el editor salta de inmediato a esa línea sin tener que scrollear a ciegas en archivos largos.
+4. **Protección al cerrar pestañas:**
    - Si intentás cerrar una pestaña que tiene cambios locales aún no sincronizados con GitHub, el IDE abre un diálogo de confirmación accesible antes de purgar el estado de memoria del archivo.
+5. **Adaptación fluida a la rotación de pantalla:**
+   - Si rotás el iPad de horizontal a vertical o reacomodás el tamaño de ventana en Stage Manager, los paneles laterales se re-ajustan proporcionalmente al instante para que nunca desborden la pantalla ni queden cortados.
 
 ---
 
@@ -129,8 +137,9 @@ En la barra superior del modal de vista previa podés alternar el tamaño de pan
 - Al abrir una pestaña con un archivo `.sql` y tocar **Vista previa**, se inicia una base de datos SQLite completa en memoria vía WebAssembly (`sql.js`).
 - Ejecuta tus sentencias DDL y DML (`CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`) mostrando el conteo de filas afectadas y los tiempos de ejecución.
 - Si tu script contiene consultas `SELECT`, las presenta en **tablas HTML formateadas y responsivas** con scroll horizontal cómodo al tacto.
+- **Paginación cliente fluida (50 filas por página):** para bases de datos con cientos o miles de registros, la tabla se divide en páginas de 50 filas con botones de navegación accesibles (**Anterior** / **Siguiente**) e indicador de registros totales, evitando congelamientos del navegador en tablets.
 - **Consola interactiva de consultas:** podés escribir sentencias SQL adicionales en la caja inferior y ejecutarlas con el botón **Ejecutar Consulta** o el atajo `Ctrl + Enter`.
-- **Exportación de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`.
+- **Exportación completa de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`. La exportación procesa **el 100% de los registros completos**, independientemente de la página en la que estés posicionado.
 
 ### Compilador y Ejecutor Nativo de C y C++ (`.c`, `.cpp`, `.h`)
 

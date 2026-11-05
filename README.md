@@ -8,7 +8,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 298 tests unitarios pasando al 100% (58 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 346 tests unitarios pasando al 100% (71 suites, 0 fallos).
 
 ---
 
@@ -28,10 +28,11 @@
   - **Protección contra pérdida de datos:** diálogo modal de confirmación accesible (`#confirm-dialog`) si se intenta cerrar una pestaña con cambios pendientes frente al repositorio.
   - **Barra táctil de símbolos con Auto-Wrap:** al seleccionar texto y tocar delimitadores (`( )`, `{ }`, `[ ]`, `" "`, `' '`, ```` ``` ````), el contenido seleccionado se envuelve automáticamente conservando la selección interna.
   - **Paleta de apertura rápida (`Cmd + P` / `Ctrl + P`):** filtrado instantáneo de archivos y salto directo a línea mediante la sintaxis `:número` (ej. `app.js:140` o `:45` sobre el archivo activo).
+  - **Regla visual de errores en el scrollbar (Error Overview Ruler):** barra lateral derecha (`#editor-error-ruler`) que posiciona proporcionalmente píldoras interactivas de diagnóstico (errores de GCC o sintaxis), permitiendo saltar a la línea afectada con un solo toque.
   - Resaltado de sintaxis para **Python, C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda/reemplazo y control de tamaño tipográfico.
 - **Adaptación a Stage Manager y teclado virtual:**
   - Control dinámico de `visualViewport` para evitar desplazamientos accidentales al desplegar el teclado táctil de iPadOS.
-  - Re-clamp dinámico de dimensiones de paneles al rotar el dispositivo o redimensionar ventanas en Stage Manager.
+  - Re-clamp dinámico e instantáneo de dimensiones de paneles ante cambios de orientación de pantalla (`orientationchange`, `screen.orientation`) o redimensionamiento de ventanas en Stage Manager.
 
 ### 2. Asistente de IA integrado (APIs gratuitas y seguras)
 
@@ -58,7 +59,7 @@
 - **Precarga y descarga bajo demanda inteligente (GitHub Lazy):** en repositorios remotos donde los archivos no están descargados previamente (`contentLoaded: false`), el motor de vista previa descarga automáticamente el HTML destino y todos los assets CSS y JS vinculados antes de compilar el iframe, evitando pantallas en blanco y estilos rotos.
 - **Inlining recursivo de `@import url(...)` en CSS:** empaqueta hojas de estilo CSS modulares complejas de forma recursiva dentro de etiquetas `<style>` protegidas, permitiendo previsualizar aplicaciones que estructuran sus estilos en múltiples subarchivos.
 - **Selector de páginas HTML optimizado y sin duplicados:** exclusión de carpetas de dependencias y artefactos de empaquetado (`node_modules`, `.git`, `dist`, `build`, `.next`, `.cache`, `out`, etc.), deduplicación por ruta normalizada y desambiguación automática de nombres con rutas relativas para evitar opciones triplicadas.
-- **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas para consultas `SELECT`, contador de filas afectadas, editor de consultas rápidas y exportación directa de resultados a `.csv` o `.json`.
+- **Bases de datos SQLite en vivo (.sql):** ejecución directa de sentencias DDL/DML mediante WebAssembly en memoria (`sql.js`), tablas interactivas con paginación fluida de 50 filas por página (`PAGE_SIZE = 50`) y controles accesibles, contador de filas afectadas, editor de consultas rápidas y exportación directa del 100% de los datos a `.csv` o `.json`.
 
 <p align="center">
   <img src="./docs/screenshots/03-c-runner-interactive.png" alt="Runner C/C++ Nativo con Terminal Interactiva Paso a Paso y Detección de Errores GCC" width="100%">
@@ -93,7 +94,7 @@
 
 1. **Content Security Policy (CSP) Estricta:**
    `index.html` declara una directiva CSP restrictiva que autoriza únicamente las APIs oficiales de GitHub y proveedores de IA (`api.github.com`, `generativelanguage.googleapis.com`, `api.groq.com`, `openrouter.ai`, `api.mistral.ai`), el compilador seguro de C/C++ (`https://wandbox.org`), CDNs certificados para ESM y librerías WebAssembly (`esm.sh`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`) y orígenes de fuentes seguros (`fonts.googleapis.com`, `fonts.gstatic.com`).
-2. **Service Worker (`studio-ide-shell-v18`):**
+2. **Service Worker (`studio-ide-shell-v19`):**
    - Estrategia **Network-First** para el App Shell propio garantizando la versión más fresca con internet y fallback offline automático.
    - Pre-cacheo de módulos críticos (incluyendo el analizador sintáctico Acorn y los motores de ejecución de C/C++ y SQL) en `RUNTIME_CACHE` durante el evento `install`.
 3. **Privacidad de credenciales:**
@@ -109,7 +110,7 @@
 .
 ├── index.html                  # Shell principal, CSP, diálogos modales accesibles y maquetación
 ├── manifest.json               # Manifiesto Web App (PWA standalone para iPadOS y escritorio)
-├── sw.js                       # Service Worker v18 (App Shell + Runtime Cache de Acorn/CDNs)
+├── sw.js                       # Service Worker v19 (App Shell + Runtime Cache de Acorn/CDNs)
 ├── .nojekyll                   # Desactiva el procesamiento de Jekyll en GitHub Pages
 ├── README.md                   # Documentación técnica y arquitectura de la solución
 ├── MANUAL_DE_USUARIO.md        # Manual exhaustivo para el usuario final (iPad y PC)
@@ -155,7 +156,7 @@
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
 │       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 290 pruebas unitarias
+└── tests/                      # Suite automatizada con 346 pruebas unitarias y E2E
 ```
 
 ---
@@ -169,10 +170,10 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **290 pruebas unitarias ejecutadas.**
-- **56 suites completadas.**
+- **346 pruebas unitarias y de integración ejecutadas.**
+- **71 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
-- Tiempo de ejecución: **~1.2 segundos.**
+- Tiempo de ejecución: **~1.3 segundos.**
 
 ---
 
