@@ -1122,5 +1122,67 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
         instance.destroy();
       });
     });
+
+    describe("Persistencia y Respaldo Resiliente de Credenciales (IndexedDB + localStorage)", () => {
+      test("saveCredentialsBackup persiste el paquete en IndexedDB y readCredentialsBackup lo recupera intacto", async () => {
+        const { saveCredentialsBackup, readCredentialsBackup } = await import("../js/storage/workspaceDb.js");
+        const sampleBundle = JSON.stringify({
+          gemini: "AIzaSyTest123",
+          groq: "gsk_test456",
+          githubPat: "github_pat_test789",
+          activeProvider: "groq"
+        });
+
+        await saveCredentialsBackup(sampleBundle);
+        const recovered = await readCredentialsBackup();
+        assert.equal(recovered, sampleBundle, "IndexedDB debe devolver exactamente el JSON guardado");
+      });
+
+      test("hasStoredCredentials detecta presencia de claves de IA o token de GitHub", async () => {
+        const { hasStoredCredentials, saveApiKey, clearApiKey } = await import("../js/ai/providers.js");
+        clearApiKey("gemini");
+        clearApiKey("groq");
+        localStorage.removeItem("ide.github.pat");
+        sessionStorage.removeItem("ide.github.pat");
+
+        assert.equal(hasStoredCredentials(), false, "Sin claves ni PAT debe ser false");
+
+        saveApiKey("gemini", "AIzaSyKey");
+        assert.equal(hasStoredCredentials(), true, "Con clave Gemini debe ser true");
+
+        clearApiKey("gemini");
+        assert.equal(hasStoredCredentials(), false);
+
+        localStorage.setItem("ide.github.pat", "github_pat_valid");
+        assert.equal(hasStoredCredentials(), true, "Con GitHub PAT debe ser true");
+        localStorage.removeItem("ide.github.pat");
+      });
+
+      test("Simulación iPad Safari: si localStorage se vacía por recarga, se restaura desde IndexedDB", async () => {
+        const { exportKeysBundle, importKeysBundle, saveApiKey, getApiKey } = await import("../js/ai/providers.js");
+        const { saveCredentialsBackup, readCredentialsBackup } = await import("../js/storage/workspaceDb.js");
+
+        // 1. El usuario tiene configurado Gemini y su token de GitHub
+        saveApiKey("gemini", "AIzaSyKeyValiosa");
+        localStorage.setItem("ide.github.pat", "github_pat_secreto123");
+        const bundle = exportKeysBundle();
+        await saveCredentialsBackup(bundle);
+
+        // 2. Simular limpieza de Safari en iPadOS (vaciado de localStorage)
+        localStorage.clear();
+        sessionStorage.clear();
+        assert.equal(getApiKey("gemini"), "", "localStorage quedó vacío");
+        assert.equal(localStorage.getItem("ide.github.pat"), null, "PAT quedó vacío");
+
+        // 3. Proceso de auto-restauración de Studio IDE al arrancar
+        const backupJson = await readCredentialsBackup();
+        assert.ok(backupJson, "El respaldo en IndexedDB debe seguir intacto");
+        const restoredCount = importKeysBundle(backupJson);
+
+        assert.equal(restoredCount, 2, "Debe haber restaurado 2 credenciales (Gemini y GitHub PAT)");
+        assert.equal(getApiKey("gemini"), "AIzaSyKeyValiosa", "La clave de Gemini debe estar restaurada");
+        assert.equal(localStorage.getItem("ide.github.pat"), "github_pat_secreto123", "El PAT de GitHub debe estar restaurado");
+      });
+    });
   });
 });

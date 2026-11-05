@@ -222,6 +222,10 @@ export function exportKeysBundle() {
     if (ghToken) {
       bundle.githubPat = ghToken;
     }
+    const currentProvider = getSavedProviderId();
+    if (currentProvider) {
+      bundle.activeProvider = currentProvider;
+    }
   } catch {
     // Ignorar
   }
@@ -253,7 +257,25 @@ export function importKeysBundle(rawJson) {
       // Ignorar
     }
   }
+  if (typeof parsed.activeProvider === "string" && AI_PROVIDERS[parsed.activeProvider]) {
+    saveProviderId(parsed.activeProvider);
+  }
   return count;
+}
+
+export function hasStoredCredentials() {
+  try {
+    for (const id of Object.keys(AI_PROVIDERS)) {
+      if (getApiKey(id)) return true;
+    }
+    const ghToken =
+      window.sessionStorage.getItem(GH_TOKEN_STORAGE_KEY) ||
+      window.localStorage.getItem(GH_TOKEN_STORAGE_KEY) ||
+      "";
+    return Boolean(ghToken && ghToken.trim());
+  } catch {
+    return false;
+  }
 }
 
 export function getSavedProviderId() {

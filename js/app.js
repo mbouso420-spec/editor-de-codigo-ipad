@@ -16,6 +16,12 @@ import {
   getGithubToken
 } from "./github/githubService.js";
 import {
+  exportKeysBundle,
+  getKeyStorageMode,
+  hasStoredCredentials,
+  importKeysBundle
+} from "./ai/providers.js";
+import {
   cacheSingleGithubFileContent,
   createLocalProject,
   deleteProject,
@@ -30,8 +36,10 @@ import {
   listProjects,
   markProjectOfflineCached,
   normalizePath,
+  readCredentialsBackup,
   renameProjectEntry,
   requestPersistentStorage,
+  saveCredentialsBackup,
   saveProjectChatHistory,
   saveProjectState,
   setSavedActiveProjectId,
@@ -48,6 +56,20 @@ async function initApp() {
   hydrateIcons(document);
   registerPwaServiceWorker();
   void requestPersistentStorage();
+
+  // Restaurar credenciales (claves IA y token GitHub) desde IndexedDB si Safari/iPadOS vació localStorage
+  try {
+    if (!hasStoredCredentials()) {
+      const backupJson = await readCredentialsBackup();
+      if (backupJson) {
+        importKeysBundle(backupJson);
+      }
+    } else if (getKeyStorageMode() !== "session") {
+      void saveCredentialsBackup(exportKeysBundle());
+    }
+  } catch {
+    // Continuar con el arranque normal si falla la lectura de respaldo
+  }
 
   const layout = initLayoutController();
   const diffModal = initDiffModal();

@@ -16,6 +16,7 @@ import {
   streamAiCompletion,
   validateApiKey
 } from "./providers.js";
+import { saveCredentialsBackup } from "../storage/workspaceDb.js";
 
 /**
  * Controlador del Asistente IA estilo Antigravity (depurado 100% para APIs gratuitas):
@@ -231,8 +232,19 @@ export function initChatController({
     }
   });
 
+  function syncCredentialsBackup() {
+    try {
+      if (getKeyStorageMode() !== "session") {
+        void saveCredentialsBackup(exportKeysBundle());
+      }
+    } catch {
+      // Ignorar si falla el guardado asíncrono
+    }
+  }
+
   apiKeyInput?.addEventListener("input", () => {
     saveApiKey(activeProviderId, apiKeyInput.value);
+    syncCredentialsBackup();
     scheduleKeyValidation(activeProviderId, 700, true);
   });
 
@@ -246,6 +258,7 @@ export function initChatController({
 
   clearKeyBtn?.addEventListener("click", () => {
     clearApiKey(activeProviderId);
+    syncCredentialsBackup();
     if (apiKeyInput) {
       apiKeyInput.value = "";
     }
@@ -255,11 +268,15 @@ export function initChatController({
   modeLocalBtn?.addEventListener("click", () => {
     setKeyStorageMode("local");
     syncStorageModeButtons();
+    syncCredentialsBackup();
   });
 
   modeSessionBtn?.addEventListener("click", () => {
     setKeyStorageMode("session");
     syncStorageModeButtons();
+    try {
+      void saveCredentialsBackup("");
+    } catch {}
   });
 
   exportKeysBtn?.addEventListener("click", async () => {
@@ -313,6 +330,7 @@ export function initChatController({
       event.preventDefault();
       try {
         const count = importKeysBundle(input.value.trim());
+        syncCredentialsBackup();
         close();
         syncSettingsForm();
         scheduleKeyValidation(activeProviderId, 0, true);

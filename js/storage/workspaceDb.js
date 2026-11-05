@@ -940,3 +940,40 @@ function putRecord(storeName, value) {
       })
   );
 }
+
+/**
+ * Guarda un respaldo persistente de las credenciales (claves IA y token GitHub) en IndexedDB
+ * para protegerlas si Safari / iPadOS vacía el localStorage durante recargas o suspensión de memoria.
+ * @param {string} rawJson
+ */
+export async function saveCredentialsBackup(rawJson) {
+  try {
+    const key = makeFileKey("__system__", "credentials");
+    await putRecord(STORE_FILES, {
+      key,
+      projectId: "__system__",
+      path: "credentials",
+      isFolder: false,
+      content: rawJson || "",
+      baseContent: "",
+      deleted: false,
+      updatedAt: Date.now()
+    });
+  } catch {
+    // Entorno restringido o sin soporte
+  }
+}
+
+/**
+ * Lee el respaldo persistente de credenciales desde IndexedDB.
+ * @returns {Promise<string>}
+ */
+export async function readCredentialsBackup() {
+  try {
+    const key = makeFileKey("__system__", "credentials");
+    const record = await getRecord(STORE_FILES, key);
+    return record && typeof record.content === "string" ? record.content : "";
+  } catch {
+    return "";
+  }
+}

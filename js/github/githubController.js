@@ -23,8 +23,10 @@ import {
   hydrateLazyGithubProject,
   makeGithubProjectId,
   markProjectSynced,
+  saveCredentialsBackup,
   saveProjectState
 } from "../storage/workspaceDb.js";
+import { exportKeysBundle, getKeyStorageMode } from "../ai/providers.js";
 
 /**
  * Controlador del flujo de conexión con GitHub (PAT local + Octokit),
@@ -193,6 +195,11 @@ export function initGithubController({
 
     saveGithubToken(token);
     hideTokenWarning();
+    try {
+      if (getKeyStorageMode() !== "session") {
+        void saveCredentialsBackup(exportKeysBundle());
+      }
+    } catch {}
 
     if (check.status !== "valid") {
       // Sin internet o GitHub sin responder: se guarda para usarlo cuando vuelva la conexión.
@@ -205,6 +212,11 @@ export function initGithubController({
   clearTokenBtn?.addEventListener("click", () => {
     clearGithubToken();
     hideTokenWarning();
+    try {
+      if (getKeyStorageMode() !== "session") {
+        void saveCredentialsBackup(exportKeysBundle());
+      }
+    } catch {}
     reposCache = [];
     onReposListChanged?.([]);
     if (tokenInput) tokenInput.value = "";
