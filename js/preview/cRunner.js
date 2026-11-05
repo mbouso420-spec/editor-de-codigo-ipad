@@ -271,6 +271,7 @@ export function mountCRunnerView(containerEl, {
   header.append(meta, btnCompile);
 
   // 2. Tarjeta stdin
+  const hasInteractiveInput = /\b(scanf|cin|getline|getchar|fgets|gets)\b/.test(activeFile.content || "");
   const stdinCard = document.createElement("div");
   stdinCard.className = "c-stdin-card";
   const stdinLabel = document.createElement("label");
@@ -278,7 +279,9 @@ export function mountCRunnerView(containerEl, {
   stdinLabel.textContent = "Entrada estándar (stdin para cin / scanf):";
   const stdinTextarea = document.createElement("textarea");
   stdinTextarea.className = "c-stdin-textarea code-font";
-  stdinTextarea.placeholder = "Escribí aquí los datos de entrada que tu programa solicitará en tiempo de ejecución...";
+  stdinTextarea.placeholder = hasInteractiveInput
+    ? "Tu código usa scanf/cin. Escribí aquí los datos de entrada que solicitará (ej: 1\\n10 20\\n5)..."
+    : "Escribí aquí los datos de entrada que tu programa solicitará en tiempo de ejecución...";
   stdinCard.append(stdinLabel, stdinTextarea);
 
   // 3. Tarjeta Terminal
@@ -371,6 +374,15 @@ export function mountCRunnerView(containerEl, {
         emptyDiv.className = "c-term-hint";
         emptyDiv.textContent = "(El programa terminó sin producir salida en stdout ni stderr).";
         termBody.appendChild(emptyDiv);
+      }
+
+      const isStdinEmpty = !(stdinTextarea.value || "").trim();
+      if (hasInteractiveInput && isStdinEmpty) {
+        const hintDiv = document.createElement("div");
+        hintDiv.className = "c-term-hint c-term-stdin-tip";
+        hintDiv.style.cssText = "margin-top: 10px; padding: 8px 12px; background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; color: #bae6fd; font-size: 12px; border-radius: 4px; line-height: 1.4;";
+        hintDiv.textContent = "💡 Consejo: Tu programa solicita datos con scanf/cin y la caja de Entrada estándar está vacía. Si ves que el menú se repite en bucle o termina de golpe, ingresá las opciones y números en la caja de 'Entrada estándar' arriba y volvé a presionar 'Compilar y Ejecutar'.";
+        termBody.appendChild(hintDiv);
       }
     } catch (err) {
       termStatus.className = "c-term-status is-err";
