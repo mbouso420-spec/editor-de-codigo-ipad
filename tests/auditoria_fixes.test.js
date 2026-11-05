@@ -33,7 +33,9 @@ const {
   mountCRunnerView,
   hasMainFunction,
   sanitizeLoopOutput,
-  extractNewOutputDelta
+  extractNewOutputDelta,
+  trimInitialMenuOutput,
+  trimPrematureMenuRepeat
 } = await import("../js/preview/cRunner.js");
 const { fetchRepoBranches, createRepoBranch } = await import("../js/github/githubService.js");
 
@@ -761,6 +763,16 @@ describe("Verificación de Arreglos de Auditoría (Fases 1, 2, 3 y 4)", () => {
 
         const delta = extractNewOutputDelta("Hola mundo\n", "Hola mundo\nNueva linea\n");
         assert.equal(delta, "Nueva linea\n");
+
+        const initialMenu = "=== CALCULADORA EN C ===\n1. Sumar\n2. Salir\nOpcion: ";
+        const chunkWithPrematureMenu = "\n[SUMA] Ingrese dos numeros: \n=== CALCULADORA EN C ===\n1. Sumar\n2. Salir\n";
+        const trimmed = trimPrematureMenuRepeat(chunkWithPrematureMenu, initialMenu);
+        assert.equal(trimmed.includes("=== CALCULADORA EN C ==="), false, "Debe suprimir la reaparición prematura del menú");
+        assert.ok(trimmed.includes("[SUMA] Ingrese dos numeros:"), "Conserva el prompt de los números");
+
+        const repeatedMenuInitial = `${initialMenu}\n${initialMenu}\n${initialMenu}`;
+        const singleInitial = trimInitialMenuOutput(repeatedMenuInitial);
+        assert.equal(singleInitial.split("=== CALCULADORA EN C ===").length - 1, 1, "Debe dejar una sola aparición del menú en paso 0");
       });
 
       test("hasMainFunction detecta firmas de main e ignora comentarios y prototipos", () => {

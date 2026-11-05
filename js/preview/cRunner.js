@@ -76,6 +76,53 @@ export function extractNewOutputDelta(prev, next) {
 }
 
 /**
+ * Trunca repeticiones masivas de un menú inicial cuando un bucle no comprueba EOF en el paso 0.
+ * @param {string} output
+ * @returns {string}
+ */
+export function trimInitialMenuOutput(output) {
+  if (!output || typeof output !== "string") return "";
+  const lines = output.split("\n");
+  if (lines.length > 8) {
+    const firstSig = lines.find((l) => l.trim().length >= 4);
+    if (firstSig) {
+      const firstIdx = lines.indexOf(firstSig);
+      const secondIdx = lines.indexOf(firstSig, firstIdx + 1);
+      if (secondIdx > firstIdx) {
+        return lines.slice(0, secondIdx).join("\n").trimEnd();
+      }
+    }
+  }
+  return output;
+}
+
+/**
+ * Suprime la reaparición prematura del menú cuando un paso interactivo llega a un scanf
+ * subsiguiente que aún no tiene datos y hace rebotar el bucle a mostrar el menú.
+ * @param {string} newChunk
+ * @param {string} initialOutput
+ * @returns {string}
+ */
+export function trimPrematureMenuRepeat(newChunk, initialOutput) {
+  if (!newChunk || !initialOutput || typeof newChunk !== "string") return newChunk;
+
+  const initialLines = initialOutput.split("\n").map((l) => l.trim()).filter((l) => l.length >= 4);
+  if (initialLines.length === 0) return newChunk;
+  const menuSignature = initialLines[0];
+
+  const sigIndex = newChunk.indexOf(menuSignature);
+  if (sigIndex > 0) {
+    const beforeSig = newChunk.slice(0, sigIndex);
+    // Si la porción antes del menú termina con un prompt de pregunta o dos puntos (: o ?)
+    if (/[:?]\s*$/m.test(beforeSig.trim())) {
+      return beforeSig.trimEnd() + " ";
+    }
+  }
+
+  return newChunk;
+}
+
+/**
  * Genera el payload de compilación para la API de Wandbox con soporte multi-archivo.
  * Reglas de aislamiento estricto:
  * 1. Si el archivo activo es C (.c): JAMÁS incluye archivos C++ (.cpp, .hpp) para no romper el compilador gcc de C.
@@ -416,6 +463,7 @@ export function mountCRunnerView(containerEl, {
 
   let sessionInputs = [];
   let lastRawStdout = "";
+  let initialMenuSnapshot = "";
   let isCompiling = false;
 
   async function executeStep(userInput = null) {
@@ -478,7 +526,8 @@ export function mountCRunnerView(containerEl, {
       if (sessionInputs.length === 0) {
         termBody.innerHTML = "";
         lastRawStdout = res.stdout || "";
-        const cleanStdout = sanitizeLoopOutput(lastRawStdout);
+        const cleanStdout = trimInitialMenuOutput(sanitizeLoopOutput(lastRawStdout));
+        initialMenuSnapshot = cleanStdout;
 
         if (cleanStdout) {
           const outDiv = document.createElement("div");
@@ -514,7 +563,10 @@ export function mountCRunnerView(containerEl, {
         }
         lastRawStdout = fullStdout;
 
-        const cleanNewChunk = sanitizeLoopOutput(newChunk);
+        // Truncar reaparición prematura del menú si el programa llegó a un scanf que aún no tiene datos
+        const trimmedChunk = trimPrematureMenuRepeat(newChunk, initialMenuSnapshot);
+        const cleanNewChunk = sanitizeLoopOutput(trimmedChunk);
+
         if (cleanNewChunk) {
           const outDiv = document.createElement("div");
           outDiv.className = "c-term-stdout";
@@ -562,18 +614,21 @@ export function mountCRunnerView(containerEl, {
   btnCompile.addEventListener("click", () => {
     sessionInputs = [];
     lastRawStdout = "";
+    initialMenuSnapshot = "";
     executeStep(null);
   });
 
   btnSendStdin.addEventListener("click", () => {
     sessionInputs = [];
     lastRawStdout = "";
+    initialMenuSnapshot = "";
     executeStep(null);
   });
 
   btnReset.addEventListener("click", () => {
     sessionInputs = [];
     lastRawStdout = "";
+    initialMenuSnapshot = "";
     termInput.value = "";
     termBody.innerHTML = '<span class="c-term-hint">Reiniciando consola...</span>';
     executeStep(null);
