@@ -344,4 +344,56 @@ describe("Respaldo en la Nube con GitHub (Gists y Repositorios)", () => {
     const stored = await getProject(created.id);
     assert.equal(stored.kind, "github");
   });
+
+  test("publishProjectAsNewRepository crea repositorio privado si isPrivate es true", async () => {
+    const calls = installFakeGithub({
+      "POST /user/repos": (body) => [201, {
+        name: body.name,
+        full_name: `mi-usuario/${body.name}`,
+        owner: { login: "mi-usuario" },
+        default_branch: "main",
+        html_url: `https://github.com/mi-usuario/${body.name}`
+      }]
+    });
+
+    const res = await gh.publishProjectAsNewRepository("token-test", {
+      repoName: "Proyecto Secreto",
+      isPrivate: true,
+      entries: []
+    });
+
+    assert.equal(res.owner, "mi-usuario");
+    assert.equal(res.repo, "proyecto-secreto");
+    assert.equal(res.fullName, "mi-usuario/proyecto-secreto");
+    const postCall = calls.find((c) => c.key === "POST /user/repos");
+    assert.ok(postCall);
+    assert.equal(postCall.body.name, "proyecto-secreto");
+    assert.equal(postCall.body.private, true, "Debe ser privado en GitHub");
+  });
+
+  test("publishProjectAsNewRepository crea repositorio público si isPrivate es false", async () => {
+    const calls = installFakeGithub({
+      "POST /user/repos": (body) => [201, {
+        name: body.name,
+        full_name: `mi-usuario/${body.name}`,
+        owner: { login: "mi-usuario" },
+        default_branch: "main",
+        html_url: `https://github.com/mi-usuario/${body.name}`
+      }]
+    });
+
+    const res = await gh.publishProjectAsNewRepository("token-test", {
+      repoName: "Proyecto Open Source",
+      isPrivate: false,
+      entries: []
+    });
+
+    assert.equal(res.owner, "mi-usuario");
+    assert.equal(res.repo, "proyecto-open-source");
+    assert.equal(res.fullName, "mi-usuario/proyecto-open-source");
+    const postCall = calls.find((c) => c.key === "POST /user/repos");
+    assert.ok(postCall);
+    assert.equal(postCall.body.name, "proyecto-open-source");
+    assert.equal(postCall.body.private, false, "Debe ser público en GitHub");
+  });
 });

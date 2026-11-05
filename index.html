@@ -600,6 +600,27 @@
                 <span>Publicar como Repositorio</span>
               </button>
             </div>
+
+            <!-- Formulario accesible para publicar como repositorio público o privado -->
+            <div id="gh-publish-repo-box" class="field-group gh-publish-box" style="margin-top: 12px; padding: 12px; border: 1px solid var(--borde); border-radius: var(--radio-md); background: var(--superficie-panel);" hidden>
+              <label for="gh-publish-name-input" class="field-label">Nombre del repositorio en GitHub</label>
+              <div class="field-row">
+                <input type="text" id="gh-publish-name-input" class="field-control code-font field-grow-2" placeholder="mi-proyecto" spellcheck="false" autocomplete="off">
+                <label for="gh-publish-visibility-select" class="visually-hidden">Visibilidad</label>
+                <select id="gh-publish-visibility-select" class="field-control field-grow-1">
+                  <option value="private" selected>🔒 Privado</option>
+                  <option value="public">🌐 Público</option>
+                </select>
+              </div>
+              <div class="field-row gh-open-actions" style="margin-top: 10px;">
+                <button type="button" id="btn-gh-confirm-publish" class="btn btn-primary btn-sm">
+                  <span data-icon="cloudUpload"></span>
+                  <span>Crear y Publicar</span>
+                </button>
+                <button type="button" id="btn-gh-cancel-publish" class="btn btn-ghost btn-sm">Cancelar</button>
+              </div>
+            </div>
+
             <p id="gh-local-backup-status" class="gh-status-msg"></p>
           </div>
 

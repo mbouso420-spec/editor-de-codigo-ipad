@@ -90,6 +90,11 @@ export function initGithubController({
   const backupGistBtn = document.getElementById("btn-gh-backup-gist");
   const backupGistText = document.getElementById("btn-gh-backup-gist-text");
   const publishRepoBtn = document.getElementById("btn-gh-publish-repo");
+  const publishRepoBox = document.getElementById("gh-publish-repo-box");
+  const publishNameInput = document.getElementById("gh-publish-name-input");
+  const publishVisibilitySelect = document.getElementById("gh-publish-visibility-select");
+  const confirmPublishBtn = document.getElementById("btn-gh-confirm-publish");
+  const cancelPublishBtn = document.getElementById("btn-gh-cancel-publish");
   const localBackupStatus = document.getElementById("gh-local-backup-status");
   const gistSelect = document.getElementById("gh-gist-select");
   const restoreGistBtn = document.getElementById("btn-gh-restore-gist");
@@ -158,11 +163,16 @@ export function initGithubController({
     }
   }
 
+  function hidePublishRepoBox() {
+    if (publishRepoBox) publishRepoBox.hidden = true;
+  }
+
   openDialogBtn?.addEventListener("click", async () => {
     if (!dialog) return;
     resetPullConfirm();
     resetOpenConfirm();
     hideConflictBox();
+    hidePublishRepoBox();
     await onFlushPendingSaves?.();
     const storedToken = getGithubToken();
     if (tokenInput) {
@@ -179,6 +189,7 @@ export function initGithubController({
     resetPullConfirm();
     resetOpenConfirm();
     hideConflictBox();
+    hidePublishRepoBox();
     dialog?.close();
   });
 
@@ -187,6 +198,7 @@ export function initGithubController({
       resetPullConfirm();
       resetOpenConfirm();
       hideConflictBox();
+      hidePublishRepoBox();
       dialog.close();
     }
   });
@@ -755,6 +767,7 @@ export function initGithubController({
 
   async function refreshLocalBackupSection(project) {
     if (!project) return;
+    hidePublishRepoBox();
     if (localProjectNameEl) {
       localProjectNameEl.textContent = project.name;
     }
@@ -855,7 +868,7 @@ export function initGithubController({
     }
   });
 
-  publishRepoBtn?.addEventListener("click", async () => {
+  publishRepoBtn?.addEventListener("click", () => {
     const token = getGithubToken();
     if (!token) {
       setStatus(localBackupStatus, "Conectá tu token de GitHub arriba primero.", "error");
@@ -866,18 +879,56 @@ export function initGithubController({
     const project = getActiveProject();
     if (!project) return;
 
-    const repoName = window.prompt("Nombre para el nuevo repositorio privado en GitHub:", project.name);
-    if (!repoName || !repoName.trim()) return;
+    if (publishRepoBox) {
+      const willShow = publishRepoBox.hidden;
+      publishRepoBox.hidden = !willShow;
+      if (willShow) {
+        if (publishNameInput) {
+          publishNameInput.value =
+            project.name.toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/^-+|-+$/g, "") || project.name;
+          publishNameInput.focus();
+          publishNameInput.select();
+        }
+      }
+    }
+  });
 
-    publishRepoBtn.disabled = true;
-    setStatus(localBackupStatus, "Creando repositorio privado y subiendo archivos a GitHub…", "neutral");
+  cancelPublishBtn?.addEventListener("click", () => {
+    hidePublishRepoBox();
+  });
+
+  confirmPublishBtn?.addEventListener("click", async () => {
+    const token = getGithubToken();
+    if (!token) {
+      setStatus(localBackupStatus, "Conectá tu token de GitHub arriba primero.", "error");
+      tokenInput?.focus();
+      return;
+    }
+
+    const project = getActiveProject();
+    if (!project) return;
+
+    const rawName = (publishNameInput?.value || "").trim();
+    if (!rawName) {
+      publishNameInput?.focus();
+      setStatus(localBackupStatus, "Ingresá un nombre para el repositorio en GitHub.", "error");
+      return;
+    }
+
+    const isPrivate = publishVisibilitySelect ? publishVisibilitySelect.value === "private" : true;
+    const visibilityLabel = isPrivate ? "privado" : "público";
+
+    if (confirmPublishBtn) confirmPublishBtn.disabled = true;
+    if (cancelPublishBtn) cancelPublishBtn.disabled = true;
+    if (publishRepoBtn) publishRepoBtn.disabled = true;
+    setStatus(localBackupStatus, `Creando repositorio ${visibilityLabel} y subiendo archivos a GitHub…`, "neutral");
 
     try {
       await onFlushPendingSaves?.();
       const entries = await getProjectEntries(project.id);
       const res = await publishProjectAsNewRepository(token, {
-        repoName: repoName.trim(),
-        isPrivate: true,
+        repoName: rawName,
+        isPrivate,
         entries
       });
 
@@ -887,7 +938,8 @@ export function initGithubController({
         branch: res.branch
       });
 
-      setStatus(localBackupStatus, `¡Publicado con éxito como ${res.fullName}!`, "ok");
+      hidePublishRepoBox();
+      setStatus(localBackupStatus, `¡Publicado con éxito como ${res.fullName} (${visibilityLabel})!`, "ok");
       await onProjectClonedOrSynced?.(project.id);
       await refreshSyncPanel();
     } catch (err) {
@@ -902,7 +954,9 @@ export function initGithubController({
         setStatus(localBackupStatus, `Error al publicar repositorio: ${msg}`, "error");
       }
     } finally {
-      publishRepoBtn.disabled = false;
+      if (confirmPublishBtn) confirmPublishBtn.disabled = false;
+      if (cancelPublishBtn) cancelPublishBtn.disabled = false;
+      if (publishRepoBtn) publishRepoBtn.disabled = false;
     }
   });
 
