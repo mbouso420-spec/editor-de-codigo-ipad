@@ -90,6 +90,16 @@ export function initLayoutController() {
     restorePanelWidths();
   });
 
+  window.addEventListener("orientationchange", () => {
+    restorePanelWidths();
+  });
+
+  if (typeof screen !== "undefined" && screen.orientation && typeof screen.orientation.addEventListener === "function") {
+    screen.orientation.addEventListener("change", () => {
+      restorePanelWidths();
+    });
+  }
+
   // Atajos de teclado (Cmd/Ctrl + B para Explorador, Cmd/Ctrl + J para Asistente, Escape para cerrar drawers)
   window.addEventListener("keydown", (event) => {
     const mod = event.metaKey || event.ctrlKey;
