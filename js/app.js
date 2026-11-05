@@ -200,8 +200,29 @@ async function initApp() {
   keyboardRouter.registerGlobalShortcut("ctrl+shift+f", () => globalSearchModal.open());
   keyboardRouter.registerGlobalShortcut("meta+shift+f", () => globalSearchModal.open());
 
+  const getContextSnapshot = () => {
+    const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) ?? null : null;
+    const otherOpenFiles = openTabIds
+      .filter((id) => id !== activeFileId)
+      .map((id) => filesOnly.find((f) => f.id === id))
+      .filter((f) => Boolean(f) && f.contentLoaded !== false);
+
+    return {
+      activeFile,
+      selection: activeSelection,
+      otherOpenFiles
+    };
+  };
+
   const settingsModal = initSettingsModal({
-    editor
+    editor,
+    getContextSnapshot,
+    onSelectProvider(providerId) {
+      if (!layout.isRightPanelOpen()) {
+        layout.toggleRightPanel();
+      }
+      chat?.switchProvider?.(providerId);
+    }
   });
 
   keyboardRouter.registerGlobalShortcut("ctrl+,", () => settingsModal?.open());
@@ -713,19 +734,7 @@ async function initApp() {
   }
 
   chat = initChatController({
-    getContextSnapshot() {
-      const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) ?? null : null;
-      const otherOpenFiles = openTabIds
-        .filter((id) => id !== activeFileId)
-        .map((id) => filesOnly.find((f) => f.id === id))
-        .filter((f) => Boolean(f) && f.contentLoaded !== false);
-
-      return {
-        activeFile,
-        selection: activeSelection,
-        otherOpenFiles
-      };
-    },
+    getContextSnapshot,
     async onInsertAtCursor(code, lang) {
       await ensureAnOpenFile(lang);
       if (!activeFileId) {

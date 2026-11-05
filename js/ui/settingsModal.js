@@ -1,12 +1,17 @@
 import { keyboardRouter } from "./keyboardRouter.js";
 import { getStorageQuotaEstimate, formatStorageBytes } from "../storage/storageQuota.js";
 import {
+  AI_PROVIDERS,
   getKeyStorageMode,
   setKeyStorageMode,
+  getApiKey,
+  getSavedModel,
   getAiTemperature,
   setAiTemperature,
   getAiContextBudget,
-  setAiContextBudget
+  setAiContextBudget,
+  getAiThinkingSpeed,
+  setAiThinkingSpeed
 } from "../ai/providers.js";
 
 const THEME_STORAGE_KEY = "studio_theme";
@@ -35,10 +40,12 @@ export const KEYBOARD_SHORTCUTS = [
  *     isMinimapVisible: () => boolean,
  *     toggleMinimap: () => boolean
  *   },
- *   onThemeChange?: (newTheme: string) => void
+ *   onThemeChange?: (newTheme: string) => void,
+ *   getContextSnapshot?: () => { activeFile?: { content?: string }, otherOpenFiles?: Array<{ content?: string }> },
+ *   onSelectProvider?: (providerId: string) => void
  * }} config
  */
-export function initSettingsModal({ editor, onThemeChange }) {
+export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, onSelectProvider }) {
   const dialog = document.getElementById("settings-dialog");
   const openBtn = document.getElementById("btn-open-settings");
   const closeBtn = document.getElementById("btn-close-settings");
@@ -50,6 +57,8 @@ export function initSettingsModal({ editor, onThemeChange }) {
   const selectAutosave = document.getElementById("setting-autosave-delay");
   const selectAiTemp = document.getElementById("setting-ai-temperature");
   const selectAiBudget = document.getElementById("setting-ai-budget");
+  const selectAiThinkingSpeed = document.getElementById("setting-ai-thinking-speed");
+  const modelsListEl = document.getElementById("settings-active-models-list");
   const quotaTextEl = document.getElementById("setting-quota-text");
   const shortcutsFilter = document.getElementById("setting-shortcuts-filter");
   const shortcutsListEl = document.getElementById("setting-shortcuts-list");
@@ -75,6 +84,111 @@ export function initSettingsModal({ editor, onThemeChange }) {
     keyboardRouter.popModal("settings-dialog");
     if (dialog?.open) {
       dialog.close();
+    }
+  }
+
+  function refreshTokensMeter() {
+    const pctEl = document.getElementById("models-tokens-pct");
+    const fillEl = document.getElementById("models-meter-fill");
+    const detailEl = document.getElementById("models-tokens-detail");
+    const remainingEl = document.getElementById("models-tokens-remaining");
+    const trackEl = dialog?.querySelector(".models-meter-track");
+
+    let contextChars = 0;
+    try {
+      const snapshot = getContextSnapshot ? getContextSnapshot() : null;
+      if (snapshot?.activeFile?.content) {
+        contextChars += snapshot.activeFile.content.length;
+      }
+      if (snapshot?.otherOpenFiles) {
+        for (const f of snapshot.otherOpenFiles) {
+          contextChars += (f.content || "").length;
+        }
+      }
+    } catch (_) {}
+
+    const usedTokens = Math.ceil(contextChars / 4);
+    const maxBudgetChars = getAiContextBudget();
+    const maxBudgetTokens = Math.ceil(maxBudgetChars / 4);
+    const remainingTokens = Math.max(0, maxBudgetTokens - usedTokens);
+    const availablePct = maxBudgetTokens > 0
+      ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxBudgetTokens) * 100)))
+      : 100;
+
+    if (pctEl) {
+      pctEl.textContent = `${availablePct}% disponible`;
+    }
+    if (fillEl) {
+      fillEl.style.setProperty("--progress-val", String(availablePct));
+      fillEl.dataset.state = availablePct > 40 ? "good" : availablePct > 15 ? "warning" : "low";
+    }
+    if (trackEl) {
+      trackEl.setAttribute("aria-valuenow", String(availablePct));
+    }
+    if (detailEl) {
+      detailEl.textContent = `~${usedTokens.toLocaleString()} / ${maxBudgetTokens.toLocaleString()} tokens en uso`;
+    }
+    if (remainingEl) {
+      remainingEl.textContent = `${remainingTokens.toLocaleString()} tokens libres`;
+    }
+  }
+
+  function renderActiveModelsList() {
+    if (!modelsListEl) return;
+    const providers = Object.values(AI_PROVIDERS || {});
+    modelsListEl.innerHTML = providers
+      .map((p) => {
+        const key = getApiKey(p.id);
+        const hasKey = Boolean(key && key.trim());
+        const savedModel = getSavedModel(p.id) || p.models?.[0]?.id || "Predeterminado";
+        return `
+        <div class="models-provider-item" role="listitem">
+          <div class="models-provider-main">
+            <div class="models-provider-header">
+              <span class="models-provider-name">${escapeHtml(p.name)}</span>
+              <span class="models-status-badge ${hasKey ? "badge-connected" : "badge-disconnected"}">
+                ${hasKey ? "Conectado" : "Sin API key"}
+              </span>
+            </div>
+            <div class="models-provider-meta">
+              <span class="models-provider-model code-font">${escapeHtml(savedModel)}</span>
+              <span class="models-provider-hint">${escapeHtml(p.help || "")}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-provider-action"
+            data-provider-id="${escapeHtml(p.id)}"
+            title="${hasKey ? "Seleccionar en el Asistente IA" : "Configurar API key"}"
+          >
+            ${hasKey ? "Usar en chat" : "Configurar"}
+          </button>
+        </div>
+      `;
+      })
+      .join("");
+
+    const buttons = modelsListEl.querySelectorAll(".btn-provider-action");
+    if (buttons && buttons.length > 0) {
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const pid = btn.dataset?.providerId || btn.getAttribute?.("data-provider-id");
+          if (pid) {
+            close();
+            onSelectProvider?.(pid);
+          }
+        });
+      });
+    } else {
+      for (const p of providers) {
+        const btn = document.createElement("button");
+        btn.setAttribute("data-provider-id", p.id);
+        btn.addEventListener("click", () => {
+          close();
+          onSelectProvider?.(p.id);
+        });
+        modelsListEl.appendChild(btn);
+      }
     }
   }
 
@@ -121,6 +235,13 @@ export function initSettingsModal({ editor, onThemeChange }) {
         selectAiBudget.value = "standard";
       }
     }
+
+    if (selectAiThinkingSpeed) {
+      selectAiThinkingSpeed.value = getAiThinkingSpeed();
+    }
+
+    refreshTokensMeter();
+    renderActiveModelsList();
   }
 
   async function refreshStorageInfo() {
@@ -244,6 +365,14 @@ export function initSettingsModal({ editor, onThemeChange }) {
   selectAiBudget?.addEventListener("change", (e) => {
     const val = (e?.target ? e.target.value : selectAiBudget?.value) || "standard";
     setAiContextBudget(val);
+    refreshTokensMeter();
+  });
+
+  selectAiThinkingSpeed?.addEventListener("change", (e) => {
+    const val = (e?.target ? e.target.value : selectAiThinkingSpeed?.value) || "media";
+    if (val === "baja" || val === "media" || val === "alta") {
+      setAiThinkingSpeed(val);
+    }
   });
 
   shortcutsFilter?.addEventListener("input", (e) => {

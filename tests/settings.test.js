@@ -15,7 +15,10 @@ import {
   getAiTemperature,
   setAiTemperature,
   getAiContextBudget,
-  setAiContextBudget
+  setAiContextBudget,
+  getAiThinkingSpeed,
+  setAiThinkingSpeed,
+  saveApiKey
 } from "../js/ai/providers.js";
 
 function createMockEl(tag, attrs = {}, children = []) {
@@ -66,7 +69,7 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     const btnClose = createMockEl("button", { id: "btn-close-settings" });
     const tabAppearance = createMockEl("button", { class: "settings-tab-btn is-active", "data-tab": "appearance", "aria-selected": "true" });
     const tabEditor = createMockEl("button", { class: "settings-tab-btn", "data-tab": "editor", "aria-selected": "false" });
-    const tabAi = createMockEl("button", { class: "settings-tab-btn", "data-tab": "ai", "aria-selected": "false" });
+    const tabModels = createMockEl("button", { class: "settings-tab-btn", "data-tab": "models", "aria-selected": "false" });
     const tabShortcuts = createMockEl("button", { class: "settings-tab-btn", "data-tab": "shortcuts", "aria-selected": "false" });
     const tabStorage = createMockEl("button", { class: "settings-tab-btn", "data-tab": "storage", "aria-selected": "false" });
 
@@ -85,13 +88,20 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     ]);
     panelEditor.hidden = true;
 
-    // Panel 3: Asistente IA
-    const selectAiTemp = createMockEl("select", { id: "setting-ai-temperature" });
+    // Panel 3: Modelos e Inteligencia Artificial
+    const tokensPct = createMockEl("span", { id: "models-tokens-pct" });
+    const meterFill = createMockEl("div", { id: "models-meter-fill" });
+    const meterTrack = createMockEl("div", { class: "models-meter-track" }, [meterFill]);
+    const tokensDetail = createMockEl("span", { id: "models-tokens-detail" });
+    const tokensRemaining = createMockEl("span", { id: "models-tokens-remaining" });
     const selectAiBudget = createMockEl("select", { id: "setting-ai-budget" });
-    const panelAi = createMockEl("section", { class: "settings-tab-panel", "data-tab": "ai" }, [
-      selectAiTemp, selectAiBudget
+    const selectAiThinking = createMockEl("select", { id: "setting-ai-thinking-speed" });
+    const selectAiTemp = createMockEl("select", { id: "setting-ai-temperature" });
+    const modelsList = createMockEl("div", { id: "settings-active-models-list" });
+    const panelModels = createMockEl("section", { class: "settings-tab-panel", "data-tab": "models" }, [
+      tokensPct, meterTrack, tokensDetail, tokensRemaining, selectAiBudget, selectAiThinking, selectAiTemp, modelsList
     ]);
-    panelAi.hidden = true;
+    panelModels.hidden = true;
 
     // Panel 4: Atajos
     const filterShortcuts = createMockEl("input", { id: "setting-shortcuts-filter", type: "search" });
@@ -112,12 +122,12 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     dialog.appendChild(btnClose);
     dialog.appendChild(tabAppearance);
     dialog.appendChild(tabEditor);
-    dialog.appendChild(tabAi);
+    dialog.appendChild(tabModels);
     dialog.appendChild(tabShortcuts);
     dialog.appendChild(tabStorage);
     dialog.appendChild(panelAppearance);
     dialog.appendChild(panelEditor);
-    dialog.appendChild(panelAi);
+    dialog.appendChild(panelModels);
     dialog.appendChild(panelShortcuts);
     dialog.appendChild(panelStorage);
 
@@ -261,10 +271,11 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(localStorage.getItem("studio_autosave_delay"), "240");
   });
 
-  test("Configuración avanzada de IA: Temperatura y Presupuesto de contexto", () => {
+  test("Configuración avanzada de IA: Temperatura, Presupuesto y Velocidad de pensamiento", () => {
     initSettingsModal({ editor: null });
     const selectTemp = document.getElementById("setting-ai-temperature");
     const selectBudget = document.getElementById("setting-ai-budget");
+    const selectThinking = document.getElementById("setting-ai-thinking-speed");
 
     selectTemp.value = "0.2";
     selectTemp.dispatchEvent(new Event("change"));
@@ -281,6 +292,59 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     selectBudget.value = "large";
     selectBudget.dispatchEvent(new Event("change"));
     assert.equal(getAiContextBudget(), 40000);
+
+    selectThinking.value = "alta";
+    selectThinking.dispatchEvent(new Event("change"));
+    assert.equal(getAiThinkingSpeed(), "alta");
+
+    selectThinking.value = "baja";
+    selectThinking.dispatchEvent(new Event("change"));
+    assert.equal(getAiThinkingSpeed(), "baja");
+  });
+
+  test("Pestaña Modelos: Medidor de tokens calcula porcentaje y actualiza barra según contexto", () => {
+    const mockContext = {
+      activeFile: { content: "const a = 1;\nconst b = 2;\n" },
+      otherOpenFiles: [{ content: "function hello() { return 'world'; }" }]
+    };
+
+    const modal = initSettingsModal({
+      editor: null,
+      getContextSnapshot: () => mockContext
+    });
+    modal.open();
+
+    const pctEl = document.getElementById("models-tokens-pct");
+    const detailEl = document.getElementById("models-tokens-detail");
+    const remainingEl = document.getElementById("models-tokens-remaining");
+
+    assert.ok(pctEl.textContent.includes("% disponible"));
+    assert.ok(detailEl.textContent.includes("tokens en uso"));
+    assert.ok(remainingEl.textContent.includes("tokens libres"));
+  });
+
+  test("Pestaña Modelos: Renderiza proveedores activos y permite invocar onSelectProvider", () => {
+    saveApiKey("gemini", "AIzaSyFakeKey123");
+
+    let selectedProvider = null;
+    const modal = initSettingsModal({
+      editor: null,
+      onSelectProvider(pid) {
+        selectedProvider = pid;
+      }
+    });
+    modal.open();
+
+    const listEl = document.getElementById("settings-active-models-list");
+    assert.ok(listEl.innerHTML.includes("Google Gemini"));
+    assert.ok(listEl.innerHTML.includes("badge-connected"));
+    assert.ok(listEl.innerHTML.includes("Conectado"));
+
+    // Simular clic en el botón de acción de proveedor
+    const geminiBtn = listEl.querySelector('[data-provider-id="gemini"]');
+    assert.ok(geminiBtn);
+    geminiBtn.click();
+    assert.equal(selectedProvider, "gemini");
   });
 
   test("Filtrado interactivo de atajos de teclado", () => {
@@ -307,9 +371,9 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
 
     const tabButtons = document.querySelectorAll(".settings-tab-btn");
     const tabEditor = Array.from(tabButtons).find((b) => b.dataset.tab === "editor");
-    const tabAi = Array.from(tabButtons).find((b) => b.dataset.tab === "ai");
+    const tabModels = Array.from(tabButtons).find((b) => b.dataset.tab === "models");
     const panelEditor = document.querySelector('.settings-tab-panel[data-tab="editor"]');
-    const panelAi = document.querySelector('.settings-tab-panel[data-tab="ai"]');
+    const panelModels = document.querySelector('.settings-tab-panel[data-tab="models"]');
     const panelAppearance = document.querySelector('.settings-tab-panel[data-tab="appearance"]');
 
     tabEditor.click();
@@ -317,9 +381,9 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(panelEditor.hidden, false);
     assert.equal(panelAppearance.hidden, true);
 
-    tabAi.click();
-    assert.equal(tabAi.classList.contains("is-active"), true);
-    assert.equal(panelAi.hidden, false);
+    tabModels.click();
+    assert.equal(tabModels.classList.contains("is-active"), true);
+    assert.equal(panelModels.hidden, false);
     assert.equal(panelEditor.hidden, true);
   });
 

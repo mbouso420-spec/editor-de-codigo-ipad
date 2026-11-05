@@ -429,37 +429,11 @@
 
         <form id="chat-composer-form" class="chat-composer">
           <div class="chat-composer-info">
-            <div id="chat-fuel-gauge" class="chat-fuel-gauge" role="progressbar" aria-label="Nivel de combustible de tokens" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" title="Combustible de tokens: 100% disponible">
-              <span class="chat-fuel-icon" data-icon="gauge" aria-hidden="true"></span>
-              <span class="chat-fuel-label-end">E</span>
-              <div class="chat-fuel-track">
-                <div id="chat-fuel-needle" class="chat-fuel-needle"></div>
-              </div>
-              <span class="chat-fuel-label-end">F</span>
-              <span id="chat-token-counter" class="chat-token-counter code-font">100% (~0 / 16k)</span>
-            </div>
-
+            <span id="chat-token-counter" class="chat-token-counter code-font">~0 tokens</span>
             <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
               <span data-icon="refreshCw"></span>
               <span>Regenerar respuesta</span>
             </button>
-          </div>
-
-          <div class="chat-quick-controls">
-            <div class="chat-thinking-control" role="group" aria-label="Velocidad de pensamiento">
-              <span class="chat-control-label" title="Profundidad de razonamiento de la IA"><span data-icon="zap"></span> Pensar:</span>
-              <div class="chat-pill-group">
-                <button type="button" class="chat-pill-btn" data-speed="baja" aria-pressed="false" title="Baja: Respuesta rápida y ligera">Baja</button>
-                <button type="button" class="chat-pill-btn is-active" data-speed="media" aria-pressed="true" title="Media: Razonamiento equilibrado">Media</button>
-                <button type="button" class="chat-pill-btn" data-speed="alta" aria-pressed="false" title="Alta: Análisis profundo y exhaustivo">Alta</button>
-              </div>
-            </div>
-
-            <div class="chat-slash-shortcuts" role="toolbar" aria-label="Comandos rápidos">
-              <button type="button" class="chat-slash-btn" data-command="/fix" title="Corregir errores del archivo activo">/fix</button>
-              <button type="button" class="chat-slash-btn" data-command="/explain" title="Explicar detalladamente el código">/explain</button>
-              <button type="button" class="chat-slash-btn" data-command="/test" title="Generar pruebas unitarias">/test</button>
-            </div>
           </div>
 
           <div class="chat-input-row">
@@ -468,7 +442,7 @@
               id="chat-prompt-input"
               class="chat-input"
               rows="2"
-              placeholder="Preguntá o escribí /fix, /explain, /test…"
+              placeholder="Preguntá sobre tu código o usá /fix, /explain, /test…"
             ></textarea>
             <button type="submit" id="chat-submit-btn" class="btn btn-primary btn-icon" aria-label="Enviar consulta" title="Enviar consulta">
               <span data-icon="send"></span>
@@ -870,7 +844,7 @@
         <div class="settings-tabs-bar" role="tablist" aria-label="Secciones de configuración">
           <button type="button" class="settings-tab-btn is-active" data-tab="appearance" role="tab" aria-selected="true">Apariencia</button>
           <button type="button" class="settings-tab-btn" data-tab="editor" role="tab" aria-selected="false">Editor</button>
-          <button type="button" class="settings-tab-btn" data-tab="ai" role="tab" aria-selected="false">Asistente IA</button>
+          <button type="button" class="settings-tab-btn" data-tab="models" role="tab" aria-selected="false">Modelos</button>
           <button type="button" class="settings-tab-btn" data-tab="shortcuts" role="tab" aria-selected="false">Atajos de Teclado</button>
           <button type="button" class="settings-tab-btn" data-tab="storage" role="tab" aria-selected="false">Almacenamiento</button>
         </div>
@@ -913,24 +887,79 @@
             </div>
           </div>
 
-          <!-- Pestaña 3: Asistente IA -->
-          <div class="settings-tab-panel" data-tab="ai" hidden>
-            <div class="setting-field">
-              <label for="setting-ai-temperature" class="setting-label">Temperatura de generación de la IA</label>
-              <select id="setting-ai-temperature" class="field-control">
-                <option value="0.2">Preciso / Código estricto (0.2)</option>
-                <option value="0.7">Equilibrado (0.7 - recomendado)</option>
-                <option value="1.0">Creativo y exploratorio (1.0)</option>
-              </select>
+          <!-- Pestaña 3: Modelos e Inteligencia Artificial -->
+          <div class="settings-tab-panel" data-tab="models" hidden>
+            <!-- 1. Medidor de Capacidad de Contexto y Tokens Disponibles -->
+            <div class="models-section-card">
+              <div class="models-card-header">
+                <div class="models-card-title-group">
+                  <span data-icon="gauge" class="models-card-icon" aria-hidden="true"></span>
+                  <div class="models-card-titles">
+                    <h3 class="models-card-title">Capacidad de Contexto y Tokens Disponibles</h3>
+                    <p class="models-card-desc">Consumo calculado según el archivo activo y pestañas abiertas del proyecto.</p>
+                  </div>
+                </div>
+                <div class="models-meter-badge-group">
+                  <span id="models-tokens-pct" class="models-tokens-badge">100% disponible</span>
+                </div>
+              </div>
+
+              <div class="models-meter-container">
+                <div class="models-meter-track" role="progressbar" aria-labelledby="models-tokens-pct" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+                  <div id="models-meter-fill" class="models-meter-fill"></div>
+                </div>
+                <div class="models-meter-legend">
+                  <span id="models-tokens-detail" class="models-meter-detail code-font">~0 / 4,000 tokens en uso</span>
+                  <span id="models-tokens-remaining" class="models-meter-remaining code-font">4,000 tokens libres</span>
+                </div>
+              </div>
+
+              <div class="setting-field">
+                <label for="setting-ai-budget" class="setting-label">Presupuesto máximo de contexto por consulta</label>
+                <select id="setting-ai-budget" class="field-control">
+                  <option value="compact">Compacto (~2,000 tokens / 8 KB - conexiones móviles)</option>
+                  <option value="standard">Estándar (~4,000 tokens / 16 KB - recomendado)</option>
+                  <option value="large">Extenso (~10,000 tokens / 40 KB - proyectos amplios)</option>
+                </select>
+              </div>
             </div>
 
-            <div class="setting-field">
-              <label for="setting-ai-budget" class="setting-label">Presupuesto de contexto de código por mensaje</label>
-              <select id="setting-ai-budget" class="field-control">
-                <option value="compact">Compacto (~2,000 tokens / 8 KB - ideal conexiones lentas)</option>
-                <option value="standard">Estándar (~4,000 tokens / 16 KB - recomendado)</option>
-                <option value="large">Extenso (~10,000 tokens / 40 KB - proyectos amplios)</option>
-              </select>
+            <!-- 2. Parámetros de Razonamiento -->
+            <div class="settings-grid-two">
+              <div class="setting-field">
+                <label for="setting-ai-thinking-speed" class="setting-label">Velocidad de pensamiento y razonamiento</label>
+                <select id="setting-ai-thinking-speed" class="field-control">
+                  <option value="baja">Baja (Respuesta inmediata y síntesis rápida)</option>
+                  <option value="media">Media (Equilibrada - recomendada para desarrollo diario)</option>
+                  <option value="alta">Alta (Razonamiento profundo y análisis exhaustivo)</option>
+                </select>
+              </div>
+
+              <div class="setting-field">
+                <label for="setting-ai-temperature" class="setting-label">Temperatura de generación</label>
+                <select id="setting-ai-temperature" class="field-control">
+                  <option value="0.2">Preciso / Código estricto (0.2)</option>
+                  <option value="0.7">Equilibrado (0.7 - recomendado)</option>
+                  <option value="1.0">Creativo y exploratorio (1.0)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3. Proveedores y Modelos Activos -->
+            <div class="models-section-card">
+              <div class="models-card-header">
+                <div class="models-card-title-group">
+                  <span data-icon="layers" class="models-card-icon" aria-hidden="true"></span>
+                  <div class="models-card-titles">
+                    <h3 class="models-card-title">Proveedores y Modelos Activos</h3>
+                    <p class="models-card-desc">Estado de credenciales de API y modelos configurados.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div id="settings-active-models-list" class="models-provider-list" role="list">
+                <!-- Se puebla dinámicamente con providers activos y sus API keys -->
+              </div>
             </div>
           </div>
 

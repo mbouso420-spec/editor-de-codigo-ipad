@@ -6,7 +6,6 @@ import {
   fetchLiveFreeModels,
   getAiContextBudget,
   getAiThinkingSpeed,
-  setAiThinkingSpeed,
   getApiKey,
   getKeyStorageMode,
   getSavedModel,
@@ -402,26 +401,7 @@ export function initChatController({
     const maxBudgetChars = getAiContextBudget();
     const maxBudgetTokens = estimateTokens(maxBudgetChars);
 
-    // Medidor de combustible de tokens: 100% (Full) cuando no consumiste nada, desciende hacia 0% (Empty)
-    const remainingTokens = Math.max(0, maxBudgetTokens - usedTokens);
-    const fuelPercent = maxBudgetTokens > 0
-      ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxBudgetTokens) * 100)))
-      : 0;
-
-    const fuelGaugeEl = document.getElementById("chat-fuel-gauge");
-    const fuelNeedleEl = document.getElementById("chat-fuel-needle");
-
-    if (fuelGaugeEl) {
-      fuelGaugeEl.setAttribute("aria-valuenow", String(fuelPercent));
-      fuelGaugeEl.title = `Combustible de tokens: ${fuelPercent}% disponible (${remainingTokens} tokens restantes de ${maxBudgetTokens})`;
-      fuelGaugeEl.dataset.fuelState = fuelPercent > 40 ? "good" : fuelPercent > 15 ? "warning" : "low";
-    }
-
-    if (fuelNeedleEl) {
-      fuelNeedleEl.style.setProperty("--fuel-pct", String(fuelPercent));
-    }
-
-    tokenCounterEl.textContent = `${fuelPercent}% (~${usedTokens} / ${maxBudgetTokens})`;
+    tokenCounterEl.textContent = `~${usedTokens.toLocaleString()} / ${maxBudgetTokens.toLocaleString()} tokens`;
   }
 
   function syncRegenerateButton() {
@@ -432,45 +412,6 @@ export function initChatController({
   }
 
   promptInput?.addEventListener("input", updateTokenEstimate);
-
-  const thinkingPills = composerForm?.querySelectorAll(".chat-pill-btn");
-  function syncThinkingSpeedUi(speed = getAiThinkingSpeed()) {
-    thinkingPills?.forEach((btn) => {
-      const active = btn.dataset.speed === speed;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", String(active));
-    });
-  }
-  syncThinkingSpeedUi();
-
-  thinkingPills?.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const chosen = btn.dataset.speed;
-      if (chosen === "baja" || chosen === "media" || chosen === "alta") {
-        setAiThinkingSpeed(chosen);
-        syncThinkingSpeedUi(chosen);
-      }
-    });
-  });
-
-  const slashButtons = composerForm?.querySelectorAll(".chat-slash-btn");
-  slashButtons?.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const cmd = btn.dataset.command;
-      if (!promptInput) return;
-      if (cmd === "/fix") {
-        promptInput.value = "/fix Analizá y corregí los errores en el código activo.";
-      } else if (cmd === "/explain") {
-        promptInput.value = "/explain Explicá cómo funciona este código y su lógica paso a paso.";
-      } else if (cmd === "/test") {
-        promptInput.value = "/test Generá una suite de pruebas unitarias exhaustiva para este código.";
-      } else if (cmd) {
-        promptInput.value = `${cmd} `;
-      }
-      promptInput.focus();
-      updateTokenEstimate();
-    });
-  });
 
   regenerateBtn?.addEventListener("click", async () => {
     const running = activeStreams.get(conversationKey);
@@ -1103,6 +1044,19 @@ export function initChatController({
         : [];
       renderConversation();
       scrollToBottom();
+    },
+    switchProvider(providerId) {
+      if (AI_PROVIDERS[providerId]) {
+        activeProviderId = providerId;
+        saveProviderId(activeProviderId);
+        activeModelId = getSavedModel(activeProviderId);
+        if (providerSelect) providerSelect.value = activeProviderId;
+        syncSettingsForm();
+        toggleSettings(true);
+        if (!getApiKey(activeProviderId) && apiKeyInput) {
+          apiKeyInput.focus();
+        }
+      }
     }
   };
 }
