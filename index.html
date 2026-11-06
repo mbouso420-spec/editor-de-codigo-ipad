@@ -428,25 +428,56 @@
         </div>
 
         <form id="chat-composer-form" class="chat-composer">
-          <div class="chat-composer-info">
-            <span id="chat-token-counter" class="chat-token-counter code-font">~0 tokens</span>
-            <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
-              <span data-icon="refreshCw"></span>
-              <span>Regenerar respuesta</span>
+          <!-- 1. Fila de Comandos Rápidos Táctiles (Scroll suave iPadOS) -->
+          <div class="chat-quick-actions" role="toolbar" aria-label="Comandos rápidos">
+            <button type="button" class="chat-action-chip" data-command="/fix" title="Corregir errores del archivo activo">
+              <span class="chat-chip-cmd">/fix</span>
+              <span class="chat-chip-label">Corregir</span>
+            </button>
+            <button type="button" class="chat-action-chip" data-command="/explain" title="Explicar código paso a paso">
+              <span class="chat-chip-cmd">/explain</span>
+              <span class="chat-chip-label">Explicar</span>
+            </button>
+            <button type="button" class="chat-action-chip" data-command="/test" title="Generar pruebas unitarias completas">
+              <span class="chat-chip-cmd">/test</span>
+              <span class="chat-chip-label">Pruebas</span>
             </button>
           </div>
 
+          <!-- 2. Campo de entrada principal y botón de envío -->
           <div class="chat-input-row">
             <label for="chat-prompt-input" class="visually-hidden">Consultar al asistente sobre el código</label>
             <textarea
               id="chat-prompt-input"
               class="chat-input"
               rows="2"
-              placeholder="Preguntá sobre tu código o usá /fix, /explain, /test…"
+              placeholder="Preguntá sobre tu código o pedí cambios…"
             ></textarea>
             <button type="submit" id="chat-submit-btn" class="btn btn-primary btn-icon" aria-label="Enviar consulta" title="Enviar consulta">
               <span data-icon="send"></span>
             </button>
+          </div>
+
+          <!-- 3. Barra de Control Inferior: Velocidad de razonamiento (Rápida / Estándar / Lenta) + Contador -->
+          <div class="chat-composer-footer">
+            <div class="chat-thinking-control" role="group" aria-label="Modo de razonamiento">
+              <div class="chat-thinking-segmented" role="radiogroup" aria-label="Velocidad de razonamiento">
+                <span class="chat-thinking-icon-badge" title="Velocidad de razonamiento de la IA" aria-hidden="true">
+                  <span data-icon="zap"></span>
+                </span>
+                <button type="button" class="chat-thinking-btn" data-speed="baja" role="radio" aria-checked="false" title="Rápida: respuesta directa y veloz">Rápida</button>
+                <button type="button" class="chat-thinking-btn is-active" data-speed="media" role="radio" aria-checked="true" title="Estándar: razonamiento equilibrado">Estándar</button>
+                <button type="button" class="chat-thinking-btn" data-speed="alta" role="radio" aria-checked="false" title="Lenta: análisis profundo y exhaustivo">Lenta</button>
+              </div>
+            </div>
+
+            <div class="chat-footer-meta">
+              <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
+                <span data-icon="refreshCw"></span>
+                <span>Regenerar</span>
+              </button>
+              <span id="chat-token-counter" class="chat-token-counter code-font" title="Tokens estimados de archivo y mensaje">~0 tokens</span>
+            </div>
           </div>
         </form>
       </aside>

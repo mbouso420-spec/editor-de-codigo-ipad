@@ -372,6 +372,12 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
     const val = (e?.target ? e.target.value : selectAiThinkingSpeed?.value) || "media";
     if (val === "baja" || val === "media" || val === "alta") {
       setAiThinkingSpeed(val);
+      const chatBtns = document.querySelectorAll(".chat-thinking-btn");
+      chatBtns?.forEach((btn) => {
+        const active = (btn.dataset?.speed || btn.getAttribute?.("data-speed")) === val;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-checked", String(active));
+      });
     }
   });
 

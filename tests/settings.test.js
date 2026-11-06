@@ -347,6 +347,25 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(selectedProvider, "gemini");
   });
 
+  test("Sincronización bidireccional de velocidad de razonamiento con botones del chat", () => {
+    const chatBtnFast = createMockEl("button", { class: "chat-thinking-btn", "data-speed": "baja" });
+    const chatBtnStd = createMockEl("button", { class: "chat-thinking-btn is-active", "data-speed": "media" });
+    const chatBtnSlow = createMockEl("button", { class: "chat-thinking-btn", "data-speed": "alta" });
+    document.body.appendChild(chatBtnFast);
+    document.body.appendChild(chatBtnStd);
+    document.body.appendChild(chatBtnSlow);
+
+    initSettingsModal({ editor: null });
+    const selectThinking = document.getElementById("setting-ai-thinking-speed");
+
+    selectThinking.value = "alta";
+    selectThinking.dispatchEvent(new Event("change"));
+
+    assert.equal(getAiThinkingSpeed(), "alta");
+    assert.equal(chatBtnSlow.classList.contains("is-active"), true);
+    assert.equal(chatBtnStd.classList.contains("is-active"), false);
+  });
+
   test("Filtrado interactivo de atajos de teclado", () => {
     const modal = initSettingsModal({ editor: null });
     modal.open();

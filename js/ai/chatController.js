@@ -6,6 +6,7 @@ import {
   fetchLiveFreeModels,
   getAiContextBudget,
   getAiThinkingSpeed,
+  setAiThinkingSpeed,
   getApiKey,
   getKeyStorageMode,
   getSavedModel,
@@ -412,6 +413,49 @@ export function initChatController({
   }
 
   promptInput?.addEventListener("input", updateTokenEstimate);
+
+  const actionChips = composerForm?.querySelectorAll(".chat-action-chip");
+  actionChips?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cmd = btn.dataset?.command || btn.getAttribute("data-command");
+      if (!promptInput) return;
+      if (cmd === "/fix") {
+        promptInput.value = "/fix Analizá y corregí los errores en el código activo.";
+      } else if (cmd === "/explain") {
+        promptInput.value = "/explain Explicá cómo funciona este código y su lógica paso a paso.";
+      } else if (cmd === "/test") {
+        promptInput.value = "/test Generá una suite de pruebas unitarias exhaustiva para este código.";
+      } else if (cmd) {
+        promptInput.value = `${cmd} `;
+      }
+      promptInput.focus();
+      updateTokenEstimate();
+    });
+  });
+
+  const thinkingButtons = composerForm?.querySelectorAll(".chat-thinking-btn");
+  function syncThinkingSpeedUi(speed = getAiThinkingSpeed()) {
+    thinkingButtons?.forEach((btn) => {
+      const active = btn.dataset?.speed === speed || btn.getAttribute("data-speed") === speed;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-checked", String(active));
+    });
+  }
+  syncThinkingSpeedUi();
+
+  thinkingButtons?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const chosen = btn.dataset?.speed || btn.getAttribute("data-speed");
+      if (chosen === "baja" || chosen === "media" || chosen === "alta") {
+        setAiThinkingSpeed(chosen);
+        syncThinkingSpeedUi(chosen);
+        const settingSpeed = document.getElementById("setting-ai-thinking-speed");
+        if (settingSpeed) {
+          settingSpeed.value = chosen;
+        }
+      }
+    });
+  });
 
   regenerateBtn?.addEventListener("click", async () => {
     const running = activeStreams.get(conversationKey);
@@ -1057,6 +1101,9 @@ export function initChatController({
           apiKeyInput.focus();
         }
       }
+    },
+    syncThinkingSpeed(speed) {
+      syncThinkingSpeedUi(speed);
     }
   };
 }
