@@ -8,7 +8,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/ide-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 409 tests unitarios pasando al 100% (92 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 410 tests unitarios pasando al 100% (93 suites, 0 fallos).
 
 ---
 
@@ -156,7 +156,7 @@
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
 │       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 409 pruebas unitarias y E2E
+└── tests/                      # Suite automatizada con 410 pruebas unitarias y E2E
 ```
 
 ---
@@ -170,8 +170,8 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **409 pruebas unitarias y de integración ejecutadas.**
-- **92 suites completadas.**
+- **410 pruebas unitarias y de integración ejecutadas.**
+- **93 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
 - Tiempo de ejecución: **~1.5 segundos.**
 

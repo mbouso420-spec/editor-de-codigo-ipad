@@ -7,14 +7,17 @@
 /**
  * Convierte un conjunto de resultados de sql.js a formato CSV estándar.
  * @param {Array<{ columns: string[], values: any[][] }>} results
+ * @param {number} [maxRows] Límite de filas a serializar para prevenir desbordes de memoria.
  * @returns {string}
  */
-export function convertResultsToCsv(results) {
+export function convertResultsToCsv(results, maxRows = Infinity) {
   if (!Array.isArray(results) || results.length === 0) {
     return "";
   }
 
   const sections = [];
+  const limit = Number.isFinite(maxRows) && maxRows > 0 ? maxRows : Infinity;
+
   for (const res of results) {
     if (!res || !Array.isArray(res.columns)) continue;
     const lines = [];
@@ -22,9 +25,11 @@ export function convertResultsToCsv(results) {
     // Cabeceras
     lines.push(res.columns.map(escapeCsvField).join(","));
 
-    // Filas
+    // Filas con protección de volumen
     if (Array.isArray(res.values)) {
-      for (const row of res.values) {
+      const rowLimit = Math.min(res.values.length, limit);
+      for (let i = 0; i < rowLimit; i++) {
+        const row = res.values[i];
         if (!Array.isArray(row)) continue;
         lines.push(row.map(escapeCsvField).join(","));
       }
@@ -48,18 +53,23 @@ function escapeCsvField(val) {
 /**
  * Convierte los resultados de sql.js a una estructura JSON limpia con nombres de columna como claves.
  * @param {Array<{ columns: string[], values: any[][] }>} results
+ * @param {number} [maxRows] Límite de filas a serializar.
  * @returns {Array<Record<string, any>>}
  */
-export function convertResultsToJson(results) {
+export function convertResultsToJson(results, maxRows = Infinity) {
   if (!Array.isArray(results) || results.length === 0) {
     return [];
   }
 
   const out = [];
+  const limit = Number.isFinite(maxRows) && maxRows > 0 ? maxRows : Infinity;
+
   for (const res of results) {
     if (!res || !Array.isArray(res.columns) || !Array.isArray(res.values)) continue;
     const cols = res.columns;
-    for (const row of res.values) {
+    const rowLimit = Math.min(res.values.length, limit);
+    for (let rowIndex = 0; rowIndex < rowLimit; rowIndex++) {
+      const row = res.values[rowIndex];
       if (!Array.isArray(row)) continue;
       const obj = {};
       for (let i = 0; i < cols.length; i += 1) {
@@ -433,7 +443,12 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
           return;
         }
 
+        var MAX_SQL_DISPLAY_ROWS = 5000;
         results.forEach(function (res, idx) {
+          var originalRowCount = res.values ? res.values.length : 0;
+          var isTruncated = originalRowCount > MAX_SQL_DISPLAY_ROWS;
+          var activeValues = isTruncated ? res.values.slice(0, MAX_SQL_DISPLAY_ROWS) : res.values;
+
           var card = document.createElement("div");
           card.className = "sql-result-card";
 
@@ -446,11 +461,25 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
 
           var countSpan = document.createElement("span");
           countSpan.className = "sql-card-count";
-          countSpan.textContent = res.values.length + " fila(s) / " + res.columns.length + " columna(s)";
+          if (isTruncated) {
+            countSpan.textContent = MAX_SQL_DISPLAY_ROWS + " de " + originalRowCount + " filas (límite de memoria) / " + res.columns.length + " cols";
+            countSpan.title = "La consulta superó el lote de 5.000 filas. Se muestran las primeras 5.000 para optimizar el DOM y la memoria de WebKit.";
+          } else {
+            countSpan.textContent = res.values.length + " fila(s) / " + res.columns.length + " columna(s)";
+          }
 
           head.appendChild(querySpan);
           head.appendChild(countSpan);
           card.appendChild(head);
+
+          if (isTruncated) {
+            var warnBanner = document.createElement("div");
+            warnBanner.className = "sql-hint";
+            warnBanner.style.padding = "6px 12px";
+            warnBanner.style.color = "#d97706";
+            warnBanner.textContent = "⚠️ La consulta devolvió " + originalRowCount + " filas. Se muestran las primeras " + MAX_SQL_DISPLAY_ROWS + " para prevenir saturación de memoria. Usá LIMIT y OFFSET para paginar consultas masivas.";
+            card.appendChild(warnBanner);
+          }
 
           var tableWrap = document.createElement("div");
           tableWrap.className = "sql-table-wrap";
@@ -473,9 +502,9 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
           card.appendChild(tableWrap);
 
           var PAGE_SIZE = 50;
-          if (res.values.length > PAGE_SIZE) {
+          if (activeValues.length > PAGE_SIZE) {
             var currentPage = 1;
-            var totalPages = Math.ceil(res.values.length / PAGE_SIZE);
+            var totalPages = Math.ceil(activeValues.length / PAGE_SIZE);
 
             var pagBar = document.createElement("div");
             pagBar.className = "sql-pagination-bar";
@@ -497,13 +526,13 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
               currentPage = Math.max(1, Math.min(page, totalPages));
               tbody.innerHTML = "";
               var startIdx = (currentPage - 1) * PAGE_SIZE;
-              var endIdx = Math.min(res.values.length, startIdx + PAGE_SIZE);
-              pageInfo.textContent = "Página " + currentPage + " de " + totalPages + " (filas " + (startIdx + 1) + " a " + endIdx + " de " + res.values.length + ")";
+              var endIdx = Math.min(activeValues.length, startIdx + PAGE_SIZE);
+              pageInfo.textContent = "Página " + currentPage + " de " + totalPages + " (filas " + (startIdx + 1) + " a " + endIdx + " de " + activeValues.length + ")" + (isTruncated ? " [primeras " + MAX_SQL_DISPLAY_ROWS + "]" : "");
               btnPrev.disabled = currentPage === 1;
               btnNext.disabled = currentPage === totalPages;
 
               for (var i = startIdx; i < endIdx; i++) {
-                var row = res.values[i];
+                var row = activeValues[i];
                 var tr = document.createElement("tr");
                 row.forEach(function (cell) {
                   var td = document.createElement("td");
@@ -528,7 +557,7 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
 
             renderPage(1);
           } else {
-            res.values.forEach(function (row) {
+            activeValues.forEach(function (row) {
               var tr = document.createElement("tr");
               row.forEach(function (cell) {
                 var td = document.createElement("td");

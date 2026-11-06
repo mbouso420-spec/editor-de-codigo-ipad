@@ -24,6 +24,7 @@ import {
   EMERGENCY_BACKUP_PREFIX
 } from "../js/storage/emergencyBackup.js";
 import { KeyboardRouter } from "../js/ui/keyboardRouter.js";
+import { convertResultsToCsv, convertResultsToJson } from "../js/preview/sqlRunner.js";
 
 describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
   describe("1. Conversión de Búferes Binarios Grandes (uint8ArrayToBase64)", () => {
@@ -290,6 +291,33 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
 
       assert.equal(closeAttempts, 2);
       assert.equal(router.getActiveModal(), null, "Modal debe desapilarse cuando onEscape retorna true");
+    });
+  });
+
+  describe("7. Optimización de Memoria en Consultas SQL Masivas (sqlRunner)", () => {
+    test("convertResultsToCsv y convertResultsToJson respetan maxRows ante grandes lotes", () => {
+      const largeResults = [
+        {
+          columns: ["id", "name"],
+          values: Array.from({ length: 100 }, (_, i) => [i + 1, `Usuario ${i + 1}`])
+        }
+      ];
+
+      // Sin maxRows serializa las 100 filas
+      const fullCsv = convertResultsToCsv(largeResults);
+      const csvLines = fullCsv.trim().split("\r\n");
+      assert.equal(csvLines.length, 101); // 1 cabecera + 100 filas
+
+      // Con maxRows = 10, limita a 10 filas de datos
+      const limitedCsv = convertResultsToCsv(largeResults, 10);
+      const limitedLines = limitedCsv.trim().split("\r\n");
+      assert.equal(limitedLines.length, 11); // 1 cabecera + 10 filas
+
+      // JSON con maxRows = 5
+      const limitedJson = convertResultsToJson(largeResults, 5);
+      assert.equal(limitedJson.length, 5);
+      assert.equal(limitedJson[0].id, 1);
+      assert.equal(limitedJson[4].id, 5);
     });
   });
 });
