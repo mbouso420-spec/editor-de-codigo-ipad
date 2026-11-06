@@ -428,56 +428,75 @@
         </div>
 
         <form id="chat-composer-form" class="chat-composer">
-          <!-- 1. Fila de Comandos Rápidos Táctiles (Scroll suave iPadOS) -->
-          <div class="chat-quick-actions" role="toolbar" aria-label="Comandos rápidos">
-            <button type="button" class="chat-action-chip" data-command="/fix" title="Corregir errores del archivo activo">
-              <span class="chat-chip-cmd">/fix</span>
-              <span class="chat-chip-label">Corregir</span>
-            </button>
-            <button type="button" class="chat-action-chip" data-command="/explain" title="Explicar código paso a paso">
-              <span class="chat-chip-cmd">/explain</span>
-              <span class="chat-chip-label">Explicar</span>
-            </button>
-            <button type="button" class="chat-action-chip" data-command="/test" title="Generar pruebas unitarias completas">
-              <span class="chat-chip-cmd">/test</span>
-              <span class="chat-chip-label">Pruebas</span>
-            </button>
+          <!-- Gaveta desplegable de herramientas y razonamiento (inicialmente oculta) -->
+          <div id="chat-tools-drawer" class="chat-tools-drawer" hidden>
+            <div class="chat-tools-section">
+              <span class="chat-tools-section-title">Comandos rápidos</span>
+              <div class="chat-quick-actions" role="toolbar" aria-label="Comandos rápidos">
+                <button type="button" class="chat-action-chip" data-command="/fix" title="Corregir errores del archivo activo">
+                  <span class="chat-chip-cmd">/fix</span>
+                  <span class="chat-chip-label">Corregir</span>
+                </button>
+                <button type="button" class="chat-action-chip" data-command="/explain" title="Explicar código paso a paso">
+                  <span class="chat-chip-cmd">/explain</span>
+                  <span class="chat-chip-label">Explicar</span>
+                </button>
+                <button type="button" class="chat-action-chip" data-command="/test" title="Generar pruebas unitarias completas">
+                  <span class="chat-chip-cmd">/test</span>
+                  <span class="chat-chip-label">Pruebas</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="chat-tools-section">
+              <span class="chat-tools-section-title">Profundidad de razonamiento</span>
+              <div class="chat-thinking-segmented" role="radiogroup" aria-label="Profundidad de razonamiento">
+                <button type="button" class="chat-thinking-btn" data-speed="baja" role="radio" aria-checked="false" title="Directo: respuesta ágil y concisa">
+                  Directo
+                </button>
+                <button type="button" class="chat-thinking-btn is-active" data-speed="media" role="radio" aria-checked="true" title="Equilibrado: razonamiento estándar recomendado">
+                  Equilibrado
+                </button>
+                <button type="button" class="chat-thinking-btn" data-speed="alta" role="radio" aria-checked="false" title="Exhaustivo: análisis profundo y casos límite">
+                  Exhaustivo
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- 2. Campo de entrada principal y botón de envío -->
+          <!-- Barra principal de entrada: Botón desplegable + Textarea + Enviar -->
           <div class="chat-input-row">
+            <button
+              type="button"
+              id="btn-toggle-composer-tools"
+              class="chat-tools-toggle-btn"
+              aria-expanded="false"
+              aria-controls="chat-tools-drawer"
+              title="Desplegar comandos rápidos y modo de razonamiento"
+            >
+              <span data-icon="sparkles"></span>
+            </button>
+
             <label for="chat-prompt-input" class="visually-hidden">Consultar al asistente sobre el código</label>
             <textarea
               id="chat-prompt-input"
               class="chat-input"
               rows="2"
-              placeholder="Preguntá sobre tu código o pedí cambios…"
+              placeholder="Preguntá sobre tu código o desplegá acciones (✦)…"
             ></textarea>
+
             <button type="submit" id="chat-submit-btn" class="btn btn-primary btn-icon" aria-label="Enviar consulta" title="Enviar consulta">
               <span data-icon="send"></span>
             </button>
           </div>
 
-          <!-- 3. Barra de Control Inferior: Velocidad de razonamiento (Rápida / Estándar / Lenta) + Contador -->
+          <!-- Pie del compositor: Tokens restantes y botón de regenerar -->
           <div class="chat-composer-footer">
-            <div class="chat-thinking-control" role="group" aria-label="Modo de razonamiento">
-              <div class="chat-thinking-segmented" role="radiogroup" aria-label="Velocidad de razonamiento">
-                <span class="chat-thinking-icon-badge" title="Velocidad de razonamiento de la IA" aria-hidden="true">
-                  <span data-icon="zap"></span>
-                </span>
-                <button type="button" class="chat-thinking-btn" data-speed="baja" role="radio" aria-checked="false" title="Rápida: respuesta directa y veloz">Rápida</button>
-                <button type="button" class="chat-thinking-btn is-active" data-speed="media" role="radio" aria-checked="true" title="Estándar: razonamiento equilibrado">Estándar</button>
-                <button type="button" class="chat-thinking-btn" data-speed="alta" role="radio" aria-checked="false" title="Lenta: análisis profundo y exhaustivo">Lenta</button>
-              </div>
-            </div>
-
-            <div class="chat-footer-meta">
-              <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
-                <span data-icon="refreshCw"></span>
-                <span>Regenerar</span>
-              </button>
-              <span id="chat-token-counter" class="chat-token-counter code-font" title="Tokens estimados de archivo y mensaje">~0 tokens</span>
-            </div>
+            <span id="chat-token-counter" class="chat-token-counter code-font" title="Tokens estimados de archivo y mensaje">~0 tokens</span>
+            <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
+              <span data-icon="refreshCw"></span>
+              <span>Regenerar</span>
+            </button>
           </div>
         </form>
       </aside>
@@ -927,7 +946,7 @@
                   <span data-icon="gauge" class="models-card-icon" aria-hidden="true"></span>
                   <div class="models-card-titles">
                     <h3 class="models-card-title">Capacidad de Contexto y Tokens Disponibles</h3>
-                    <p class="models-card-desc">Consumo calculado según el archivo activo y pestañas abiertas del proyecto.</p>
+                    <p class="models-card-desc">Consumo calculado en tiempo real según el archivo activo y pestañas abiertas del proyecto.</p>
                   </div>
                 </div>
                 <div class="models-meter-badge-group">
@@ -944,39 +963,9 @@
                   <span id="models-tokens-remaining" class="models-meter-remaining code-font">4,000 tokens libres</span>
                 </div>
               </div>
-
-              <div class="setting-field">
-                <label for="setting-ai-budget" class="setting-label">Presupuesto máximo de contexto por consulta</label>
-                <select id="setting-ai-budget" class="field-control">
-                  <option value="compact">Compacto (~2,000 tokens / 8 KB - conexiones móviles)</option>
-                  <option value="standard">Estándar (~4,000 tokens / 16 KB - recomendado)</option>
-                  <option value="large">Extenso (~10,000 tokens / 40 KB - proyectos amplios)</option>
-                </select>
-              </div>
             </div>
 
-            <!-- 2. Parámetros de Razonamiento -->
-            <div class="settings-grid-two">
-              <div class="setting-field">
-                <label for="setting-ai-thinking-speed" class="setting-label">Velocidad de pensamiento y razonamiento</label>
-                <select id="setting-ai-thinking-speed" class="field-control">
-                  <option value="baja">Baja (Respuesta inmediata y síntesis rápida)</option>
-                  <option value="media">Media (Equilibrada - recomendada para desarrollo diario)</option>
-                  <option value="alta">Alta (Razonamiento profundo y análisis exhaustivo)</option>
-                </select>
-              </div>
-
-              <div class="setting-field">
-                <label for="setting-ai-temperature" class="setting-label">Temperatura de generación</label>
-                <select id="setting-ai-temperature" class="field-control">
-                  <option value="0.2">Preciso / Código estricto (0.2)</option>
-                  <option value="0.7">Equilibrado (0.7 - recomendado)</option>
-                  <option value="1.0">Creativo y exploratorio (1.0)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- 3. Proveedores y Modelos Activos -->
+            <!-- 2. Proveedores y Modelos Activos -->
             <div class="models-section-card">
               <div class="models-card-header">
                 <div class="models-card-title-group">

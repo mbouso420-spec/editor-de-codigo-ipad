@@ -318,152 +318,225 @@
 }
 
 /* ==========================================================================
-   Compositor de Chat: Comandos Rápidos y Selector de Razonamiento iPadOS
+   Compositor de Chat: Gaveta Desplegable de Herramientas y Razonamiento
    ========================================================================== */
 
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Gaveta desplegable de acciones y razonamiento */
+.chat-tools-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  border: var(--rule-hair) solid var(--color-rule);
+  box-shadow: 0 4px 16px oklch(0% 0 0 / 0.28);
+}
+
+.chat-tools-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.chat-tools-section-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Chips de Comandos Rápidos */
 .chat-quick-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2xs);
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
+  flex-wrap: wrap;
 }
 
-.chat-quick-actions::-webkit-scrollbar {
-  display: none;
-}
-
-.chat-action-chip {
+button.chat-action-chip {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3xs);
-  min-height: 28px;
-  padding: 2px 10px;
+  gap: var(--space-2xs);
+  min-height: 30px;
+  padding: var(--space-3xs) var(--space-sm);
   border-radius: var(--radius-pill);
-  background: var(--color-paper-3);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
   border: var(--rule-hair) solid var(--color-rule);
   cursor: pointer;
-  flex-shrink: 0;
+  font: inherit;
   transition:
     background-color var(--dur-micro) var(--ease-out),
     border-color var(--dur-micro) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
 
-.chat-action-chip:hover {
+button.chat-action-chip:hover {
   background: var(--color-selection);
   border-color: var(--color-accent);
 }
 
-.chat-action-chip:active {
+button.chat-action-chip:active {
   transform: scale(0.96);
 }
 
-.chat-action-chip:focus-visible {
+button.chat-action-chip:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
 }
 
 .chat-chip-cmd {
   font-family: var(--font-outlier);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--color-accent-text);
   line-height: 1;
 }
 
 .chat-chip-label {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--color-ink-2);
   line-height: 1;
 }
 
-.chat-composer-footer {
+/* Selector Segmentado de Razonamiento */
+.chat-thinking-segmented {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs);
-  min-height: 28px;
-}
-
-.chat-thinking-control {
-  display: inline-flex;
-  align-items: center;
-}
-
-.chat-thinking-segmented {
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
-  padding: 2px;
+  padding: 3px;
   border-radius: var(--radius-pill);
-  background: var(--color-paper-3);
+  background: var(--color-paper-2);
   border: var(--rule-hair) solid var(--color-rule);
+  max-width: 100%;
 }
 
-.chat-thinking-icon-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding-inline: 4px 2px;
-  color: var(--color-accent-text);
-}
-
-.chat-thinking-icon-badge svg {
-  width: 12px;
-  height: 12px;
-}
-
-.chat-thinking-btn {
+button.chat-thinking-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
   background: transparent;
   border: none;
   border-radius: var(--radius-pill);
-  padding: 2px 8px;
-  font-size: 0.72rem;
+  padding: var(--space-2xs) var(--space-xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--color-muted);
   cursor: pointer;
-  line-height: 1.4;
+  line-height: 1.3;
+  text-align: center;
   white-space: nowrap;
+  font: inherit;
   transition:
     background-color var(--dur-micro) var(--ease-out),
     color var(--dur-micro) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
 
-.chat-thinking-btn:hover {
+button.chat-thinking-btn:hover {
   color: var(--color-ink);
-  background: var(--color-paper-2);
+  background: var(--color-paper-3);
 }
 
-.chat-thinking-btn.is-active,
-.chat-thinking-btn[aria-checked="true"] {
+button.chat-thinking-btn.is-active,
+button.chat-thinking-btn[aria-checked="true"] {
   background: var(--color-paper);
   color: var(--color-accent-text);
   font-weight: 600;
-  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.25);
+  box-shadow: 0 1px 4px oklch(0% 0 0 / 0.35);
 }
 
-.chat-thinking-btn:focus-visible {
+button.chat-thinking-btn:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
 }
 
-.chat-footer-meta {
+/* Fila de entrada con botón de herramientas desplegable */
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-xs);
+}
+
+button.chat-tools-toggle-btn {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  min-width: var(--control-height);
+  border-radius: var(--radius-control);
+  background: var(--color-paper-3);
+  color: var(--color-muted);
+  border: var(--rule-hair) solid var(--color-rule);
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background-color var(--dur-micro) var(--ease-out),
+    color var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+button.chat-tools-toggle-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+button.chat-tools-toggle-btn:hover {
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border-color: var(--color-accent);
+}
+
+button.chat-tools-toggle-btn.is-active,
+button.chat-tools-toggle-btn[aria-expanded="true"] {
+  background: var(--color-selection);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+button.chat-tools-toggle-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+}
+
+/* Footer del compositor */
+.chat-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-xs);
-  flex-shrink: 0;
+  padding-inline: var(--space-2xs);
+}
+
+.chat-token-counter {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-action-chip,
-  .chat-thinking-btn {
+  button.chat-action-chip,
+  button.chat-thinking-btn,
+  button.chat-tools-toggle-btn {
     transition: none;
   }
 }

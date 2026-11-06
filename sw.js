@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v19";
+const SHELL_CACHE = "studio-ide-shell-v20";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 const ACORN_CDN_URL = "https://esm.sh/acorn@8.14.0";
 

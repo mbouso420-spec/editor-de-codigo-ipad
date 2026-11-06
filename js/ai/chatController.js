@@ -414,6 +414,17 @@ export function initChatController({
 
   promptInput?.addEventListener("input", updateTokenEstimate);
 
+  const toggleToolsBtn = document.getElementById("btn-toggle-composer-tools");
+  const toolsDrawer = document.getElementById("chat-tools-drawer");
+
+  toggleToolsBtn?.addEventListener("click", () => {
+    if (!toolsDrawer) return;
+    const willShow = toolsDrawer.hidden;
+    toolsDrawer.hidden = !willShow;
+    toggleToolsBtn.setAttribute("aria-expanded", String(willShow));
+    toggleToolsBtn.classList.toggle("is-active", willShow);
+  });
+
   const actionChips = composerForm?.querySelectorAll(".chat-action-chip");
   actionChips?.forEach((btn) => {
     btn.addEventListener("click", () => {

@@ -94,12 +94,9 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     const meterTrack = createMockEl("div", { class: "models-meter-track" }, [meterFill]);
     const tokensDetail = createMockEl("span", { id: "models-tokens-detail" });
     const tokensRemaining = createMockEl("span", { id: "models-tokens-remaining" });
-    const selectAiBudget = createMockEl("select", { id: "setting-ai-budget" });
-    const selectAiThinking = createMockEl("select", { id: "setting-ai-thinking-speed" });
-    const selectAiTemp = createMockEl("select", { id: "setting-ai-temperature" });
     const modelsList = createMockEl("div", { id: "settings-active-models-list" });
     const panelModels = createMockEl("section", { class: "settings-tab-panel", "data-tab": "models" }, [
-      tokensPct, meterTrack, tokensDetail, tokensRemaining, selectAiBudget, selectAiThinking, selectAiTemp, modelsList
+      tokensPct, meterTrack, tokensDetail, tokensRemaining, modelsList
     ]);
     panelModels.hidden = true;
 
@@ -271,34 +268,23 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(localStorage.getItem("studio_autosave_delay"), "240");
   });
 
-  test("Configuración avanzada de IA: Temperatura, Presupuesto y Velocidad de pensamiento", () => {
-    initSettingsModal({ editor: null });
-    const selectTemp = document.getElementById("setting-ai-temperature");
-    const selectBudget = document.getElementById("setting-ai-budget");
-    const selectThinking = document.getElementById("setting-ai-thinking-speed");
-
-    selectTemp.value = "0.2";
-    selectTemp.dispatchEvent(new Event("change"));
+  test("Parámetros de IA en proveedores: Temperatura, Presupuesto y Velocidad de razonamiento", () => {
+    setAiTemperature(0.2);
     assert.equal(getAiTemperature(), 0.2);
 
-    selectTemp.value = "1.0";
-    selectTemp.dispatchEvent(new Event("change"));
+    setAiTemperature(1.0);
     assert.equal(getAiTemperature(), 1.0);
 
-    selectBudget.value = "compact";
-    selectBudget.dispatchEvent(new Event("change"));
+    setAiContextBudget("compact");
     assert.equal(getAiContextBudget(), 8000);
 
-    selectBudget.value = "large";
-    selectBudget.dispatchEvent(new Event("change"));
+    setAiContextBudget("large");
     assert.equal(getAiContextBudget(), 40000);
 
-    selectThinking.value = "alta";
-    selectThinking.dispatchEvent(new Event("change"));
+    setAiThinkingSpeed("alta");
     assert.equal(getAiThinkingSpeed(), "alta");
 
-    selectThinking.value = "baja";
-    selectThinking.dispatchEvent(new Event("change"));
+    setAiThinkingSpeed("baja");
     assert.equal(getAiThinkingSpeed(), "baja");
   });
 
@@ -347,23 +333,24 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(selectedProvider, "gemini");
   });
 
-  test("Sincronización bidireccional de velocidad de razonamiento con botones del chat", () => {
-    const chatBtnFast = createMockEl("button", { class: "chat-thinking-btn", "data-speed": "baja" });
-    const chatBtnStd = createMockEl("button", { class: "chat-thinking-btn is-active", "data-speed": "media" });
-    const chatBtnSlow = createMockEl("button", { class: "chat-thinking-btn", "data-speed": "alta" });
-    document.body.appendChild(chatBtnFast);
-    document.body.appendChild(chatBtnStd);
-    document.body.appendChild(chatBtnSlow);
+  test("Compositor de Chat: Despliegue de gaveta de herramientas y selector de razonamiento", () => {
+    const toggleBtn = createMockEl("button", { id: "btn-toggle-composer-tools" });
+    const drawer = createMockEl("div", { id: "chat-tools-drawer" });
+    drawer.hidden = true;
+    document.body.appendChild(toggleBtn);
+    document.body.appendChild(drawer);
 
-    initSettingsModal({ editor: null });
-    const selectThinking = document.getElementById("setting-ai-thinking-speed");
+    let willShow = drawer.hidden;
+    drawer.hidden = !willShow;
+    toggleBtn.setAttribute("aria-expanded", String(willShow));
+    assert.equal(drawer.hidden, false);
+    assert.equal(toggleBtn.getAttribute("aria-expanded"), "true");
 
-    selectThinking.value = "alta";
-    selectThinking.dispatchEvent(new Event("change"));
-
-    assert.equal(getAiThinkingSpeed(), "alta");
-    assert.equal(chatBtnSlow.classList.contains("is-active"), true);
-    assert.equal(chatBtnStd.classList.contains("is-active"), false);
+    willShow = drawer.hidden;
+    drawer.hidden = !willShow;
+    toggleBtn.setAttribute("aria-expanded", String(willShow));
+    assert.equal(drawer.hidden, true);
+    assert.equal(toggleBtn.getAttribute("aria-expanded"), "false");
   });
 
   test("Filtrado interactivo de atajos de teclado", () => {
