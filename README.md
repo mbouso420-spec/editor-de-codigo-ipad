@@ -6,9 +6,9 @@
 
 **Studio IDE** es un entorno de desarrollo web ligero, modular y 100% offline-first sin servidores intermedios, diseñado específicamente para programar con fluidez desde un **iPad** (instalado como PWA a pantalla completa en Safari y adaptable a ventanas de **Stage Manager**) así como desde una **PC de escritorio**.
 
-- **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/editor-de-codigo-ipad/
+- **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/ide-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 346 tests unitarios pasando al 100% (71 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 405 tests unitarios pasando al 100% (90 suites, 0 fallos).
 
 ---
 

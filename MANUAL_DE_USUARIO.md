@@ -19,12 +19,12 @@ Esta guía reúne todo lo que necesitás para instalar **Studio IDE** en tu iPad
 ## 1. Instalación en iPad (PWA a pantalla completa) y PC
 
 ### Paso A: Activar GitHub Pages (una sola vez)
-1. Entrá a tu repositorio en GitHub: `https://github.com/mbouso420-spec/editor-de-codigo-ipad`.
+1. Entrá a tu repositorio en GitHub: `https://github.com/mbouso420-spec/ide-ipad`.
 2. Dirigite a **Settings** -> menú lateral izquierdo **Pages**.
 3. En **Build and deployment** -> **Source**, seleccioná **Deploy from a branch**.
 4. En **Branch**, elegí **`main`** y carpeta **`/ (root)`**, luego tocá **Save**.
 5. Tras 1 o 2 minutos, tu app estará disponible en:
-   `https://mbouso420-spec.github.io/editor-de-codigo-ipad/`
+   `https://mbouso420-spec.github.io/ide-ipad/`
 
 ### Paso B: Instalar como app en tu iPad (PWA)
 1. Abrí **Safari** en el iPad y navegá a tu URL de GitHub Pages.
