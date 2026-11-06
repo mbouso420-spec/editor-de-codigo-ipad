@@ -100,18 +100,20 @@ export function initLayoutController() {
     restorePanelWidths();
   });
 
-  window.addEventListener("resize", () => {
-    restorePanelWidths();
-  });
-
-  window.addEventListener("orientationchange", () => {
-    restorePanelWidths();
-  });
-
-  if (typeof screen !== "undefined" && screen.orientation && typeof screen.orientation.addEventListener === "function") {
-    screen.orientation.addEventListener("change", () => {
+  let restoreRaf = 0;
+  const scheduleRestoreWidths = () => {
+    if (restoreRaf) return;
+    restoreRaf = window.requestAnimationFrame(() => {
+      restoreRaf = 0;
       restorePanelWidths();
     });
+  };
+
+  window.addEventListener("resize", scheduleRestoreWidths, { passive: true });
+  window.addEventListener("orientationchange", scheduleRestoreWidths, { passive: true });
+
+  if (typeof screen !== "undefined" && screen.orientation && typeof screen.orientation.addEventListener === "function") {
+    screen.orientation.addEventListener("change", scheduleRestoreWidths);
   }
 
   // Atajos de teclado (Cmd/Ctrl + B para Explorador, Cmd/Ctrl + J para Asistente, Escape para cerrar drawers)

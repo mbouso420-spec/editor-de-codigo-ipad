@@ -87,7 +87,7 @@ function escapeHtml(str) {
  * @param {Array<{ path: string, content: string }>} [sameFolderFiles=[]]
  * @returns {string}
  */
-export function buildSqlRunnerPreview(sqlFile, sameFolderFiles = []) {
+export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
   const safeTitle = escapeHtml(sqlFile.shortName || "consulta.sql");
   const safeContent = JSON.stringify(sqlFile.content || "").replace(/</g, "\\u003c");
 

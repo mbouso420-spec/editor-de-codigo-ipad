@@ -99,6 +99,14 @@ export function searchInFiles(files, query, options = {}) {
     const ext = file.path.includes(".") ? file.path.split(".").pop().toLowerCase() : "";
     if (BINARY_EXTENSIONS.has(ext)) continue;
 
+    // Optimización: si el archivo no contiene el patrón, evitar la asignación de memoria
+    // que implica dividir todo el archivo en un arreglo de miles de líneas.
+    if (!isRegex || (!cleanQuery.includes("^") && !cleanQuery.includes("$"))) {
+      regex.lastIndex = 0;
+      if (!regex.test(file.content)) continue;
+      regex.lastIndex = 0;
+    }
+
     const lines = file.content.split(/\r?\n/);
     const fileMatches = [];
 

@@ -10,7 +10,6 @@ import {
   getModelContextWindow,
   getAiTemperature,
   setAiTemperature,
-  getAiContextBudget,
   setAiContextBudget,
   getAiThinkingSpeed,
   setAiThinkingSpeed

@@ -1,4 +1,3 @@
-import { icon } from "./icons.js";
 import { searchInFiles } from "../search/projectSearch.js";
 import { keyboardRouter } from "./keyboardRouter.js";
 

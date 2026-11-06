@@ -31,6 +31,19 @@ export function createMinimapController({ mountEl, getDocLines, getViewport, onS
   let containerEl = null;
   let isDragging = false;
   let animFrameId = null;
+  let sliderRaf = null;
+
+  const handlePointerMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    updateScrollFromPointer(e);
+  };
+
+  const handlePointerUp = () => {
+    isDragging = false;
+    window.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("pointerup", handlePointerUp);
+  };
 
   function initDOM() {
     if (!mountEl) return;
@@ -63,18 +76,6 @@ export function createMinimapController({ mountEl, getDocLines, getViewport, onS
       updateScrollFromPointer(e);
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp);
-    };
-
-    const handlePointerMove = (e) => {
-      if (!isDragging) return;
-      e.preventDefault();
-      updateScrollFromPointer(e);
-    };
-
-    const handlePointerUp = () => {
-      isDragging = false;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
     };
 
     containerEl.addEventListener("pointerdown", handlePointerDown);
@@ -128,19 +129,24 @@ export function createMinimapController({ mountEl, getDocLines, getViewport, onS
   }
 
   function updateSlider() {
-    if (!sliderEl || !containerEl) return;
-    const viewport = typeof getViewport === "function" ? getViewport() : { top: 0, height: 100, totalHeight: 100 };
-    const containerH = containerEl.clientHeight || 1;
+    if (!sliderEl || !containerEl || !isVisible) return;
+    if (sliderRaf) return;
+    sliderRaf = safeRequestAnim(() => {
+      sliderRaf = null;
+      if (!sliderEl || !containerEl) return;
+      const viewport = typeof getViewport === "function" ? getViewport() : { top: 0, height: 100, totalHeight: 100 };
+      const containerH = containerEl.clientHeight || 1;
 
-    const totalH = Math.max(1, viewport.totalHeight);
-    const topRatio = Math.max(0, Math.min(1, viewport.top / totalH));
-    const heightRatio = Math.max(0.05, Math.min(1, viewport.height / totalH));
+      const totalH = Math.max(1, viewport.totalHeight);
+      const topRatio = Math.max(0, Math.min(1, viewport.top / totalH));
+      const heightRatio = Math.max(0.05, Math.min(1, viewport.height / totalH));
 
-    const sliderTop = topRatio * containerH;
-    const sliderHeight = heightRatio * containerH;
+      const sliderTop = topRatio * containerH;
+      const sliderHeight = heightRatio * containerH;
 
-    sliderEl.style.transform = `translateY(${sliderTop}px)`;
-    sliderEl.style.height = `${sliderHeight}px`;
+      sliderEl.style.transform = `translateY(${sliderTop}px)`;
+      sliderEl.style.height = `${sliderHeight}px`;
+    });
   }
 
   function requestRender() {
@@ -167,6 +173,9 @@ export function createMinimapController({ mountEl, getDocLines, getViewport, onS
 
   function destroy() {
     if (animFrameId) safeCancelAnim(animFrameId);
+    if (sliderRaf) safeCancelAnim(sliderRaf);
+    window.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("pointerup", handlePointerUp);
     containerEl?.remove();
   }
 

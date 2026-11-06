@@ -316,6 +316,7 @@ async function initApp() {
       );
       for (const rem of removedTabs) {
         editor.dropFileState(rem);
+        editorSplit?.dropFileState?.(rem);
       }
 
       openTabIds = openTabIds.filter(
@@ -1025,6 +1026,10 @@ async function initApp() {
         splitMountEl.style.flex = "";
         splitMountEl.style.width = "";
       }
+      if (editorSplit) {
+        editorSplit.destroy?.();
+        editorSplit = null;
+      }
       editor.focus();
     }
   }
@@ -1160,6 +1165,7 @@ async function initApp() {
 
     for (const f of filesOnly) {
       editor.dropFileState(f.id);
+      editorSplit?.dropFileState?.(f.id);
     }
 
     activeProject = nextProj;
@@ -1463,8 +1469,18 @@ async function initApp() {
     const idx = openTabIds.indexOf(filePath);
     if (idx === -1) return;
 
+    // Si había un guardado pendiente para este archivo, aplicarlo de inmediato
+    const timerKey = `${activeProject.id}::${filePath}`;
+    const pending = saveTimers.get(timerKey);
+    if (pending) {
+      if (pending.timerId) window.clearTimeout(pending.timerId);
+      saveTimers.delete(timerKey);
+      await updateFileContent(pending.projectId, pending.filePath, pending.content);
+    }
+
     openTabIds.splice(idx, 1);
     editor.dropFileState(filePath);
+    editorSplit?.dropFileState?.(filePath);
     if (activeFileId === filePath) {
       activeFileId = openTabIds.length > 0 ? openTabIds[Math.min(idx, openTabIds.length - 1)] : null;
     }

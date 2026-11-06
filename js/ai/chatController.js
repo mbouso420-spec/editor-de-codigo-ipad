@@ -1450,15 +1450,6 @@ export function formatInlineMarkdown(str) {
   return safe;
 }
 
-function escapeAttr(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 async function copyToClipboardSafe(text) {
   if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
     try {

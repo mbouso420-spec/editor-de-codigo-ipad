@@ -1,5 +1,5 @@
 import { icon } from "./icons.js";
-import { inferFileMeta, normalizePath, validateUserPath } from "../storage/workspaceDb.js";
+import { inferFileMeta, validateUserPath } from "../storage/workspaceDb.js";
 import { decodeImportedFile, MAX_IMPORT_FILE_BYTES } from "../storage/fileImport.js";
 import { getStorageQuotaEstimate } from "../storage/storageQuota.js";
 

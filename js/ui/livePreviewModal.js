@@ -1,7 +1,7 @@
 import { normalizePath } from "../storage/workspaceDb.js";
-import { buildLoopGuardRuntime, instrumentLoops } from "../preview/loopGuard.js";
+import { instrumentLoops } from "../preview/loopGuard.js";
 import { buildSqlRunnerPreview } from "../preview/sqlRunner.js";
-import { buildCRunnerPreview, mountCRunnerView } from "../preview/cRunner.js";
+import { mountCRunnerView } from "../preview/cRunner.js";
 
 const ACORN_URL = "https://esm.sh/acorn@8.14.0";
 let acornModule = null;
@@ -46,11 +46,9 @@ import {
   JAVA_EXTENSIONS,
   CSHARP_EXTENSIONS,
   TS_EXTENSIONS,
-  MAX_PREVIEW_ASSET_BYTES,
   IGNORED_PREVIEW_DIRS,
   getFileExtension,
   getParentFolder,
-  resolveRelativePath,
   filterFolderScopeFiles,
   buildWorkspaceAssetMap,
   extractReferencedAssetPaths,
@@ -59,13 +57,10 @@ import {
   savePreviewHtml,
   findBestHtmlEntrypoint,
   findTargetHtmlFile,
-  findSiblingHtmlInSameFolder,
   bundleHtmlWithFolderAssets,
   buildStandaloneJsPreview,
   buildStandalonePythonPreview,
-  buildMarkdownPreview,
-  renderMarkdownDocumentHtml,
-  formatMdInline
+  buildMarkdownPreview
 } from "../preview/htmlBundler.js";
 
 export * from "../preview/htmlBundler.js";

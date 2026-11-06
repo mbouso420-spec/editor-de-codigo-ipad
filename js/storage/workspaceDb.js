@@ -170,7 +170,12 @@ function openDb() {
   }
 
   dbPromise = new Promise((resolve, reject) => {
-    const req = window.indexedDB.open(DB_NAME, DB_VERSION);
+    const idb = typeof indexedDB !== "undefined" ? indexedDB : (typeof window !== "undefined" ? window.indexedDB : null);
+    if (!idb) {
+      dbPromise = null;
+      return reject(new Error("IndexedDB no está disponible en este entorno."));
+    }
+    const req = idb.open(DB_NAME, DB_VERSION);
 
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -183,8 +188,21 @@ function openDb() {
       }
     };
 
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error("No se pudo abrir IndexedDB."));
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      db.onversionchange = () => {
+        try { db.close(); } catch (_) {}
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error || new Error("No se pudo abrir IndexedDB."));
+    };
   });
 
   return dbPromise;
@@ -379,11 +397,14 @@ export async function entryExists(projectId, rawPath) {
 }
 
 let syncChannel = null;
-if (typeof BroadcastChannel !== "undefined") {
-  try {
-    syncChannel = new BroadcastChannel("studio_ide_workspace_sync");
-    syncChannel.unref?.();
-  } catch (_) {}
+function getSyncChannel() {
+  if (!syncChannel && typeof BroadcastChannel !== "undefined") {
+    try {
+      syncChannel = new BroadcastChannel("studio_ide_workspace_sync");
+      syncChannel.unref?.();
+    } catch (_) {}
+  }
+  return syncChannel;
 }
 
 export function closeWorkspaceBroadcast() {
@@ -396,22 +417,28 @@ export function closeWorkspaceBroadcast() {
 }
 
 export function broadcastWorkspaceChange(event) {
-  if (syncChannel && event) {
+  const channel = getSyncChannel();
+  if (channel && event) {
     try {
-      syncChannel.postMessage(event);
+      channel.postMessage(event);
     } catch (_) {}
   }
 }
 
 export function onWorkspaceBroadcast(listener) {
-  if (!syncChannel || typeof listener !== "function") return () => {};
+  const channel = getSyncChannel();
+  if (!channel || typeof listener !== "function") return () => {};
   const handler = (ev) => {
     if (ev && ev.data) {
       listener(ev.data);
     }
   };
-  syncChannel.addEventListener("message", handler);
-  return () => syncChannel.removeEventListener("message", handler);
+  channel.addEventListener("message", handler);
+  return () => {
+    try {
+      channel.removeEventListener("message", handler);
+    } catch (_) {}
+  };
 }
 
 export async function upsertEntry(
@@ -596,9 +623,27 @@ export async function deleteProjectEntry(projectId, targetPath, isFolder) {
     (e) => !e.deleted && (e.path === cleanPath || (isFolder && e.path.startsWith(`${cleanPath}/`)))
   );
 
-  for (const item of affected) {
-    await removeOrSoftDeleteRecord(item);
-  }
+  if (affected.length === 0) return;
+
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_FILES, "readwrite");
+    const store = tx.objectStore(STORE_FILES);
+    const now = Date.now();
+    for (const item of affected) {
+      if (item.trackedInGithub && !item.isFolder) {
+        item.deleted = true;
+        item.updatedAt = now;
+        store.put(item);
+      } else {
+        store.delete(item.key);
+      }
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("La transacción de borrado se canceló."));
+  });
+
   broadcastWorkspaceChange({ type: "ENTRY_DELETED", projectId, path: cleanPath, isFolder });
 }
 

@@ -401,6 +401,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     if (activeFileId === fileId) {
       activeFileId = null;
       clearErrorMarkers();
+      onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     }
   }
 
@@ -650,7 +651,19 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     isMinimapVisible: () => (minimap ? minimap.isVisible() : false),
     getActiveFileId: () => activeFileId,
     syncDoc,
-    focus: () => view?.focus()
+    focus: () => view?.focus(),
+    destroy() {
+      clearErrorMarkers();
+      minimap?.destroy?.();
+      if (view) {
+        try {
+          view.destroy();
+        } catch (_) {}
+        view = null;
+      }
+      statesByFile.clear();
+      activeFileId = null;
+    }
   };
 }
 
@@ -893,6 +906,7 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
       if (activeFileId === fileId) {
         activeFileId = null;
         this.clearErrorMarkers();
+        onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
       }
     },
     renameFileStates(oldPath, newPath, isFolder) {
@@ -1014,7 +1028,12 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
         }
       }
     },
-    focus: () => textarea?.focus()
+    focus: () => textarea?.focus(),
+    destroy() {
+      fallbackMinimap?.destroy?.();
+      mountEl.innerHTML = "";
+      activeFileId = null;
+    }
   };
 }
 

@@ -19,13 +19,16 @@ export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const SNIFF_BYTES = 8000;
 
 export function uint8ArrayToBase64(bytes) {
-  if (!bytes) return "";
+  if (!bytes || bytes.length === 0) return "";
   let binary = "";
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 8192;
+  const len = bytes.length;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
   }
-  return btoa(binary);
+  const btoaFn = typeof btoa === "function" ? btoa : (globalThis.btoa || (typeof window !== "undefined" ? window.btoa : null));
+  return btoaFn(binary);
 }
 
 /**

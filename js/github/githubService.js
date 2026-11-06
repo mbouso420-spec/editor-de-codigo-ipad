@@ -627,9 +627,11 @@ export async function pushAtomicCommit({
 
 function decodeBase64Utf8(base64) {
   const clean = base64.replace(/\s+/g, "");
-  const binary = window.atob(clean);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
+  const atobFn = typeof atob === "function" ? atob : (globalThis.atob || (typeof window !== "undefined" ? window.atob : null));
+  const binary = atobFn(clean);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i += 1) {
     bytes[i] = binary.charCodeAt(i);
   }
   return new TextDecoder("utf-8").decode(bytes);
@@ -638,10 +640,14 @@ function decodeBase64Utf8(base64) {
 function encodeUtf8Base64(text) {
   const bytes = new TextEncoder().encode(String(text ?? ""));
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 8192;
+  const len = bytes.length;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
   }
-  return window.btoa(binary);
+  const btoaFn = typeof btoa === "function" ? btoa : (globalThis.btoa || (typeof window !== "undefined" ? window.btoa : null));
+  return btoaFn(binary);
 }
 
 /**
