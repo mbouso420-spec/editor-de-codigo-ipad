@@ -82,6 +82,58 @@ export function convertResultsToJson(results, maxRows = Infinity) {
   return out;
 }
 
+/**
+ * Determina si una consulta SQL corresponde a una sentencia de selección (SELECT o WITH ... SELECT).
+ * @param {string} sql
+ * @returns {boolean}
+ */
+export function isSelectQuery(sql) {
+  if (!sql || typeof sql !== "string") return false;
+  const stripped = sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+  return /^(WITH\s+[\s\S]+?SELECT|SELECT\b)/i.test(stripped);
+}
+
+/**
+ * Comprueba si la consulta ya contiene una cláusula LIMIT explícita.
+ * @param {string} sql
+ * @returns {boolean}
+ */
+export function hasLimitClause(sql) {
+  if (!sql || typeof sql !== "string") return false;
+  return /\bLIMIT\s+\d+/i.test(sql);
+}
+
+/**
+ * Aplica paginación real a nivel de motor SQL mediante cláusulas LIMIT y OFFSET,
+ * evitando materializar en la memoria de WebAssembly/JavaScript conjuntos masivos de filas.
+ * @param {string} query Consulta SQL cruda
+ * @param {number} [limit=50] Tamaño de página
+ * @param {number} [offset=0] Desplazamiento inicial
+ * @returns {string} Consulta SQL paginada
+ */
+export function applySqlPagination(query, limit = 50, offset = 0) {
+  if (!query || typeof query !== "string") return "";
+  const trimmed = query.trim().replace(/;+\s*$/, "");
+  if (!isSelectQuery(trimmed) || hasLimitClause(trimmed)) {
+    return trimmed + ";";
+  }
+  const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
+  const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+  return `${trimmed} LIMIT ${safeLimit} OFFSET ${safeOffset};`;
+}
+
+/**
+ * Genera una consulta de conteo para determinar el total de filas de un SELECT.
+ * @param {string} query
+ * @returns {string}
+ */
+export function buildCountQuery(query) {
+  if (!query || typeof query !== "string") return "";
+  const trimmed = query.trim().replace(/;+\s*$/, "");
+  if (!isSelectQuery(trimmed)) return "";
+  return `SELECT COUNT(*) AS total_rows FROM (${trimmed});`;
+}
+
 function escapeHtml(str) {
   return String(str ?? "")
     .replace(/&/g, "&amp;")
@@ -434,7 +486,7 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         });
       }
 
-      function renderResults(results, queryContext) {
+      function renderResults(results, queryContext, meta) {
         if (!results || results.length === 0) {
           var note = document.createElement("div");
           note.className = "status-banner status-ok";
@@ -446,7 +498,7 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         var MAX_SQL_DISPLAY_ROWS = 5000;
         results.forEach(function (res, idx) {
           var originalRowCount = res.values ? res.values.length : 0;
-          var isTruncated = originalRowCount > MAX_SQL_DISPLAY_ROWS;
+          var isTruncated = !meta && originalRowCount > MAX_SQL_DISPLAY_ROWS;
           var activeValues = isTruncated ? res.values.slice(0, MAX_SQL_DISPLAY_ROWS) : res.values;
 
           var card = document.createElement("div");
@@ -461,7 +513,9 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
 
           var countSpan = document.createElement("span");
           countSpan.className = "sql-card-count";
-          if (isTruncated) {
+          if (meta && meta.totalRows !== null && meta.totalRows !== undefined) {
+            countSpan.textContent = meta.totalRows + " fila(s) totales / " + res.columns.length + " columna(s)";
+          } else if (isTruncated) {
             countSpan.textContent = MAX_SQL_DISPLAY_ROWS + " de " + originalRowCount + " filas (límite de memoria) / " + res.columns.length + " cols";
             countSpan.title = "La consulta superó el lote de 5.000 filas. Se muestran las primeras 5.000 para optimizar el DOM y la memoria de WebKit.";
           } else {
@@ -502,7 +556,56 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
           card.appendChild(tableWrap);
 
           var PAGE_SIZE = 50;
-          if (activeValues.length > PAGE_SIZE) {
+
+          if (meta && meta.isRealPagination) {
+            // Paginación real en el motor SQLite (LIMIT y OFFSET)
+            var pagBar = document.createElement("div");
+            pagBar.className = "sql-pagination-bar";
+
+            var pageInfo = document.createElement("span");
+            pageInfo.className = "sql-pagination-info";
+            var startIdx = (meta.currentPage - 1) * meta.pageSize + 1;
+            var endIdx = meta.totalRows !== null ? Math.min(meta.totalRows, meta.currentPage * meta.pageSize) : (startIdx + res.values.length - 1);
+            pageInfo.textContent = "Página " + meta.currentPage + " de " + meta.totalPages + (meta.totalRows !== null ? " (filas " + startIdx + " a " + endIdx + " de " + meta.totalRows + ")" : "") + " [Paginación SQL: LIMIT " + meta.pageSize + "]";
+
+            var btnPrev = document.createElement("button");
+            btnPrev.type = "button";
+            btnPrev.className = "btn";
+            btnPrev.textContent = "‹ Anterior";
+            btnPrev.disabled = meta.currentPage <= 1;
+
+            var btnNext = document.createElement("button");
+            btnNext.type = "button";
+            btnNext.className = "btn";
+            btnNext.textContent = "Siguiente ›";
+            btnNext.disabled = meta.currentPage >= meta.totalPages || res.values.length < meta.pageSize;
+
+            btnPrev.addEventListener("click", function () {
+              if (meta.currentPage > 1) meta.onPageChange(meta.currentPage - 1);
+            });
+            btnNext.addEventListener("click", function () {
+              if (meta.currentPage < meta.totalPages) meta.onPageChange(meta.currentPage + 1);
+            });
+
+            var actionsWrap = document.createElement("div");
+            actionsWrap.className = "sql-pagination-actions";
+            actionsWrap.appendChild(btnPrev);
+            actionsWrap.appendChild(btnNext);
+
+            pagBar.appendChild(pageInfo);
+            pagBar.appendChild(actionsWrap);
+            card.appendChild(pagBar);
+
+            res.values.forEach(function (row) {
+              var tr = document.createElement("tr");
+              row.forEach(function (cell) {
+                var td = document.createElement("td");
+                td.textContent = cell !== null && cell !== undefined ? cell : "NULL";
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
+            });
+          } else if (activeValues.length > PAGE_SIZE) {
             var currentPage = 1;
             var totalPages = Math.ceil(activeValues.length / PAGE_SIZE);
 
@@ -592,6 +695,58 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
       function runCustomQuery() {
         var query = (queryInput.value || "").trim();
         if (!query || !db) return;
+
+        var clean = query.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim().replace(/;+\s*$/, "");
+        var isSelect = /^(WITH\s+[\s\S]+?SELECT|SELECT\b)/i.test(clean);
+        var hasLimit = /\bLIMIT\s+\d+/i.test(clean);
+
+        if (isSelect && !hasLimit) {
+          // Paginación real de memoria en SQLite con LIMIT y OFFSET
+          var PAGE_SIZE = 50;
+          var totalRows = null;
+          try {
+            var countSql = "SELECT COUNT(*) AS total_rows FROM (" + clean + ");";
+            var countRes = db.exec(countSql);
+            if (countRes && countRes[0] && countRes[0].values && countRes[0].values[0]) {
+              totalRows = countRes[0].values[0][0];
+            }
+          } catch (_) {}
+
+          var totalPages = totalRows !== null ? Math.max(1, Math.ceil(totalRows / PAGE_SIZE)) : 1;
+
+          function executePage(page) {
+            resultsArea.innerHTML = "";
+            var offset = (page - 1) * PAGE_SIZE;
+            var paginatedSql = clean + " LIMIT " + PAGE_SIZE + " OFFSET " + offset + ";";
+            try {
+              var res = db.exec(paginatedSql);
+              if (res && res.length > 0) {
+                lastResults = res;
+              }
+              renderResults(res, query, {
+                isRealPagination: true,
+                currentPage: page,
+                pageSize: PAGE_SIZE,
+                totalRows: totalRows,
+                totalPages: totalPages,
+                onPageChange: executePage
+              });
+              sendLog("log", "Consulta SQL paginada (pág " + page + "): " + paginatedSql);
+            } catch (e) {
+              var errDiv = document.createElement("div");
+              errDiv.className = "status-banner status-err";
+              errDiv.textContent = "Error en consulta paginada: " + e.message;
+              resultsArea.appendChild(errDiv);
+              sendLog("error", "Error SQL: " + e.message);
+            }
+          }
+
+          executePage(1);
+          queryInput.value = "";
+          return;
+        }
+
+        resultsArea.innerHTML = "";
         try {
           var res = db.exec(query);
           if (res && res.length > 0) {

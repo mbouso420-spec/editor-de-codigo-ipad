@@ -54,7 +54,8 @@ import { keyboardRouter } from "./ui/keyboardRouter.js";
 import {
   clearEmergencyBackup,
   restoreEmergencyBackup,
-  writeEmergencyBackup
+  writeEmergencyBackup,
+  getTabInstanceId
 } from "./storage/emergencyBackup.js";
 
 async function initApp() {
@@ -939,14 +940,15 @@ async function initApp() {
   });
 
   // Autoguardado inmediato si Safari en iPad suspende la app o cambia en Stage Manager.
-  // Primero se escribe un respaldo SÍNCRONO particionado por proyecto en localStorage.
+  // Primero se escribe un respaldo SÍNCRONO particionado por proyecto e instancia de pestaña en localStorage.
+  const tabInstanceId = getTabInstanceId();
   const backupAndFlush = () => {
     if (saveTimers.size === 0) return;
     const currentPid = activeProject?.id || null;
-    writeEmergencyBackup([...saveTimers.values()], window.localStorage, currentPid);
+    writeEmergencyBackup([...saveTimers.values()], window.localStorage, currentPid, tabInstanceId);
     void flushPendingSaves().then(() => {
       if (saveTimers.size === 0) {
-        clearEmergencyBackup(window.localStorage, currentPid);
+        clearEmergencyBackup(window.localStorage, currentPid, tabInstanceId);
       }
     });
   };

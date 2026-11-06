@@ -5,19 +5,52 @@
  * localStorage es síncrono: lo que se escribe en pagehide/visibilitychange queda guardado aunque
  * el navegador destruya la página en el instante siguiente. Al abrir la app se vuelca a IndexedDB.
  *
- * Soporta particionamiento por proyecto (studio_ide_emergency_backup_${projectId}) para evitar
- * colisiones si el usuario mantiene múltiples pestañas abiertas simultáneamente.
+ * Soporta particionamiento por proyecto e instancia de pestaña:
+ * studio_ide_emergency_backup_${projectId}_${tabInstanceId}
+ * Evita colisiones si el usuario mantiene múltiples pestañas abiertas simultáneamente,
+ * incluso sobre el mismo proyecto.
  */
 export const EMERGENCY_BACKUP_KEY = "ide.emergencyBackup.v1";
 export const EMERGENCY_BACKUP_PREFIX = "studio_ide_emergency_backup_";
 
+let memoryTabId = null;
+
 /**
- * Obtiene la clave de almacenamiento para un proyecto o la clave por defecto.
- * @param {string|null} [projectId]
+ * Obtiene o inicializa un identificador único para la pestaña/instancia actual.
+ * En navegador utiliza sessionStorage para sobrevivir a recargas en la misma pestaña
+ * mientras aísla pestañas concurrentes.
  * @returns {string}
  */
-export function getEmergencyBackupKey(projectId = null) {
-  return projectId ? `${EMERGENCY_BACKUP_PREFIX}${projectId}` : EMERGENCY_BACKUP_KEY;
+export function getTabInstanceId() {
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try {
+      let id = window.sessionStorage.getItem("studio_ide_tab_instance_id");
+      if (!id) {
+        id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID().slice(0, 8)
+          : Math.random().toString(36).slice(2, 10);
+        window.sessionStorage.setItem("studio_ide_tab_instance_id", id);
+      }
+      return id;
+    } catch (_) {}
+  }
+  if (!memoryTabId) {
+    memoryTabId = Math.random().toString(36).slice(2, 10);
+  }
+  return memoryTabId;
+}
+
+/**
+ * Obtiene la clave de almacenamiento para un proyecto e instancia o la clave por defecto.
+ * @param {string|null} [projectId]
+ * @param {string|null} [instanceId]
+ * @returns {string}
+ */
+export function getEmergencyBackupKey(projectId = null, instanceId = null) {
+  if (!projectId) return EMERGENCY_BACKUP_KEY;
+  return instanceId
+    ? `${EMERGENCY_BACKUP_PREFIX}${projectId}_${instanceId}`
+    : `${EMERGENCY_BACKUP_PREFIX}${projectId}`;
 }
 
 function getAllStorageKeys(storage) {
@@ -57,13 +90,14 @@ function parseBackupItems(raw) {
  * @param {Array<{ projectId: string, filePath: string, content: string }>} items
  * @param {Storage} [storage]
  * @param {string|null} [projectId]
+ * @param {string|null} [instanceId]
  * @returns {boolean} true si quedó escrito
  */
-export function writeEmergencyBackup(items, storage = window.localStorage, projectId = null) {
+export function writeEmergencyBackup(items, storage = window.localStorage, projectId = null, instanceId = null) {
   const clean = (Array.isArray(items) ? items : []).filter(
     (it) => it && typeof it.projectId === "string" && typeof it.filePath === "string" && typeof it.content === "string"
   );
-  const targetKey = getEmergencyBackupKey(projectId);
+  const targetKey = getEmergencyBackupKey(projectId, instanceId);
 
   try {
     if (clean.length === 0) {
@@ -75,6 +109,7 @@ export function writeEmergencyBackup(items, storage = window.localStorage, proje
       JSON.stringify({
         savedAt: Date.now(),
         projectId: projectId || null,
+        instanceId: instanceId || null,
         items: clean.map(({ projectId: p, filePath, content }) => ({ projectId: p, filePath, content }))
       })
     );
@@ -88,19 +123,46 @@ export function writeEmergencyBackup(items, storage = window.localStorage, proje
 /**
  * @param {Storage} [storage]
  * @param {string|null} [projectId]
+ * @param {string|null} [instanceId]
  * @returns {Array<{ projectId: string, filePath: string, content: string }>}
  */
-export function readEmergencyBackup(storage = window.localStorage, projectId = null) {
-  if (projectId) {
-    const targetKey = getEmergencyBackupKey(projectId);
+export function readEmergencyBackup(storage = window.localStorage, projectId = null, instanceId = null) {
+  if (projectId && instanceId) {
+    const targetKey = getEmergencyBackupKey(projectId, instanceId);
     const direct = parseBackupItems(storage.getItem(targetKey));
     if (direct.length > 0) return direct;
-    // Si no está particionado aún, buscar si existe en la clave legado
+    // Si no está particionado por instancia, buscar en la partición por proyecto
+    const projectOnly = parseBackupItems(storage.getItem(getEmergencyBackupKey(projectId)));
+    if (projectOnly.length > 0) return projectOnly;
+    // Fallback: clave legado
     const legacy = parseBackupItems(storage.getItem(EMERGENCY_BACKUP_KEY));
     return legacy.filter((it) => it.projectId === projectId);
   }
 
-  // Si no se especifica proyecto, agregar clave legado y todas las particiones existentes
+  if (projectId && !instanceId) {
+    const result = [];
+    // Leer clave exacta de proyecto
+    const direct = parseBackupItems(storage.getItem(getEmergencyBackupKey(projectId)));
+    result.push(...direct);
+
+    // Leer todas las particiones de instancias de este proyecto
+    const prefix = `${EMERGENCY_BACKUP_PREFIX}${projectId}_`;
+    const keys = getAllStorageKeys(storage);
+    for (const k of keys) {
+      if (k && k.startsWith(prefix)) {
+        const instItems = parseBackupItems(storage.getItem(k));
+        result.push(...instItems);
+      }
+    }
+
+    if (result.length > 0) return result;
+
+    // Fallback: clave legado
+    const legacy = parseBackupItems(storage.getItem(EMERGENCY_BACKUP_KEY));
+    return legacy.filter((it) => it.projectId === projectId);
+  }
+
+  // Si no se especifica proyecto ni instancia, agregar clave legado y todas las particiones existentes
   const result = [];
   const legacyItems = parseBackupItems(storage.getItem(EMERGENCY_BACKUP_KEY));
   result.push(...legacyItems);
@@ -119,11 +181,23 @@ export function readEmergencyBackup(storage = window.localStorage, projectId = n
 /**
  * @param {Storage} [storage]
  * @param {string|null} [projectId]
+ * @param {string|null} [instanceId]
  */
-export function clearEmergencyBackup(storage = window.localStorage, projectId = null) {
+export function clearEmergencyBackup(storage = window.localStorage, projectId = null, instanceId = null) {
   try {
-    if (projectId) {
+    if (projectId && instanceId) {
+      storage.removeItem(getEmergencyBackupKey(projectId, instanceId));
+      return;
+    }
+    if (projectId && !instanceId) {
       storage.removeItem(getEmergencyBackupKey(projectId));
+      const prefix = `${EMERGENCY_BACKUP_PREFIX}${projectId}_`;
+      const keys = getAllStorageKeys(storage);
+      for (const k of keys) {
+        if (k && k.startsWith(prefix)) {
+          storage.removeItem(k);
+        }
+      }
       return;
     }
     storage.removeItem(EMERGENCY_BACKUP_KEY);
@@ -144,12 +218,13 @@ export function clearEmergencyBackup(storage = window.localStorage, projectId = 
  * @param {{ entryExists: (projectId: string, path: string) => Promise<boolean>, updateFileContent: (projectId: string, path: string, content: string) => Promise<unknown> }} db
  * @param {Storage} [storage]
  * @param {string|null} [projectId]
+ * @param {string|null} [instanceId]
  * @returns {Promise<number>} cantidad de archivos recuperados
  */
-export async function restoreEmergencyBackup(db, storage = window.localStorage, projectId = null) {
-  const items = readEmergencyBackup(storage, projectId);
+export async function restoreEmergencyBackup(db, storage = window.localStorage, projectId = null, instanceId = null) {
+  const items = readEmergencyBackup(storage, projectId, instanceId);
   if (items.length === 0) {
-    clearEmergencyBackup(storage, projectId);
+    clearEmergencyBackup(storage, projectId, instanceId);
     return 0;
   }
   let restored = 0;
@@ -159,6 +234,6 @@ export async function restoreEmergencyBackup(db, storage = window.localStorage, 
       restored += 1;
     }
   }
-  clearEmergencyBackup(storage, projectId);
+  clearEmergencyBackup(storage, projectId, instanceId);
   return restored;
 }

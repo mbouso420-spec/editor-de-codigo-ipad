@@ -20,11 +20,19 @@ import {
   readEmergencyBackup,
   clearEmergencyBackup,
   getEmergencyBackupKey,
+  getTabInstanceId,
   EMERGENCY_BACKUP_KEY,
   EMERGENCY_BACKUP_PREFIX
 } from "../js/storage/emergencyBackup.js";
 import { KeyboardRouter } from "../js/ui/keyboardRouter.js";
-import { convertResultsToCsv, convertResultsToJson } from "../js/preview/sqlRunner.js";
+import {
+  convertResultsToCsv,
+  convertResultsToJson,
+  isSelectQuery,
+  hasLimitClause,
+  applySqlPagination,
+  buildCountQuery
+} from "../js/preview/sqlRunner.js";
 
 describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
   describe("1. Conversión de Búferes Binarios Grandes (uint8ArrayToBase64)", () => {
@@ -253,6 +261,54 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       clearEmergencyBackup(mockStorage);
       assert.equal(storage.size, 0);
     });
+
+    test("writeEmergencyBackup aísla pestañas concurrentes del mismo proyecto mediante instanceId", () => {
+      const storage = new Map();
+      const mockStorage = {
+        getItem: (k) => storage.get(k) ?? null,
+        setItem: (k, v) => storage.set(k, String(v)),
+        removeItem: (k) => storage.delete(k),
+        get length() { return storage.size; },
+        key: (i) => Array.from(storage.keys())[i] ?? null
+      };
+
+      const keyTabA = getEmergencyBackupKey("proj-shared", "tab-A");
+      const keyTabB = getEmergencyBackupKey("proj-shared", "tab-B");
+      assert.equal(keyTabA, `${EMERGENCY_BACKUP_PREFIX}proj-shared_tab-A`);
+      assert.equal(keyTabB, `${EMERGENCY_BACKUP_PREFIX}proj-shared_tab-B`);
+
+      writeEmergencyBackup([{ projectId: "proj-shared", filePath: "fileA.js", content: "tab A edits" }], mockStorage, "proj-shared", "tab-A");
+      writeEmergencyBackup([{ projectId: "proj-shared", filePath: "fileB.js", content: "tab B edits" }], mockStorage, "proj-shared", "tab-B");
+
+      assert.ok(storage.has(keyTabA));
+      assert.ok(storage.has(keyTabB));
+
+      // Lectura aislada por pestaña
+      const readTabA = readEmergencyBackup(mockStorage, "proj-shared", "tab-A");
+      assert.equal(readTabA.length, 1);
+      assert.equal(readTabA[0].content, "tab A edits");
+
+      const readTabB = readEmergencyBackup(mockStorage, "proj-shared", "tab-B");
+      assert.equal(readTabB.length, 1);
+      assert.equal(readTabB[0].content, "tab B edits");
+
+      // Lectura por proyecto sin indicar instancia agrega ambas pestañas
+      const projectAggregated = readEmergencyBackup(mockStorage, "proj-shared");
+      assert.equal(projectAggregated.length, 2);
+
+      // Limpieza de solo tab-A no toca tab-B
+      clearEmergencyBackup(mockStorage, "proj-shared", "tab-A");
+      assert.ok(!storage.has(keyTabA));
+      assert.ok(storage.has(keyTabB));
+
+      // Limpieza de todo el proyecto
+      clearEmergencyBackup(mockStorage, "proj-shared");
+      assert.ok(!storage.has(keyTabB));
+
+      // getTabInstanceId devuelve un identificador consistente
+      const instId = getTabInstanceId();
+      assert.ok(typeof instId === "string" && instId.length > 0);
+    });
   });
 
   describe("6. Control de Cierre Seguro en KeyboardRouter (onEscape booleano)", () => {
@@ -318,6 +374,40 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       assert.equal(limitedJson.length, 5);
       assert.equal(limitedJson[0].id, 1);
       assert.equal(limitedJson[4].id, 5);
+    });
+
+    test("applySqlPagination inyecta LIMIT y OFFSET reales en consultas SELECT para evitar saturación de memoria", () => {
+      // Detección de SELECT
+      assert.equal(isSelectQuery("SELECT * FROM users;"), true);
+      assert.equal(isSelectQuery("  -- Comentario inicial\nSELECT a, b FROM table;"), true);
+      assert.equal(isSelectQuery("WITH cte AS (SELECT 1) SELECT * FROM cte;"), true);
+      assert.equal(isSelectQuery("INSERT INTO users VALUES (1, 'Pepe');"), false);
+      assert.equal(isSelectQuery("UPDATE users SET a = 1;"), false);
+      assert.equal(isSelectQuery("CREATE TABLE items (id INT);"), false);
+
+      // Detección de LIMIT existente
+      assert.equal(hasLimitClause("SELECT * FROM items LIMIT 10;"), true);
+      assert.equal(hasLimitClause("SELECT * FROM items limit 50 offset 20;"), true);
+      assert.equal(hasLimitClause("SELECT * FROM items WHERE limit_date > '2026';"), false);
+
+      // Paginación real aplicada al motor
+      const paged1 = applySqlPagination("SELECT * FROM large_table", 50, 0);
+      assert.equal(paged1, "SELECT * FROM large_table LIMIT 50 OFFSET 0;");
+
+      const paged2 = applySqlPagination("SELECT * FROM large_table WHERE active = 1 ORDER BY id DESC;", 100, 200);
+      assert.equal(paged2, "SELECT * FROM large_table WHERE active = 1 ORDER BY id DESC LIMIT 100 OFFSET 200;");
+
+      // Si ya tiene LIMIT, no lo altera
+      const pagedWithLimit = applySqlPagination("SELECT * FROM items LIMIT 10;", 50, 0);
+      assert.equal(pagedWithLimit, "SELECT * FROM items LIMIT 10;");
+
+      // No altera sentencias no-SELECT
+      const nonSelect = applySqlPagination("INSERT INTO logs VALUES ('ok');", 50, 0);
+      assert.equal(nonSelect, "INSERT INTO logs VALUES ('ok');");
+
+      // Consulta de conteo optimizada
+      const countQuery = buildCountQuery("SELECT id, name FROM users WHERE active = 1;");
+      assert.equal(countQuery, "SELECT COUNT(*) AS total_rows FROM (SELECT id, name FROM users WHERE active = 1);");
     });
   });
 });
