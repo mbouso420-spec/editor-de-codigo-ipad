@@ -18,6 +18,7 @@ import {
 import {
   writeEmergencyBackup,
   readEmergencyBackup,
+  restoreEmergencyBackup,
   clearEmergencyBackup,
   getEmergencyBackupKey,
   getTabInstanceId,
@@ -33,6 +34,12 @@ import {
   applySqlPagination,
   buildCountQuery
 } from "../js/preview/sqlRunner.js";
+import {
+  parseCssImportConditions,
+  wrapCssWithConditions,
+  bundleHtmlWithFolderAssets,
+  MAX_PREVIEW_ASSET_BYTES
+} from "../js/preview/htmlBundler.js";
 
 describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
   describe("1. Conversión de Búferes Binarios Grandes (uint8ArrayToBase64)", () => {
@@ -309,6 +316,46 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       const instId = getTabInstanceId();
       assert.ok(typeof instId === "string" && instId.length > 0);
     });
+
+    test("restoreEmergencyBackup utiliza snapshot atómico de claves para no borrar escrituras concurrentes de otras pestañas", async () => {
+      const storage = new Map();
+      const mockStorage = {
+        getItem: (k) => storage.get(k) ?? null,
+        setItem: (k, v) => storage.set(k, String(v)),
+        removeItem: (k) => storage.delete(k),
+        get length() { return storage.size; },
+        key: (i) => Array.from(storage.keys())[i] ?? null
+      };
+
+      const mockDb = {
+        async entryExists() { return true; },
+        async updateFileContent() {}
+      };
+
+      // Tab A escribe un respaldo
+      writeEmergencyBackup([{ projectId: "proj-sync", filePath: "fileA.js", content: "edit A" }], mockStorage, "proj-sync", "tab-A");
+
+      // Inyectamos una escritura concurrente de Tab B mientras restoreEmergencyBackup procesa la clave de Tab A
+      const originalGetItem = mockStorage.getItem;
+      let tabBInjected = false;
+      mockStorage.getItem = function (key) {
+        if (!tabBInjected && typeof key === "string" && key.includes("tab-A")) {
+          writeEmergencyBackup([{ projectId: "proj-sync", filePath: "fileB.js", content: "edit B concurrente" }], mockStorage, "proj-sync", "tab-B");
+          tabBInjected = true;
+        }
+        return originalGetItem.call(mockStorage, key);
+      };
+
+      const restored = await restoreEmergencyBackup(mockDb, mockStorage, "proj-sync");
+      assert.equal(restored, 1);
+
+      // Verificamos que la clave de Tab B NO fue eliminada por la restauración de Tab A
+      const tabBKey = getEmergencyBackupKey("proj-sync", "tab-B");
+      assert.ok(storage.has(tabBKey), "La clave de la pestaña concurrente debe preservarse intacta");
+      const tabBItems = readEmergencyBackup(mockStorage, "proj-sync", "tab-B");
+      assert.equal(tabBItems.length, 1);
+      assert.equal(tabBItems[0].content, "edit B concurrente");
+    });
   });
 
   describe("6. Control de Cierre Seguro en KeyboardRouter (onEscape booleano)", () => {
@@ -408,6 +455,61 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       // Consulta de conteo optimizada
       const countQuery = buildCountQuery("SELECT id, name FROM users WHERE active = 1;");
       assert.equal(countQuery, "SELECT COUNT(*) AS total_rows FROM (SELECT id, name FROM users WHERE active = 1);");
+    });
+  });
+
+  describe("8. Empaquetador CSS Avanzado (htmlBundler: @import con media, layer, supports y límites de tamaño)", () => {
+    test("parseCssImportConditions y wrapCssWithConditions preservan media, layer y supports", () => {
+      // 1. Parsing de condiciones
+      const c1 = parseCssImportConditions("layer(utilities) supports(display: grid) screen and (min-width: 768px)");
+      assert.equal(c1.layerClause, "@layer utilities");
+      assert.equal(c1.supportsCondition, "display: grid");
+      assert.equal(c1.mediaQueries, "screen and (min-width: 768px)");
+
+      const c2 = parseCssImportConditions("print");
+      assert.equal(c2.layerClause, "");
+      assert.equal(c2.supportsCondition, "");
+      assert.equal(c2.mediaQueries, "print");
+
+      const c3 = parseCssImportConditions("layer");
+      assert.equal(c3.layerClause, "@layer");
+      assert.equal(c3.supportsCondition, "");
+      assert.equal(c3.mediaQueries, "");
+
+      // 2. Envoltura con condiciones
+      const wrapped = wrapCssWithConditions(".btn { color: red; }", {
+        layerClause: "@layer utilities",
+        supportsCondition: "display: grid",
+        mediaQueries: "screen and (min-width: 768px)",
+        commentHeader: '/* @import "test.css" */'
+      });
+      assert.ok(wrapped.includes('/* @import "test.css" */'));
+      assert.ok(wrapped.includes("@layer utilities {"));
+      assert.ok(wrapped.includes("@supports (display: grid) {"));
+      assert.ok(wrapped.includes("@media screen and (min-width: 768px) {"));
+      assert.ok(wrapped.includes(".btn { color: red; }"));
+    });
+
+    test("bundleHtmlWithFolderAssets preserva condiciones de @import y omite imports que excedan MAX_PREVIEW_ASSET_BYTES", () => {
+      const rawHtml = '<!DOCTYPE html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>Hola</h1></body></html>';
+      const largeCssContent = "/* big */\n" + "body { color: blue; }\n".repeat(25000); // > 512 KB
+      const normalCss = ".title { font-weight: bold; }";
+      const fileMap = new Map([
+        ["index.html", { path: "index.html", content: rawHtml }],
+        ["style.css", { path: "style.css", content: '@import "theme.css" layer(theme);\n@import "large.css";\nbody { margin: 0; }' }],
+        ["theme.css", { path: "theme.css", content: normalCss }],
+        ["large.css", { path: "large.css", content: largeCssContent }]
+      ]);
+
+      const bundled = bundleHtmlWithFolderAssets("index.html", rawHtml, fileMap);
+
+      // El import normal con layer debe estar inlined y envuelto en @layer theme
+      assert.ok(bundled.includes("@layer theme {"));
+      assert.ok(bundled.includes(".title { font-weight: bold; }"));
+
+      // El import que supera MAX_PREVIEW_ASSET_BYTES no se inyecta y genera un comentario de advertencia
+      assert.ok(bundled.includes("omitido: excede el límite de tamaño individual"));
+      assert.ok(!bundled.includes("body { color: blue; }"));
     });
   });
 });

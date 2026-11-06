@@ -222,18 +222,67 @@ export function clearEmergencyBackup(storage = window.localStorage, projectId = 
  * @returns {Promise<number>} cantidad de archivos recuperados
  */
 export async function restoreEmergencyBackup(db, storage = window.localStorage, projectId = null, instanceId = null) {
-  const items = readEmergencyBackup(storage, projectId, instanceId);
-  if (items.length === 0) {
-    clearEmergencyBackup(storage, projectId, instanceId);
-    return 0;
+  // 1. Si se especifica projectId e instanceId puntual, restaurar y limpiar solo esa clave
+  if (projectId && instanceId) {
+    const key = getEmergencyBackupKey(projectId, instanceId);
+    const items = parseBackupItems(storage.getItem(key));
+    if (items.length === 0) {
+      try { storage.removeItem(key); } catch (_) {}
+      return 0;
+    }
+    let restored = 0;
+    for (const item of items) {
+      if (await db.entryExists(item.projectId, item.filePath)) {
+        await db.updateFileContent(item.projectId, item.filePath, item.content);
+        restored += 1;
+      }
+    }
+    try { storage.removeItem(key); } catch (_) {}
+    return restored;
   }
-  let restored = 0;
-  for (const item of items) {
-    if (await db.entryExists(item.projectId, item.filePath)) {
-      await db.updateFileContent(item.projectId, item.filePath, item.content);
-      restored += 1;
+
+  // 2. Si es restauración global o por proyecto:
+  // Tomar un snapshot exacto de las claves existentes al inicio para evitar que una escritura
+  // concurrente de otra pestaña activa sea eliminada accidentalmente.
+  const targetKeys = [];
+  if (!projectId && storage.getItem(EMERGENCY_BACKUP_KEY)) {
+    targetKeys.push(EMERGENCY_BACKUP_KEY);
+  } else if (projectId) {
+    const legacy = parseBackupItems(storage.getItem(EMERGENCY_BACKUP_KEY));
+    if (legacy.some((it) => it.projectId === projectId)) {
+      targetKeys.push(EMERGENCY_BACKUP_KEY);
     }
   }
-  clearEmergencyBackup(storage, projectId, instanceId);
-  return restored;
+
+  const allKeys = getAllStorageKeys(storage);
+  for (const k of allKeys) {
+    if (k && k.startsWith(EMERGENCY_BACKUP_PREFIX)) {
+      if (!projectId || k === getEmergencyBackupKey(projectId) || k.startsWith(`${EMERGENCY_BACKUP_PREFIX}${projectId}_`)) {
+        targetKeys.push(k);
+      }
+    }
+  }
+
+  if (targetKeys.length === 0) {
+    return 0;
+  }
+
+  let totalRestored = 0;
+  for (const key of targetKeys) {
+    const items = parseBackupItems(storage.getItem(key));
+    if (items.length > 0) {
+      for (const item of items) {
+        if (await db.entryExists(item.projectId, item.filePath)) {
+          await db.updateFileContent(item.projectId, item.filePath, item.content);
+          totalRestored += 1;
+        }
+      }
+    }
+    // Borrado individual y atómico de la clave procesada en el snapshot
+    try {
+      storage.removeItem(key);
+    } catch (_) {}
+  }
+
+  return totalRestored;
 }

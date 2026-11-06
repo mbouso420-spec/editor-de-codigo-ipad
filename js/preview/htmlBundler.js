@@ -163,15 +163,65 @@ export function extractReferencedAssetPaths(entryPath, rawHtml) {
 }
 
 /**
+ * Analiza las condiciones complejas asociadas a una regla `@import` de CSS
+ * (tales como capas `@layer`, consultas de soporte `@supports` y consultas de medios `@media`).
+ * @param {string} rawConditions
+ * @returns {{ layerClause: string, supportsCondition: string, mediaQueries: string }}
+ */
+export function parseCssImportConditions(rawConditions) {
+  let conditions = (rawConditions || "").trim();
+  let layerClause = "";
+  let supportsCondition = "";
+  let mediaQueries = "";
+
+  if (!conditions) {
+    return { layerClause, supportsCondition, mediaQueries };
+  }
+
+  // 1. Extraer layer(...) o layer
+  const layerMatch = conditions.match(/\blayer(?:\(([^)]*)\))?/i);
+  if (layerMatch) {
+    const layerName = layerMatch[1] ? layerMatch[1].trim() : "";
+    layerClause = layerName ? `@layer ${layerName}` : `@layer`;
+    conditions = conditions.replace(layerMatch[0], "").trim();
+  }
+
+  // 2. Extraer supports(...)
+  const supportsMatch = conditions.match(/\bsupports\(([^)]*)\)/i);
+  if (supportsMatch) {
+    supportsCondition = supportsMatch[1].trim();
+    conditions = conditions.replace(supportsMatch[0], "").trim();
+  }
+
+  // 3. El resto de las condiciones corresponden a la lista de media queries
+  mediaQueries = conditions.trim();
+
+  return { layerClause, supportsCondition, mediaQueries };
+}
+
+/**
+ * Envuelve el código CSS inlined con las condiciones semánticas preservadas del `@import`.
+ * @param {string} cssContent
+ * @param {{ layerClause?: string, supportsCondition?: string, mediaQueries?: string, commentHeader?: string }} options
+ * @returns {string}
+ */
+export function wrapCssWithConditions(cssContent, { layerClause = "", supportsCondition = "", mediaQueries = "", commentHeader = "" } = {}) {
+  let wrapped = cssContent;
+  if (mediaQueries) {
+    wrapped = `@media ${mediaQueries} {\n${wrapped}\n}`;
+  }
+  if (supportsCondition) {
+    wrapped = `@supports (${supportsCondition}) {\n${wrapped}\n}`;
+  }
+  if (layerClause) {
+    wrapped = `${layerClause} {\n${wrapped}\n}`;
+  }
+  return commentHeader ? `${commentHeader}\n${wrapped}` : wrapped;
+}
+
+/**
  * Extrae las rutas locales de reglas @import url(...) presentes en un archivo CSS.
- *
- * LIMITACIONES ARQUITECTÓNICAS Y CONDICIONES COMPLEJAS:
- * - Soporta sintaxis estándar: `@import "archivo.css";` y `@import url("archivo.css");`.
- * - Limitación conocida: No procesa condicionales avanzadas en directivas de importación, tales como
- *   `@import url(...) layer(nombre) supports(...) media(...)`. Si una regla declara capas o consultas
- *   de medios anidadas, se resolverá el archivo referenciado sin bifurcar el alcance condicional.
- * - Enlaces remotos o absolutos (`http:`, `https:`, `//`, `blob:`, `data:`) se preservan sin resolver
- *   para permitir su carga en vivo por el navegador dentro del iframe del preview.
+ * Soporta URLs entre comillas simples, dobles, url(...) y con especificadores condicionales (layer, media, supports).
  *
  * @param {string} cssPath Ruta del archivo CSS contenedor (para resolver rutas relativas).
  * @param {string} cssContent Contenido textual de la hoja de estilo.
@@ -181,10 +231,10 @@ export function extractCssImportPaths(cssPath, cssContent) {
   if (!cssContent || typeof cssContent !== "string") return [];
   const dir = getParentFolder(cssPath);
   const paths = new Set();
-  const importRegex = /@import\s+(?:url\(\s*["']?|["'])([^"')]+)["']?\s*\)?\s*;?/gi;
+  const importRegex = /@import\s+(?:url\(\s*(?:["']([^"']+)["']|([^"')]+))\s*\)|["']([^"']+)["'])([^;]*);?/gi;
   let match;
   while ((match = importRegex.exec(cssContent)) !== null) {
-    const importUrl = match[1];
+    const importUrl = match[1] || match[2] || match[3];
     if (importUrl && !/^(https?:|data:|blob:|\/\/)/i.test(importUrl)) {
       const cleanRef = importUrl.split("?")[0].split("#")[0];
       const resolved = resolveRelativePath(dir, cleanRef);
@@ -494,17 +544,12 @@ export function bundleHtmlWithFolderAssets(
   let inlinedActiveJs = false;
   let inlinedActiveCss = false;
   const deferredScripts = [];
+  let totalInlinedCssBytes = 0;
+  const MAX_TOTAL_INLINED_CSS = 2 * 1024 * 1024; // 2 MB presupuesto total
 
   /**
-   * Incrusta recursivamente directivas CSS `@import` locales resolviéndolas desde la memoria del bundle.
-   *
-   * SALVAGUARDAS Y LIMITACIONES:
-   * 1. Recursividad y ciclos: Controlado mediante el conjunto `visited` (`Set<string>`) para evitar
-   *    bucles infinitos o desbordamiento de pila ante importaciones circulares (ej. A -> B -> A).
-   * 2. Directivas complejas: Las directivas `@import` con media queries condicionales o `@layer`
-   *    se incrustan como bloques de estilos consecutivos sin particionar el árbol sintáctico.
-   * 3. Fallo controlado: Si un archivo referenciado no existe en `fileMap`, se conserva la regla `@import`
-   *    original intacta para permitir que el iframe resuelva o reporte el error de forma nativa.
+   * Incrusta recursivamente directivas CSS `@import` locales resolviéndolas desde la memoria del bundle,
+   * preservando condiciones complejas (@media, @layer, @supports) y aplicando límites estrictos de tamaño.
    *
    * @param {string} cssContent
    * @param {string} cssPath
@@ -517,7 +562,10 @@ export function bundleHtmlWithFolderAssets(
     visited.add(cleanPath);
 
     const cssDir = getParentFolder(cleanPath);
-    return cssContent.replace(/@import\s+(?:url\(\s*["']?|["'])([^"')]+)["']?\s*\)?\s*;?/gi, (match, importUrl) => {
+    const importRegex = /@import\s+(?:url\(\s*(?:["']([^"']+)["']|([^"')]+))\s*\)|["']([^"']+)["'])([^;]*);?/gi;
+
+    return cssContent.replace(importRegex, (match, urlGroup1, urlGroup2, urlGroup3, rawConditions) => {
+      const importUrl = urlGroup1 || urlGroup2 || urlGroup3;
       if (!importUrl || /^(https?:|data:|blob:|\/\/)/i.test(importUrl)) {
         return match;
       }
@@ -525,6 +573,7 @@ export function bundleHtmlWithFolderAssets(
       if (cleanRef.startsWith("../") && !allowParentTraversal) {
         return match;
       }
+
       const resolved = resolveRelativePath(cssDir, cleanRef);
       let importedAsset = fileMap.get(resolved);
       if (!importedAsset && cleanRef.startsWith("./")) {
@@ -533,10 +582,35 @@ export function bundleHtmlWithFolderAssets(
       if (!importedAsset && !cleanRef.startsWith("/")) {
         importedAsset = fileMap.get(normalizePath(cleanRef));
       }
-      if (importedAsset && typeof importedAsset.content === "string") {
-        return `/* @import "${cleanRef}" */\n` + inlineCssImports(importedAsset.content, importedAsset.path, visited);
+
+      if (!importedAsset || typeof importedAsset.content !== "string") {
+        return match;
       }
-      return match;
+
+      // 1. Control de límite de tamaño por recurso individual
+      if (importedAsset.content.length > MAX_PREVIEW_ASSET_BYTES) {
+        return `/* [Studio IDE]: @import "${cleanRef}" omitido: excede el límite de tamaño individual (${importedAsset.content.length} bytes > ${MAX_PREVIEW_ASSET_BYTES} bytes) */`;
+      }
+
+      // 2. Control de presupuesto total acumulado de CSS inlined
+      if (totalInlinedCssBytes + importedAsset.content.length > MAX_TOTAL_INLINED_CSS) {
+        return `/* [Studio IDE]: @import "${cleanRef}" omitido: presupuesto total de CSS superado */`;
+      }
+
+      totalInlinedCssBytes += importedAsset.content.length;
+
+      // 3. Resolución recursiva de dependencias hijas
+      const inlinedChild = inlineCssImports(importedAsset.content, importedAsset.path, visited);
+
+      // 4. Extracción y preservación de condiciones (layer, supports, media)
+      const conds = parseCssImportConditions(rawConditions);
+      const cleanConditionsStr = (rawConditions || "").trim();
+      const headerComment = `/* @import "${cleanRef}"${cleanConditionsStr ? " " + cleanConditionsStr : ""} */`;
+
+      return wrapCssWithConditions(inlinedChild, {
+        ...conds,
+        commentHeader: headerComment
+      });
     });
   }
 
