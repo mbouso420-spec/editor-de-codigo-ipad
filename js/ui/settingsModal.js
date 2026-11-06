@@ -114,12 +114,12 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
     let effectiveProviderId = activeProviderId;
     let activeKey = getApiKey(activeProviderId);
 
-    if (!activeKey) {
-      const anyWithKey = Object.keys(AI_PROVIDERS).find((pid) => Boolean(getApiKey(pid)?.trim()));
-      if (anyWithKey) {
-        effectiveProviderId = anyWithKey;
-        activeKey = getApiKey(anyWithKey);
-      }
+    const allProviders = Object.keys(AI_PROVIDERS);
+    const connectedProviders = allProviders.filter((pid) => Boolean(getApiKey(pid)?.trim()));
+
+    if (!activeKey && connectedProviders.length > 0) {
+      effectiveProviderId = connectedProviders[0];
+      activeKey = getApiKey(effectiveProviderId);
     }
 
     const hasKey = Boolean(activeKey && activeKey.trim());
@@ -143,65 +143,103 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
         detailEl.textContent = `~${usedTokens.toLocaleString()} tokens en contexto actual (esperando API key)`;
       }
       if (remainingEl) {
-        remainingEl.textContent = `Configurá una clave de ${provider.name.split(" ")[0]} para activar consultas`;
+        remainingEl.textContent = "Elegí y configurá una API key de algún proveedor para activar el Asistente";
       }
-      return;
+    } else {
+      const remainingTokens = Math.max(0, maxModelTokens - usedTokens);
+      const availablePct = maxModelTokens > 0
+        ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxModelTokens) * 100)))
+        : 100;
+
+      if (pctEl) {
+        pctEl.textContent = `${availablePct}% disponible (${connectedProviders.length}/4 conectados · ${provider.name.split(" ")[0]})`;
+        pctEl.className = "models-tokens-badge";
+      }
+      if (fillEl) {
+        fillEl.style.setProperty("--progress-val", String(availablePct));
+        fillEl.dataset.state = availablePct > 40 ? "good" : availablePct > 15 ? "warning" : "low";
+      }
+      if (trackEl) {
+        trackEl.setAttribute("aria-valuenow", String(availablePct));
+      }
+      if (detailEl) {
+        detailEl.textContent = `~${usedTokens.toLocaleString()} / ${maxModelTokens.toLocaleString()} tokens en uso`;
+      }
+      if (remainingEl) {
+        remainingEl.textContent = `${remainingTokens.toLocaleString()} tokens libres en ${provider.name.split(" ")[0]}`;
+      }
     }
 
-    const remainingTokens = Math.max(0, maxModelTokens - usedTokens);
-    const availablePct = maxModelTokens > 0
-      ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxModelTokens) * 100)))
-      : 100;
-
-    if (pctEl) {
-      pctEl.textContent = `${availablePct}% disponible (${provider.name.split(" ")[0]})`;
-      pctEl.className = "models-tokens-badge";
-    }
-    if (fillEl) {
-      fillEl.style.setProperty("--progress-val", String(availablePct));
-      fillEl.dataset.state = availablePct > 40 ? "good" : availablePct > 15 ? "warning" : "low";
-    }
-    if (trackEl) {
-      trackEl.setAttribute("aria-valuenow", String(availablePct));
-    }
-    if (detailEl) {
-      detailEl.textContent = `~${usedTokens.toLocaleString()} / ${maxModelTokens.toLocaleString()} tokens en uso`;
-    }
-    if (remainingEl) {
-      remainingEl.textContent = `${remainingTokens.toLocaleString()} tokens libres`;
-    }
+    renderActiveModelsList(usedTokens);
   }
 
-  function renderActiveModelsList() {
+  function renderActiveModelsList(usedTokens = 0) {
     if (!modelsListEl) return;
+    const activeProviderId = getSavedProviderId();
     const providers = Object.values(AI_PROVIDERS || {});
+
     modelsListEl.innerHTML = providers
       .map((p) => {
         const key = getApiKey(p.id);
         const hasKey = Boolean(key && key.trim());
+        const isCurrentActive = p.id === activeProviderId;
         const savedModel = getSavedModel(p.id) || p.models?.[0]?.id || "Predeterminado";
+        const maxTokens = getModelContextWindow(p.id, savedModel);
+
+        let progressPct = 0;
+        let meterState = "inactive";
+        let detailText = "";
+        let remainingText = "";
+
+        if (hasKey) {
+          const remaining = Math.max(0, maxTokens - usedTokens);
+          progressPct = maxTokens > 0
+            ? Math.max(0, Math.min(100, Math.round((remaining / maxTokens) * 100)))
+            : 100;
+          meterState = progressPct > 40 ? "good" : progressPct > 15 ? "warning" : "low";
+          detailText = `~${usedTokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens (${progressPct}% libre)`;
+          remainingText = `${remaining.toLocaleString()} tokens libres`;
+        } else {
+          progressPct = 0;
+          meterState = "inactive";
+          detailText = `Capacidad: ${maxTokens.toLocaleString()} tokens`;
+          remainingText = "Sin API key";
+        }
+
         return `
-        <div class="models-provider-item" role="listitem">
-          <div class="models-provider-main">
+        <div class="models-provider-item ${isCurrentActive ? "is-active-provider" : ""}" role="listitem">
+          <div class="models-provider-top">
             <div class="models-provider-header">
               <span class="models-provider-name">${escapeHtml(p.name)}</span>
+              ${isCurrentActive ? '<span class="models-active-pill">En uso en chat</span>' : ""}
               <span class="models-status-badge ${hasKey ? "badge-connected" : "badge-disconnected"}">
                 ${hasKey ? "Conectado" : "Sin API key"}
               </span>
             </div>
-            <div class="models-provider-meta">
-              <span class="models-provider-model code-font">${escapeHtml(savedModel)}</span>
-              <span class="models-provider-hint">${escapeHtml(p.freeQuota || p.helpText || "")} · Contexto: ${(p.contextWindow || 16000).toLocaleString()} tokens</span>
+            <button
+              type="button"
+              class="btn ${isCurrentActive ? "btn-secondary" : "btn-ghost"} btn-sm btn-provider-action"
+              data-provider-id="${escapeHtml(p.id)}"
+              title="${hasKey ? (isCurrentActive ? "Proveedor actualmente seleccionado en el chat" : "Activar este proveedor en el chat") : "Configurar API key"}"
+            >
+              ${hasKey ? (isCurrentActive ? "Activo ✓" : "Usar en chat") : "Configurar"}
+            </button>
+          </div>
+
+          <div class="models-provider-meta">
+            <span class="models-provider-model code-font">${escapeHtml(savedModel)}</span>
+            <span class="models-provider-hint">${escapeHtml(p.freeQuota || p.helpText || "")}</span>
+          </div>
+
+          <div class="models-provider-meter">
+            <div class="models-meter-track" role="progressbar" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100">
+              <div class="models-meter-fill" style="--progress-val: ${progressPct};" data-state="${meterState}"></div>
+            </div>
+            <div class="models-provider-meter-legend">
+              <span class="code-font">${detailText}</span>
+              <span class="code-font">${remainingText}</span>
             </div>
           </div>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm btn-provider-action"
-            data-provider-id="${escapeHtml(p.id)}"
-            title="${hasKey ? "Seleccionar en el Asistente IA" : "Configurar API key"}"
-          >
-            ${hasKey ? "Usar en chat" : "Configurar"}
-          </button>
         </div>
       `;
       })

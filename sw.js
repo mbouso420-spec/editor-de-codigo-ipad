@@ -1,4 +1,4 @@
-const SHELL_CACHE = "studio-ide-shell-v23";
+const SHELL_CACHE = "studio-ide-shell-v24";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 const ACORN_CDN_URL = "https://esm.sh/acorn@8.14.0";
 const PYODIDE_ENTRY_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
