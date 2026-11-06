@@ -297,21 +297,35 @@ describe("SettingsModal, Nuevos Lenguajes (Rust y Go) y Preferencias Extendidas"
     assert.equal(getAiThinkingSpeed(), "baja");
   });
 
-  test("Pestaña Modelos: Medidor de tokens calcula porcentaje y actualiza barra según contexto", () => {
+  test("Pestaña Modelos: Medidor de tokens informa estado sin clave y calcula capacidad real por modelo con clave", () => {
     const mockContext = {
       activeFile: { content: "const a = 1;\nconst b = 2;\n" },
       otherOpenFiles: [{ content: "function hello() { return 'world'; }" }]
     };
 
-    const modal = initSettingsModal({
+    // 1. Sin API key configurada
+    const modalSinKey = initSettingsModal({
       editor: null,
       getContextSnapshot: () => mockContext
     });
-    modal.open();
+    modalSinKey.open();
 
     const pctEl = document.getElementById("models-tokens-pct");
     const detailEl = document.getElementById("models-tokens-detail");
     const remainingEl = document.getElementById("models-tokens-remaining");
+
+    assert.ok(pctEl.textContent.includes("Sin API key configurada"));
+    assert.ok(detailEl.textContent.includes("tokens en contexto actual"));
+
+    modalSinKey.close();
+
+    // 2. Con API key configurada para el modelo
+    saveApiKey("groq", "gsk_testKey123");
+    const modalConKey = initSettingsModal({
+      editor: null,
+      getContextSnapshot: () => mockContext
+    });
+    modalConKey.open();
 
     assert.ok(pctEl.textContent.includes("% disponible"));
     assert.ok(detailEl.textContent.includes("tokens en uso"));

@@ -39,10 +39,12 @@ export const AI_PROVIDERS = {
     supportsLiveModels: true,
     keyPlaceholder: "AIzaSy…",
     helpText: "Sincroniza automáticamente los modelos Flash gratuitos activos en tu cuenta y reintenta si hay alta demanda.",
+    contextWindow: 1000000,
+    freeQuota: "15 req/min · 1M TPM (Google AI Studio)",
     models: [
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recomendado, cuota gratuita)" },
-      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Rápido, menor latencia)" },
-      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Estable, alta velocidad)" }
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recomendado, cuota gratuita)", contextWindow: 1000000 },
+      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Rápido, menor latencia)", contextWindow: 1000000 },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Estable, alta velocidad)", contextWindow: 1000000 }
     ]
   },
   groq: {
@@ -53,11 +55,13 @@ export const AI_PROVIDERS = {
     supportsLiveModels: true,
     keyPlaceholder: "gsk_…",
     helpText: "100% gratis sin tarjeta en console.groq.com/keys. Incluye Llama 3.3 70B y responde al instante.",
+    contextWindow: 128000,
+    freeQuota: "30 req/min · 6.000 TPM (70B) / 30.000 TPM (8B)",
     models: [
-      { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Potente y gratuito)" },
-      { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Ultrarrápido)" },
-      { id: "openai/gpt-oss-120b", label: "OpenAI GPT-OSS 120B (Gratis y ultrarrápido)" },
-      { id: "openai/gpt-oss-20b", label: "OpenAI GPT-OSS 20B (Instantáneo, cuota amplia)" }
+      { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Potente y gratuito)", contextWindow: 128000 },
+      { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Ultrarrápido)", contextWindow: 128000 },
+      { id: "openai/gpt-oss-120b", label: "OpenAI GPT-OSS 120B (Gratis y ultrarrápido)", contextWindow: 128000 },
+      { id: "openai/gpt-oss-20b", label: "OpenAI GPT-OSS 20B (Instantáneo, cuota amplia)", contextWindow: 128000 }
     ]
   },
   openrouter: {
@@ -68,11 +72,13 @@ export const AI_PROVIDERS = {
     supportsLiveModels: true,
     keyPlaceholder: "sk-or-v1-…",
     helpText: "Gratis sin tarjeta en openrouter.ai/keys. El modo Auto-Router elige siempre un modelo :free activo.",
+    contextWindow: 16000,
+    freeQuota: "20 req/min · Modelos :free rotativos sin tarjeta",
     models: [
-      { id: "openrouter/free", label: "Auto-Router Gratis (Elige un modelo :free activo)" },
-      { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "NVIDIA Nemotron 3 Ultra (:free)" },
-      { id: "google/gemma-4-31b-it:free", label: "Google Gemma 4 31B (:free)" },
-      { id: "cohere/north-mini-code:free", label: "Cohere North Mini Code (:free)" }
+      { id: "openrouter/free", label: "Auto-Router Gratis (Elige un modelo :free activo)", contextWindow: 16000 },
+      { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "NVIDIA Nemotron 3 Ultra (:free)", contextWindow: 32000 },
+      { id: "google/gemma-4-31b-it:free", label: "Google Gemma 4 31B (:free)", contextWindow: 8192 },
+      { id: "cohere/north-mini-code:free", label: "Cohere North Mini Code (:free)", contextWindow: 16000 }
     ]
   },
   mistral: {
@@ -83,13 +89,31 @@ export const AI_PROVIDERS = {
     supportsLiveModels: true,
     keyPlaceholder: "Clave de console.mistral.ai…",
     helpText: "Gratis activando el plan Experiment (sin tarjeta) en console.mistral.ai.",
+    contextWindow: 32000,
+    freeQuota: "1 req/seg · Plan Experiment gratis",
     models: [
-      { id: "codestral-latest", label: "Codestral (Especialista en código)" },
-      { id: "devstral-small-latest", label: "Devstral Small (Agente de programación)" },
-      { id: "mistral-small-latest", label: "Mistral Small (Rápido y general)" }
+      { id: "codestral-latest", label: "Codestral (Especialista en código)", contextWindow: 32000 },
+      { id: "devstral-small-latest", label: "Devstral Small (Agente de programación)", contextWindow: 32000 },
+      { id: "mistral-small-latest", label: "Mistral Small (Rápido y general)", contextWindow: 32000 }
     ]
   }
 };
+
+/**
+ * Devuelve la capacidad máxima de tokens de contexto del modelo activo o del proveedor.
+ * @param {string} providerId
+ * @param {string} [modelId]
+ * @returns {number}
+ */
+export function getModelContextWindow(providerId, modelId) {
+  const provider = AI_PROVIDERS[providerId];
+  if (!provider) return 16000;
+  if (modelId) {
+    const found = provider.models?.find((m) => m.id === modelId);
+    if (found?.contextWindow) return found.contextWindow;
+  }
+  return provider.contextWindow || 16000;
+}
 
 export function isFreeActiveGoogleModelId(id) {
   const lower = String(id || "").toLowerCase();

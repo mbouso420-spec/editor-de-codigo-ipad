@@ -6,6 +6,8 @@ import {
   setKeyStorageMode,
   getApiKey,
   getSavedModel,
+  getSavedProviderId,
+  getModelContextWindow,
   getAiTemperature,
   setAiTemperature,
   getAiContextBudget,
@@ -108,15 +110,52 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
     } catch (_) {}
 
     const usedTokens = Math.ceil(contextChars / 4);
-    const maxBudgetChars = getAiContextBudget();
-    const maxBudgetTokens = Math.ceil(maxBudgetChars / 4);
-    const remainingTokens = Math.max(0, maxBudgetTokens - usedTokens);
-    const availablePct = maxBudgetTokens > 0
-      ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxBudgetTokens) * 100)))
+    const activeProviderId = getSavedProviderId();
+    let effectiveProviderId = activeProviderId;
+    let activeKey = getApiKey(activeProviderId);
+
+    if (!activeKey) {
+      const anyWithKey = Object.keys(AI_PROVIDERS).find((pid) => Boolean(getApiKey(pid)?.trim()));
+      if (anyWithKey) {
+        effectiveProviderId = anyWithKey;
+        activeKey = getApiKey(anyWithKey);
+      }
+    }
+
+    const hasKey = Boolean(activeKey && activeKey.trim());
+    const activeModelId = getSavedModel(effectiveProviderId);
+    const provider = AI_PROVIDERS[effectiveProviderId] || AI_PROVIDERS.gemini;
+    const maxModelTokens = getModelContextWindow(effectiveProviderId, activeModelId);
+
+    if (!hasKey) {
+      if (pctEl) {
+        pctEl.textContent = "Sin API key configurada";
+        pctEl.className = "models-tokens-badge badge-neutral";
+      }
+      if (fillEl) {
+        fillEl.style.setProperty("--progress-val", "0");
+        fillEl.dataset.state = "inactive";
+      }
+      if (trackEl) {
+        trackEl.setAttribute("aria-valuenow", "0");
+      }
+      if (detailEl) {
+        detailEl.textContent = `~${usedTokens.toLocaleString()} tokens en contexto actual (esperando API key)`;
+      }
+      if (remainingEl) {
+        remainingEl.textContent = `Configurá una clave de ${provider.name.split(" ")[0]} para activar consultas`;
+      }
+      return;
+    }
+
+    const remainingTokens = Math.max(0, maxModelTokens - usedTokens);
+    const availablePct = maxModelTokens > 0
+      ? Math.max(0, Math.min(100, Math.round((remainingTokens / maxModelTokens) * 100)))
       : 100;
 
     if (pctEl) {
-      pctEl.textContent = `${availablePct}% disponible`;
+      pctEl.textContent = `${availablePct}% disponible (${provider.name.split(" ")[0]})`;
+      pctEl.className = "models-tokens-badge";
     }
     if (fillEl) {
       fillEl.style.setProperty("--progress-val", String(availablePct));
@@ -126,7 +165,7 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
       trackEl.setAttribute("aria-valuenow", String(availablePct));
     }
     if (detailEl) {
-      detailEl.textContent = `~${usedTokens.toLocaleString()} / ${maxBudgetTokens.toLocaleString()} tokens en uso`;
+      detailEl.textContent = `~${usedTokens.toLocaleString()} / ${maxModelTokens.toLocaleString()} tokens en uso`;
     }
     if (remainingEl) {
       remainingEl.textContent = `${remainingTokens.toLocaleString()} tokens libres`;
@@ -152,7 +191,7 @@ export function initSettingsModal({ editor, onThemeChange, getContextSnapshot, o
             </div>
             <div class="models-provider-meta">
               <span class="models-provider-model code-font">${escapeHtml(savedModel)}</span>
-              <span class="models-provider-hint">${escapeHtml(p.help || "")}</span>
+              <span class="models-provider-hint">${escapeHtml(p.freeQuota || p.helpText || "")} · Contexto: ${(p.contextWindow || 16000).toLocaleString()} tokens</span>
             </div>
           </div>
           <button

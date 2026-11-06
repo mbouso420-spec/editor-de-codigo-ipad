@@ -6,6 +6,7 @@ import {
   exportKeysBundle,
   fetchLiveFreeModels,
   getAiContextBudget,
+  getModelContextWindow,
   getAiThinkingSpeed,
   setAiThinkingSpeed,
   getApiKey,
@@ -402,10 +403,16 @@ export function initChatController({
     }
     const totalChars = promptLen + contextLen;
     const usedTokens = estimateTokens(totalChars);
-    const maxBudgetChars = getAiContextBudget();
-    const maxBudgetTokens = estimateTokens(maxBudgetChars);
 
-    tokenCounterEl.textContent = `~${usedTokens.toLocaleString()} / ${maxBudgetTokens.toLocaleString()} tokens`;
+    const activeKey = getApiKey(activeProviderId);
+    const hasKey = Boolean(activeKey && activeKey.trim());
+    const modelContext = getModelContextWindow(activeProviderId, activeModelId);
+
+    if (!hasKey) {
+      tokenCounterEl.textContent = `~${usedTokens.toLocaleString()} tokens (Sin clave de API)`;
+    } else {
+      tokenCounterEl.textContent = `~${usedTokens.toLocaleString()} / ${modelContext.toLocaleString()} tokens`;
+    }
   }
 
   function syncRegenerateButton() {

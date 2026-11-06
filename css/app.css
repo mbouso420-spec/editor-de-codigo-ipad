@@ -761,6 +761,16 @@
   white-space: nowrap;
 }
 
+.models-tokens-badge.badge-neutral {
+  background: var(--color-paper-2);
+  color: var(--color-ink-muted);
+  border: var(--rule-hair) solid var(--color-rule);
+}
+
+.models-meter-fill[data-state="inactive"] {
+  background: var(--color-rule);
+}
+
 .models-meter-container {
   display: flex;
   flex-direction: column;
