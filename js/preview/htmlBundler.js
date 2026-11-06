@@ -16,6 +16,7 @@ export const CSHARP_EXTENSIONS = new Set(["cs"]);
 export const TS_EXTENSIONS = new Set(["ts", "tsx"]);
 
 export const MAX_PREVIEW_ASSET_BYTES = 512 * 1024; // 512 KB por recurso individual
+export const MAX_TOTAL_INLINED_CSS = 2 * 1024 * 1024; // 2 MB presupuesto total acumulado de CSS
 
 export const IGNORED_PREVIEW_DIRS = new Set([
   "node_modules",
@@ -535,9 +536,6 @@ export function bundleHtmlWithFolderAssets(
     if (!asset || asset.content == null || typeof asset.content !== "string") {
       return null;
     }
-    if (asset.content.length > MAX_PREVIEW_ASSET_BYTES) {
-      return null;
-    }
     return asset;
   };
 
@@ -545,7 +543,6 @@ export function bundleHtmlWithFolderAssets(
   let inlinedActiveCss = false;
   const deferredScripts = [];
   let totalInlinedCssBytes = 0;
-  const MAX_TOTAL_INLINED_CSS = 2 * 1024 * 1024; // 2 MB presupuesto total
 
   /**
    * Incrusta recursivamente directivas CSS `@import` locales resolviéndolas desde la memoria del bundle,
@@ -622,17 +619,48 @@ export function bundleHtmlWithFolderAssets(
     if (ensureCssFile && normalizePath(asset.path) === normalizePath(ensureCssFile.path)) {
       inlinedActiveCss = true;
     }
+
+    // 1. Control de límite de tamaño por recurso individual
+    if (asset.content.length > MAX_PREVIEW_ASSET_BYTES) {
+      return `<!-- [Studio IDE]: stylesheet "${escapeAttr(asset.path)}" omitido: excede el límite de tamaño individual (${asset.content.length} bytes > ${MAX_PREVIEW_ASSET_BYTES} bytes) -->\n${tag}`;
+    }
+
+    // 2. Control de presupuesto total acumulado de CSS inlined
+    if (totalInlinedCssBytes + asset.content.length > MAX_TOTAL_INLINED_CSS) {
+      return `<!-- [Studio IDE]: stylesheet "${escapeAttr(asset.path)}" omitido: presupuesto total de CSS superado -->\n${tag}`;
+    }
+
+    totalInlinedCssBytes += asset.content.length;
     const safeCss = inlineCssImports(asset.content, asset.path).replace(/<\/style>/gi, "<\\/style>");
     return `<style data-source="${escapeAttr(asset.path)}">\n${safeCss}\n</style>`;
   });
 
   if (ensureCssFile && !inlinedActiveCss) {
-    const safeExtraCss = inlineCssImports(ensureCssFile.content || "", ensureCssFile.path).replace(/<\/style>/gi, "<\\/style>");
-    const styleTag = `<style data-source="${escapeAttr(ensureCssFile.path)}">\n${safeExtraCss}\n</style>`;
-    if (/<head\b[^>]*>/i.test(html)) {
-      html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${styleTag}`);
+    const cssPath = ensureCssFile.path || "style.css";
+    const cssContent = typeof ensureCssFile.content === "string" ? ensureCssFile.content : "";
+    if (cssContent.length > MAX_PREVIEW_ASSET_BYTES) {
+      const warnTag = `<!-- [Studio IDE]: stylesheet "${escapeAttr(cssPath)}" omitido: excede el límite de tamaño individual (${cssContent.length} bytes > ${MAX_PREVIEW_ASSET_BYTES} bytes) -->`;
+      if (/<head\b[^>]*>/i.test(html)) {
+        html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${warnTag}`);
+      } else {
+        html = `${warnTag}\n${html}`;
+      }
+    } else if (totalInlinedCssBytes + cssContent.length > MAX_TOTAL_INLINED_CSS) {
+      const warnTag = `<!-- [Studio IDE]: stylesheet "${escapeAttr(cssPath)}" omitido: presupuesto total de CSS superado -->`;
+      if (/<head\b[^>]*>/i.test(html)) {
+        html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${warnTag}`);
+      } else {
+        html = `${warnTag}\n${html}`;
+      }
     } else {
-      html = `${styleTag}\n${html}`;
+      totalInlinedCssBytes += cssContent.length;
+      const safeExtraCss = inlineCssImports(cssContent, cssPath).replace(/<\/style>/gi, "<\\/style>");
+      const styleTag = `<style data-source="${escapeAttr(cssPath)}">\n${safeExtraCss}\n</style>`;
+      if (/<head\b[^>]*>/i.test(html)) {
+        html = html.replace(/<head\b[^>]*>/i, (m) => `${m}\n${styleTag}`);
+      } else {
+        html = `${styleTag}\n${html}`;
+      }
     }
   }
 
@@ -647,6 +675,9 @@ export function bundleHtmlWithFolderAssets(
     }
     const asset = resolveAsset(srcMatch[1]);
     if (!asset) return fullTag;
+    if (asset.content.length > MAX_PREVIEW_ASSET_BYTES) {
+      return fullTag;
+    }
 
     if (ensureJsFile && normalizePath(asset.path) === normalizePath(ensureJsFile.path)) {
       inlinedActiveJs = true;

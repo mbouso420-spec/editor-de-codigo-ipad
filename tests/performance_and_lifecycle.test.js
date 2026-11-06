@@ -38,7 +38,8 @@ import {
   parseCssImportConditions,
   wrapCssWithConditions,
   bundleHtmlWithFolderAssets,
-  MAX_PREVIEW_ASSET_BYTES
+  MAX_PREVIEW_ASSET_BYTES,
+  MAX_TOTAL_INLINED_CSS
 } from "../js/preview/htmlBundler.js";
 
 describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
@@ -510,6 +511,47 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       // El import que supera MAX_PREVIEW_ASSET_BYTES no se inyecta y genera un comentario de advertencia
       assert.ok(bundled.includes("omitido: excede el límite de tamaño individual"));
       assert.ok(!bundled.includes("body { color: blue; }"));
+    });
+
+    test("bundleHtmlWithFolderAssets unifica el presupuesto acumulado entre hojas raíz e imports (@import y <link>)", () => {
+      // 1. Creamos bloques de CSS de ~450 KB (menores a MAX_PREVIEW_ASSET_BYTES = 512 KB)
+      const chunk450k = "/* chunk */\n" + ".item { display: block; }\n".repeat(18000); // ~450 KB
+      assert.ok(chunk450k.length < MAX_PREVIEW_ASSET_BYTES);
+
+      const rawHtml = '<!DOCTYPE html><html><head>' +
+        '<link rel="stylesheet" href="root1.css">' +
+        '<link rel="stylesheet" href="root2.css">' +
+        '<link rel="stylesheet" href="root3.css">' +
+        '</head><body><h1>Unificado</h1></body></html>';
+
+      // root1.css pesa ~450 KB e importa sub1.css (~450 KB) y sub2.css (~450 KB) -> total ~1.35 MB
+      // root2.css pesa ~450 KB e importa sub3.css (~450 KB) -> el import superará los 2 MB
+      // root3.css pesa ~450 KB -> la hoja raíz superará los 2 MB
+      const fileMap = new Map([
+        ["index.html", { path: "index.html", content: rawHtml }],
+        ["root1.css", { path: "root1.css", content: '@import "sub1.css";\n@import "sub2.css";\n' + chunk450k }],
+        ["sub1.css", { path: "sub1.css", content: chunk450k }],
+        ["sub2.css", { path: "sub2.css", content: chunk450k }],
+        ["root2.css", { path: "root2.css", content: '@import "sub3.css";\n' + chunk450k }],
+        ["sub3.css", { path: "sub3.css", content: chunk450k }],
+        ["root3.css", { path: "root3.css", content: chunk450k }]
+      ]);
+
+      const bundled = bundleHtmlWithFolderAssets("index.html", rawHtml, fileMap, null, (c) => c, { path: "extra.css", content: chunk450k });
+
+      // root1 y sus primeros imports entran en el presupuesto
+      assert.ok(bundled.includes('<style data-source="root1.css">'));
+      assert.ok(bundled.includes('/* @import "sub1.css" */'));
+      assert.ok(bundled.includes('/* @import "sub2.css" */'));
+
+      // Las hojas que empujan el acumulado por encima de MAX_TOTAL_INLINED_CSS se omiten de forma uniforme:
+      // 1. @import hijo omitido con comentario CSS
+      assert.ok(bundled.includes('/* [Studio IDE]: @import "sub3.css" omitido: presupuesto total de CSS superado */'));
+      // 2. <link> raíz omitido con comentario HTML y conservando el tag link
+      assert.ok(bundled.includes('<!-- [Studio IDE]: stylesheet "root3.css" omitido: presupuesto total de CSS superado -->'));
+      assert.ok(bundled.includes('href="root3.css"'));
+      // 3. ensureCssFile omitido con comentario HTML
+      assert.ok(bundled.includes('<!-- [Studio IDE]: stylesheet "extra.css" omitido: presupuesto total de CSS superado -->'));
     });
   });
 });
