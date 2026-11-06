@@ -899,32 +899,54 @@ async function initApp() {
   onWorkspaceBroadcast(async (event) => {
     if (!event || !activeProject || event.projectId !== activeProject.id) return;
 
-    if (event.action === "update_content" && event.path && event.path === activeFileId) {
-      if (!saveTimers.has(event.path)) {
-        await reloadProjectEntries();
-        const updated = filesOnly.find((f) => f.id === event.path);
-        if (updated) {
-          editor.dropFileState(event.path);
-          editor.openFile(updated);
-          renderTabs();
+    // Actualización de contenido de archivo emitida por otra pestaña (contrato FILE_UPDATED)
+    if (event.type === "FILE_UPDATED" && event.path) {
+      const timerKey = `${activeProject.id}::${event.path}`;
+      // Si esta pestaña tiene escrituras locales en vuelo para este archivo, no pisarlas
+      if (saveTimers.has(timerKey)) {
+        return;
+      }
+
+      await reloadProjectEntries();
+      const updated = filesOnly.find((f) => f.id === event.path);
+      if (!updated) return;
+
+      if (event.path === activeFileId) {
+        // Invalida el estado cacheado en statesByFile y reabre limpiamente desde IndexedDB sin recargar toda la UI
+        editor.dropFileState(event.path);
+        editor.openFile(updated);
+        renderTabs();
+      } else {
+        // Invalida el estado en segundo plano para que al hacer clic se lea el contenido fresco
+        editor.dropFileState(event.path);
+        renderTabs();
+      }
+
+      if (editorSplit) {
+        if (splitActiveFileId === event.path) {
+          editorSplit.dropFileState(event.path);
+          editorSplit.openFile(updated);
+        } else {
+          editorSplit.dropFileState(event.path);
         }
       }
       return;
     }
 
+    // Para cambios estructurales (creación, renombrado, borrado)
     await reloadProjectEntries();
     renderWorkspaceView();
   });
 
   // Autoguardado inmediato si Safari en iPad suspende la app o cambia en Stage Manager.
-  // Primero se escribe un respaldo SÍNCRONO (localStorage): si la página muere antes de que IndexedDB
-  // termine, lo pendiente se recupera en la próxima apertura.
+  // Primero se escribe un respaldo SÍNCRONO particionado por proyecto en localStorage.
   const backupAndFlush = () => {
     if (saveTimers.size === 0) return;
-    writeEmergencyBackup([...saveTimers.values()]);
+    const currentPid = activeProject?.id || null;
+    writeEmergencyBackup([...saveTimers.values()], window.localStorage, currentPid);
     void flushPendingSaves().then(() => {
       if (saveTimers.size === 0) {
-        clearEmergencyBackup();
+        clearEmergencyBackup(window.localStorage, currentPid);
       }
     });
   };

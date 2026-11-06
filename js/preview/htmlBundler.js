@@ -164,6 +164,18 @@ export function extractReferencedAssetPaths(entryPath, rawHtml) {
 
 /**
  * Extrae las rutas locales de reglas @import url(...) presentes en un archivo CSS.
+ *
+ * LIMITACIONES ARQUITECTÓNICAS Y CONDICIONES COMPLEJAS:
+ * - Soporta sintaxis estándar: `@import "archivo.css";` y `@import url("archivo.css");`.
+ * - Limitación conocida: No procesa condicionales avanzadas en directivas de importación, tales como
+ *   `@import url(...) layer(nombre) supports(...) media(...)`. Si una regla declara capas o consultas
+ *   de medios anidadas, se resolverá el archivo referenciado sin bifurcar el alcance condicional.
+ * - Enlaces remotos o absolutos (`http:`, `https:`, `//`, `blob:`, `data:`) se preservan sin resolver
+ *   para permitir su carga en vivo por el navegador dentro del iframe del preview.
+ *
+ * @param {string} cssPath Ruta del archivo CSS contenedor (para resolver rutas relativas).
+ * @param {string} cssContent Contenido textual de la hoja de estilo.
+ * @returns {string[]} Lista de rutas normalizadas de archivos a incrustar.
  */
 export function extractCssImportPaths(cssPath, cssContent) {
   if (!cssContent || typeof cssContent !== "string") return [];
@@ -483,6 +495,22 @@ export function bundleHtmlWithFolderAssets(
   let inlinedActiveCss = false;
   const deferredScripts = [];
 
+  /**
+   * Incrusta recursivamente directivas CSS `@import` locales resolviéndolas desde la memoria del bundle.
+   *
+   * SALVAGUARDAS Y LIMITACIONES:
+   * 1. Recursividad y ciclos: Controlado mediante el conjunto `visited` (`Set<string>`) para evitar
+   *    bucles infinitos o desbordamiento de pila ante importaciones circulares (ej. A -> B -> A).
+   * 2. Directivas complejas: Las directivas `@import` con media queries condicionales o `@layer`
+   *    se incrustan como bloques de estilos consecutivos sin particionar el árbol sintáctico.
+   * 3. Fallo controlado: Si un archivo referenciado no existe en `fileMap`, se conserva la regla `@import`
+   *    original intacta para permitir que el iframe resuelva o reporte el error de forma nativa.
+   *
+   * @param {string} cssContent
+   * @param {string} cssPath
+   * @param {Set<string>} [visited]
+   * @returns {string}
+   */
   function inlineCssImports(cssContent, cssPath, visited = new Set()) {
     const cleanPath = normalizePath(cssPath);
     if (visited.has(cleanPath)) return "";

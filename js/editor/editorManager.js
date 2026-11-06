@@ -387,12 +387,26 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     emitSelection(view.state);
   }
 
+  function purgeViewDocument() {
+    if (!view) return;
+    try {
+      // Reemplaza el documento por un estado neutro de 0 bytes para liberar AST de Lezer y buffers en RAM
+      const emptyState = EditorState.create({ doc: "", extensions: [] });
+      view.setState(emptyState);
+    } catch (_) {
+      try {
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
+      } catch (_) {}
+    }
+  }
+
   function clearActiveFile() {
     if (view && activeFileId) {
       statesByFile.set(activeFileId, view.state);
     }
     activeFileId = null;
     clearErrorMarkers();
+    purgeViewDocument();
     onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
   }
 
@@ -401,6 +415,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     if (activeFileId === fileId) {
       activeFileId = null;
       clearErrorMarkers();
+      purgeViewDocument();
       onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     }
   }
@@ -631,6 +646,7 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     openFile,
     clearActiveFile,
     dropFileState,
+    purgeViewDocument,
     renameFileStates,
     insertAtCursor,
     replaceSelection,
@@ -899,15 +915,20 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     },
     clearActiveFile() {
       activeFileId = null;
+      textarea.value = "";
       this.clearErrorMarkers();
       onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
     },
     dropFileState(fileId) {
       if (activeFileId === fileId) {
         activeFileId = null;
+        textarea.value = "";
         this.clearErrorMarkers();
         onSelectionChange({ text: "", lineCount: 0, cursorLine: 1, cursorCol: 1 });
       }
+    },
+    purgeViewDocument() {
+      textarea.value = "";
     },
     renameFileStates(oldPath, newPath, isFolder) {
       if (!activeFileId) return;
@@ -1031,6 +1052,7 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     focus: () => textarea?.focus(),
     destroy() {
       fallbackMinimap?.destroy?.();
+      textarea.value = "";
       mountEl.innerHTML = "";
       activeFileId = null;
     }

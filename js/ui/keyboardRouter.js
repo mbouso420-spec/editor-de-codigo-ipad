@@ -118,8 +118,10 @@ export class KeyboardRouter {
       if (event.key === "Escape" && typeof activeModal.onEscape === "function") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        activeModal.onEscape();
-        this.popModal(activeModal.id);
+        const shouldClose = activeModal.onEscape(event);
+        if (shouldClose !== false) {
+          this.popModal(activeModal.id);
+        }
         return;
       }
 
