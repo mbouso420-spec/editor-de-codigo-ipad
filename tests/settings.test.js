@@ -464,4 +464,57 @@ error[E0425]: cannot find value 'x' in this scope
     assert.equal(rustErrors[0].column, 5);
     assert.ok(rustErrors[0].message.includes("cannot find value"));
   });
+
+  test("Nuevos Lenguajes: inferFileMeta y Wandbox reconocen TypeScript, Java y C#", () => {
+    // inferFileMeta
+    const javaMeta = inferFileMeta("src/App.java");
+    assert.equal(javaMeta.lang, "java");
+    assert.equal(javaMeta.badge, "JAVA");
+
+    const csMeta = inferFileMeta("Program.cs");
+    assert.equal(csMeta.lang, "csharp");
+    assert.equal(csMeta.badge, "C#");
+
+    const tsMeta = inferFileMeta("index.ts");
+    assert.equal(tsMeta.lang, "ts");
+    assert.equal(tsMeta.badge, "TS");
+
+    // Symbol keys
+    assert.ok(LANGUAGE_SYMBOLS.java);
+    assert.equal(LANGUAGE_SYMBOLS.java.label, "Java");
+    assert.ok(LANGUAGE_SYMBOLS.java.keys.some((k) => k.label === "public"));
+
+    assert.ok(LANGUAGE_SYMBOLS.csharp);
+    assert.equal(LANGUAGE_SYMBOLS.csharp.label, "C#");
+    assert.ok(LANGUAGE_SYMBOLS.csharp.keys.some((k) => k.label === "using"));
+
+    assert.ok(LANGUAGE_SYMBOLS.ts);
+    assert.equal(LANGUAGE_SYMBOLS.ts.label, "TypeScript");
+    assert.ok(LANGUAGE_SYMBOLS.ts.keys.some((k) => k.label === "interface"));
+
+    // Wandbox payloads
+    const javaCode = "public class App { public static void main(String[] args) { System.out.println(\"Hi\"); } }";
+    assert.equal(hasMainFunction(javaCode), true);
+    const javaPayload = buildWandboxPayload({
+      activeFile: { path: "App.java", content: javaCode },
+      companionFiles: [{ path: "Util.java", content: "class Util {}" }]
+    });
+    assert.equal(javaPayload.compiler, "openjdk-head");
+    assert.equal(javaPayload.codes.length, 1);
+
+    const csCode = "using System; class Program { static void Main() { Console.WriteLine(\"Hi\"); } }";
+    assert.equal(hasMainFunction(csCode), true);
+    const csPayload = buildWandboxPayload({
+      activeFile: { path: "Program.cs", content: csCode },
+      companionFiles: [{ path: "Helper.cs", content: "class Helper {}" }]
+    });
+    assert.equal(csPayload.compiler, "dotnetcore-head");
+    assert.equal(csPayload.codes.length, 1);
+
+    const tsCode = "const greeting: string = \"Hello TS\"; console.log(greeting);";
+    const tsPayload = buildWandboxPayload({
+      activeFile: { path: "main.ts", content: tsCode }
+    });
+    assert.equal(tsPayload.compiler, "typescript-head");
+  });
 });

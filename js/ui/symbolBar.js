@@ -58,6 +58,56 @@ export const LANGUAGE_SYMBOLS = {
       { label: "\" \"", insert: "\"\"", cursorBack: 1 }
     ]
   },
+  java: {
+    label: "Java",
+    keys: [
+      { label: "Tab", insert: "    ", cursorBack: 0 },
+      { label: "public", insert: "public ", cursorBack: 0 },
+      { label: "class", insert: "class  {\n    \n}", cursorBack: 7 },
+      { label: "void", insert: "void ", cursorBack: 0 },
+      { label: "static", insert: "static ", cursorBack: 0 },
+      { label: "sout", insert: "System.out.println();", cursorBack: 2 },
+      { label: "{ }", insert: "{\n    \n}", cursorBack: 2 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: ";", insert: ";", cursorBack: 0 },
+      { label: "new", insert: "new ", cursorBack: 0 },
+      { label: "return", insert: "return ", cursorBack: 0 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 }
+    ]
+  },
+  csharp: {
+    label: "C#",
+    keys: [
+      { label: "Tab", insert: "    ", cursorBack: 0 },
+      { label: "using", insert: "using System;\n", cursorBack: 0 },
+      { label: "namespace", insert: "namespace \n{\n    \n}", cursorBack: 6 },
+      { label: "class", insert: "class  {\n    \n}", cursorBack: 7 },
+      { label: "public", insert: "public ", cursorBack: 0 },
+      { label: "cw", insert: "Console.WriteLine();", cursorBack: 2 },
+      { label: "{ }", insert: "{\n    \n}", cursorBack: 2 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: ";", insert: ";", cursorBack: 0 },
+      { label: "var", insert: "var ", cursorBack: 0 },
+      { label: "=>", insert: " => ", cursorBack: 0 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 }
+    ]
+  },
+  ts: {
+    label: "TypeScript",
+    keys: [
+      { label: "Tab", insert: "  ", cursorBack: 0 },
+      { label: "interface", insert: "interface  {\n  \n}", cursorBack: 5 },
+      { label: "type", insert: "type  = ;\n", cursorBack: 4 },
+      { label: ": string", insert: ": string", cursorBack: 0 },
+      { label: ": number", insert: ": number", cursorBack: 0 },
+      { label: "=>", insert: " => ", cursorBack: 0 },
+      { label: "as", insert: " as ", cursorBack: 0 },
+      { label: "{ }", insert: "{}", cursorBack: 1 },
+      { label: "( )", insert: "()", cursorBack: 1 },
+      { label: ";", insert: ";", cursorBack: 0 },
+      { label: "\" \"", insert: "\"\"", cursorBack: 1 }
+    ]
+  },
   html: {
     label: "HTML",
     keys: [
@@ -214,7 +264,10 @@ export function initSymbolBar({ onInsert }) {
    * @param {string} langKey
    */
   function setLanguage(langKey) {
-    const normalized = langKey === "c" ? "cpp" : langKey;
+    const normalized =
+      langKey === "c" ? "cpp"
+      : langKey === "tsx" || langKey === "typescript" ? "ts"
+      : langKey;
     const config = LANGUAGE_SYMBOLS[normalized] ?? LANGUAGE_SYMBOLS.js;
     if (langPill) {
       langPill.textContent = config.label;

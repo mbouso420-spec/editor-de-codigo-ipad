@@ -10,13 +10,16 @@ export const CPP_SOURCE_EXTENSIONS = new Set(["cpp", "cxx", "cc"]);
 export const CPP_HEADER_EXTENSIONS = new Set(["hpp", "hxx", "hh"]);
 export const RUST_SOURCE_EXTENSIONS = new Set(["rs"]);
 export const GO_SOURCE_EXTENSIONS = new Set(["go"]);
+export const JAVA_SOURCE_EXTENSIONS = new Set(["java"]);
+export const CSHARP_SOURCE_EXTENSIONS = new Set(["cs"]);
+export const TS_SOURCE_EXTENSIONS = new Set(["ts", "tsx"]);
 
 export const ALL_HEADER_EXTENSIONS = new Set(["h", "hpp", "hxx", "hh"]);
 export const ALL_C_EXTENSIONS = new Set(["c", "h"]);
 export const ALL_CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp", "hxx", "hh"]);
 
 /**
- * Detecta si un código fuente en C, C++, Rust o Go define la función de punto de entrada main().
+ * Detecta si un código fuente en C, C++, Rust, Go, Java o C# define la función de punto de entrada main / Main.
  * Descarta comentarios de bloque y de línea para prevenir falsos positivos.
  * @param {string} code
  * @returns {boolean}
@@ -26,7 +29,7 @@ export function hasMainFunction(code) {
   const stripped = code
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\/\/[^\r\n]*/g, " ");
-  return /\b(?:int|void|auto|signed|fn|func)?\s*main\s*(?:\([^)]*\)|!\s*\(|\(\s*\))\s*(?:->\s*[a-zA-Z0-9_:<>]+\s*)?\{/m.test(stripped);
+  return /\b(?:int|void|auto|signed|fn|func|public\s+static\s+void|static\s+void)?\s*[mM]ain\s*(?:\([^)]*\)|!\s*\(|\(\s*\))\s*(?:->\s*[a-zA-Z0-9_:<>]+\s*)?\{/m.test(stripped);
 }
 
 /**
@@ -203,6 +206,9 @@ export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "
   const ext = getFileExtension(activeFile.path);
   const isRust = RUST_SOURCE_EXTENSIONS.has(ext);
   const isGo = GO_SOURCE_EXTENSIONS.has(ext);
+  const isJava = JAVA_SOURCE_EXTENSIONS.has(ext);
+  const isCSharp = CSHARP_SOURCE_EXTENSIONS.has(ext);
+  const isTypeScript = TS_SOURCE_EXTENSIONS.has(ext);
   const isCSource = C_SOURCE_EXTENSIONS.has(ext);
   const isCHeader = C_HEADER_EXTENSIONS.has(ext);
   const isC = isCSource || (isCHeader && !companionFiles.some((f) => CPP_SOURCE_EXTENSIONS.has(getFileExtension(f?.path || ""))));
@@ -215,6 +221,15 @@ export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "
     options = "";
   } else if (isGo) {
     compiler = "go-head";
+    options = "";
+  } else if (isJava) {
+    compiler = "openjdk-head";
+    options = "";
+  } else if (isCSharp) {
+    compiler = "dotnetcore-head";
+    options = "";
+  } else if (isTypeScript) {
+    compiler = "typescript-head";
     options = "";
   } else if (isC) {
     compiler = "gcc-head-c";
@@ -240,6 +255,12 @@ export function buildWandboxPayload({ activeFile, companionFiles = [], stdin = "
       if (!RUST_SOURCE_EXTENSIONS.has(compExt)) continue;
     } else if (isGo) {
       if (!GO_SOURCE_EXTENSIONS.has(compExt)) continue;
+    } else if (isJava) {
+      if (!JAVA_SOURCE_EXTENSIONS.has(compExt)) continue;
+    } else if (isCSharp) {
+      if (!CSHARP_SOURCE_EXTENSIONS.has(compExt)) continue;
+    } else if (isTypeScript) {
+      if (!TS_SOURCE_EXTENSIONS.has(compExt)) continue;
     } else if (isC) {
       if (!C_SOURCE_EXTENSIONS.has(compExt) && !C_HEADER_EXTENSIONS.has(compExt)) {
         continue;

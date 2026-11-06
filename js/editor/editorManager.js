@@ -17,7 +17,7 @@ const DEFAULT_FONT_SIZE = 14;
  * @returns {number}
  */
 export function getIndentSize(lang) {
-  return lang === "python" || lang === "cpp" || lang === "c" || lang === "sql" || lang === "rust" || lang === "go" ? 4 : 2;
+  return lang === "python" || lang === "cpp" || lang === "c" || lang === "sql" || lang === "rust" || lang === "go" || lang === "java" || lang === "csharp" ? 4 : 2;
 }
 
 /**
@@ -257,18 +257,23 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
         return langs.json ? langs.json() : langs.javascript();
       case "rust":
       case "go":
+      case "java":
+      case "csharp":
       case "cpp":
       case "c":
-        return langs.cpp();
+        return langs.cpp ? langs.cpp() : [];
       case "html":
-        return langs.html();
+        return langs.html ? langs.html() : [];
       case "css":
-        return langs.css();
+        return langs.css ? langs.css() : [];
       case "sql":
-        return langs.sql();
+        return langs.sql ? langs.sql() : [];
+      case "ts":
+      case "tsx":
+        return langs.javascript ? langs.javascript({ typescript: true, jsx: true }) : [];
       case "js":
       default:
-        return langs.javascript();
+        return langs.javascript ? langs.javascript() : [];
     }
   }
 

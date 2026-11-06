@@ -82,10 +82,15 @@ export function inferFileMeta(path) {
     case "md":
     case "markdown":
       return { lang: "markdown", badge: "MD", icon: "fileText" };
+    case "java":
+      return { lang: "java", badge: "JAVA", icon: "fileCode" };
+    case "cs":
+      return { lang: "csharp", badge: "C#", icon: "fileCode" };
+    case "ts":
+      return { lang: "ts", badge: "TS", icon: "fileCode" };
     case "js":
     case "mjs":
     case "cjs":
-    case "ts":
     case "jsx":
     case "tsx":
       return { lang: "js", badge: ext.toUpperCase(), icon: "fileCode" };
