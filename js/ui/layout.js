@@ -56,6 +56,13 @@ export function initLayoutController() {
     }
     persistBool(STORAGE_KEYS.leftOpen, leftOpen);
     persistBool(STORAGE_KEYS.rightOpen, rightOpen);
+    if (leftOpen) {
+      const storedW = Number(safeGetStorage(STORAGE_KEYS.leftWidth));
+      if (!Number.isFinite(storedW) || storedW < 220) {
+        document.documentElement.style.setProperty("--left-panel-w", "256px");
+        safeSetStorage(STORAGE_KEYS.leftWidth, "256");
+      }
+    }
     applyState();
   }
 
@@ -66,6 +73,13 @@ export function initLayoutController() {
     }
     persistBool(STORAGE_KEYS.leftOpen, leftOpen);
     persistBool(STORAGE_KEYS.rightOpen, rightOpen);
+    if (rightOpen) {
+      const storedW = Number(safeGetStorage(STORAGE_KEYS.rightWidth));
+      if (!Number.isFinite(storedW) || storedW < 260) {
+        document.documentElement.style.setProperty("--right-panel-w", "340px");
+        safeSetStorage(STORAGE_KEYS.rightWidth, "340");
+      }
+    }
     applyState();
   }
 
@@ -125,10 +139,18 @@ export function initLayoutController() {
 
   // Divisores arrastrables con soporte táctil y mouse (Pointer Events)
   if (resizerLeft) {
-    bindSplitter(resizerLeft, "left");
+    bindSplitter(resizerLeft, "left", {
+      onCollapse: () => setLeftOpen(false),
+      onExpand: () => setLeftOpen(true),
+      isOpen: () => leftOpen
+    });
   }
   if (resizerRight) {
-    bindSplitter(resizerRight, "right");
+    bindSplitter(resizerRight, "right", {
+      onCollapse: () => setRightOpen(false),
+      onExpand: () => setRightOpen(true),
+      isOpen: () => rightOpen
+    });
   }
 
   // Gestos swipe cortos sobre cada panel abierto para cerrarlo sin interferir con bordes de Safari/Stage Manager
@@ -156,7 +178,7 @@ export function initLayoutController() {
   };
 }
 
-function bindSplitter(handle, side) {
+function bindSplitter(handle, side, callbacks = {}) {
   let activePointerId = null;
 
   handle.setAttribute("role", "separator");
@@ -222,10 +244,26 @@ function bindSplitter(handle, side) {
 
     const viewportWidth = window.innerWidth;
     if (side === "left") {
-      const nextWidth = clamp(Math.round(event.clientX - 8), 190, Math.min(420, Math.floor(viewportWidth * 0.36)));
+      const rawWidth = Math.round(event.clientX - 8);
+      if (rawWidth < 140) {
+        callbacks.onCollapse?.();
+        return;
+      }
+      if (callbacks.isOpen && !callbacks.isOpen()) {
+        callbacks.onExpand?.();
+      }
+      const nextWidth = clamp(rawWidth, 220, Math.min(420, Math.floor(viewportWidth * 0.36)));
       applyWidth(nextWidth);
     } else {
-      const nextWidth = clamp(Math.round(viewportWidth - event.clientX - 8), 260, Math.min(540, Math.floor(viewportWidth * 0.44)));
+      const rawWidth = Math.round(viewportWidth - event.clientX - 8);
+      if (rawWidth < 160) {
+        callbacks.onCollapse?.();
+        return;
+      }
+      if (callbacks.isOpen && !callbacks.isOpen()) {
+        callbacks.onExpand?.();
+      }
+      const nextWidth = clamp(rawWidth, 260, Math.min(540, Math.floor(viewportWidth * 0.44)));
       applyWidth(nextWidth);
     }
   });
@@ -333,9 +371,11 @@ function restorePanelWidths() {
   const maxLeft = Math.min(420, Math.floor(viewportWidth * 0.36));
   const maxRight = Math.min(540, Math.floor(viewportWidth * 0.44));
 
-  if (Number.isFinite(leftW) && leftW >= 190) {
-    const clampedL = clamp(leftW, 190, maxLeft);
+  if (Number.isFinite(leftW) && leftW >= 220) {
+    const clampedL = clamp(leftW, 220, maxLeft);
     document.documentElement.style.setProperty("--left-panel-w", `${clampedL}px`);
+  } else {
+    document.documentElement.style.setProperty("--left-panel-w", "256px");
   }
   if (Number.isFinite(rightW) && rightW >= 260) {
     const clampedR = clamp(rightW, 260, maxRight);
