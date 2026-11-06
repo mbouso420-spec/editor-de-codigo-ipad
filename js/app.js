@@ -57,7 +57,12 @@ import {
   writeEmergencyBackup,
   getTabInstanceId
 } from "./storage/emergencyBackup.js";
-import { base64ToUint8Array } from "./storage/fileImport.js";
+import {
+  base64ToUint8Array,
+  isBinaryFile,
+  isImageFile,
+  getImageMimeType
+} from "./storage/fileImport.js";
 
 async function initApp() {
   hydrateIcons(document);
@@ -132,6 +137,7 @@ async function initApp() {
   const splitTitleTextEl = document.getElementById("editor-split-title-text");
   const splitFileSelectEl = document.getElementById("editor-split-file-select");
   const btnCloseSplit = document.getElementById("btn-close-split");
+  const binaryPreviewEl = document.getElementById("editor-binary-preview");
 
   let isSplitOpen = false;
   let splitActiveFileId = null;
@@ -218,11 +224,12 @@ async function initApp() {
   keyboardRouter.registerGlobalShortcut("meta+shift+f", () => globalSearchModal.open());
 
   const getContextSnapshot = () => {
-    const activeFile = activeFileId ? filesOnly.find((f) => f.id === activeFileId) ?? null : null;
+    const rawActive = activeFileId ? filesOnly.find((f) => f.id === activeFileId) ?? null : null;
+    const activeFile = rawActive && isBinaryFile(rawActive) ? null : rawActive;
     const otherOpenFiles = openTabIds
       .filter((id) => id !== activeFileId)
       .map((id) => filesOnly.find((f) => f.id === id))
-      .filter((f) => Boolean(f) && f.contentLoaded !== false);
+      .filter((f) => Boolean(f) && f.contentLoaded !== false && !isBinaryFile(f));
 
     return {
       activeFile,
@@ -251,6 +258,41 @@ async function initApp() {
       editor.insertAtCursor(text, cursorBack);
     }
   });
+
+  async function downloadSingleFile(filePath) {
+    const target = filesOnly.find((f) => f.id === filePath);
+    if (!target) return;
+    try {
+      await ensureFileContentLoaded(target);
+    } catch (error) {
+      explorer.setAutosaveStatus(
+        error instanceof Error ? error.message : "No se pudo descargar el archivo desde GitHub"
+      );
+      return;
+    }
+    const filename = target.path.split("/").pop() || "archivo.txt";
+    let blob;
+    if (target.isBinary && (target.base64 || target.content)) {
+      const rawBytes = base64ToUint8Array(target.base64 || target.content);
+      blob = new Blob([rawBytes], { type: "application/octet-stream" });
+    } else {
+      blob = new Blob([target.content ?? ""], { type: "text/plain;charset=utf-8" });
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadCurrentActiveFile() {
+    const current = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
+    if (!current) return;
+    await downloadSingleFile(current.id);
+  }
 
   const explorer = initExplorerController({
     onSelectFile(path) {
@@ -454,62 +496,8 @@ async function initApp() {
       explorer.setAutosaveStatus(`Archivo duplicado como "${newPath.split("/").pop()}"`);
       await github.refreshTopbarBadge();
     },
-    async onDownloadFile(filePath) {
-      const target = filesOnly.find((f) => f.id === filePath);
-      if (!target) return;
-      try {
-        await ensureFileContentLoaded(target);
-      } catch (error) {
-        explorer.setAutosaveStatus(
-          error instanceof Error ? error.message : "No se pudo descargar el archivo desde GitHub"
-        );
-        return;
-      }
-      const filename = target.path.split("/").pop() || "archivo.txt";
-      let blob;
-      if (target.isBinary && (target.base64 || target.content)) {
-        const rawBytes = base64ToUint8Array(target.base64 || target.content);
-        blob = new Blob([rawBytes], { type: "application/octet-stream" });
-      } else {
-        blob = new Blob([target.content ?? ""], { type: "text/plain;charset=utf-8" });
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    },
-    async onDownloadActiveFile() {
-      const current = activeFileId ? filesOnly.find((f) => f.id === activeFileId) : null;
-      if (!current) return;
-      try {
-        await ensureFileContentLoaded(current);
-      } catch (error) {
-        explorer.setAutosaveStatus(
-          error instanceof Error ? error.message : "No se pudo descargar el archivo desde GitHub"
-        );
-        return;
-      }
-      const filename = current.path.split("/").pop() || "archivo.txt";
-      let blob;
-      if (current.isBinary && (current.base64 || current.content)) {
-        const rawBytes = base64ToUint8Array(current.base64 || current.content);
-        blob = new Blob([rawBytes], { type: "application/octet-stream" });
-      } else {
-        blob = new Blob([current.content ?? ""], { type: "text/plain;charset=utf-8" });
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    },
+    onDownloadFile: downloadSingleFile,
+    onDownloadActiveFile: downloadCurrentActiveFile,
     async onExportProjectZip() {
       await flushPendingSaves();
       if (!filesOnly || filesOnly.length === 0) {
@@ -1030,7 +1018,7 @@ async function initApp() {
   }
 
   function openSplitFile(file) {
-    if (!file || !editorSplit) return;
+    if (!file || !editorSplit || isBinaryFile(file)) return;
     splitActiveFileId = file.id;
     editorSplit.openFile(file);
     if (splitTitleTextEl) splitTitleTextEl.textContent = file.shortName;
@@ -1426,6 +1414,14 @@ async function initApp() {
     }
     activeFileId = target.id;
     await persistTabsState();
+
+    // Guardia de archivos binarios: si es binario/Base64, evitar pasarlo a CodeMirror como texto plano
+    if (isBinaryFile(target)) {
+      renderWorkspaceView();
+      layout.closeLeftOnCompactSelect();
+      return;
+    }
+
     renderWorkspaceView();
     layout.closeLeftOnCompactSelect();
   }
@@ -1541,6 +1537,137 @@ async function initApp() {
     renderWorkspaceView();
   }
 
+  function hideBinaryPreview() {
+    if (binaryPreviewEl) {
+      binaryPreviewEl.hidden = true;
+      binaryPreviewEl.innerHTML = "";
+    }
+  }
+
+  function renderBinaryPreview(file) {
+    if (!binaryPreviewEl) return;
+    binaryPreviewEl.hidden = false;
+    binaryPreviewEl.innerHTML = "";
+
+    const card = document.createElement("div");
+    card.className = "editor-binary-card";
+
+    const isImg = isImageFile(file);
+    const base64Data = file.base64 || (file.isBinary && typeof file.content === "string" ? file.content : null);
+    const ext = (file.path || "").split(".").pop().toLowerCase();
+
+    let sizeFormatted = "";
+    if (base64Data) {
+      const bytesLen = Math.floor((base64Data.length * 3) / 4);
+      if (bytesLen < 1024) {
+        sizeFormatted = `${bytesLen} B`;
+      } else if (bytesLen < 1024 * 1024) {
+        sizeFormatted = `${(bytesLen / 1024).toFixed(1)} KB`;
+      } else {
+        sizeFormatted = `${(bytesLen / (1024 * 1024)).toFixed(2)} MB`;
+      }
+    }
+
+    if (isImg && (base64Data || (ext === "svg" && typeof file.content === "string"))) {
+      const mime = getImageMimeType(file.path);
+      const imgSrc = base64Data
+        ? `data:${mime};base64,${base64Data}`
+        : `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`;
+
+      const imgContainer = document.createElement("div");
+      imgContainer.className = "editor-binary-image-container";
+
+      const img = document.createElement("img");
+      img.className = "editor-binary-image";
+      img.alt = file.shortName;
+      img.src = imgSrc;
+
+      imgContainer.appendChild(img);
+      card.appendChild(imgContainer);
+
+      const info = document.createElement("div");
+      info.className = "editor-binary-info";
+
+      const title = document.createElement("h2");
+      title.className = "editor-binary-title";
+      title.textContent = file.shortName;
+      info.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "editor-binary-meta";
+
+      const badge = document.createElement("span");
+      badge.className = "editor-binary-badge";
+      badge.textContent = ext.toUpperCase();
+      meta.appendChild(badge);
+
+      const sizeSpan = document.createElement("span");
+      sizeSpan.textContent = sizeFormatted || "Imagen";
+      meta.appendChild(sizeSpan);
+
+      const dimSpan = document.createElement("span");
+      dimSpan.className = "editor-binary-dim";
+      img.addEventListener("load", () => {
+        dimSpan.textContent = `${img.naturalWidth} × ${img.naturalHeight} px`;
+      });
+      meta.appendChild(dimSpan);
+
+      info.appendChild(meta);
+      card.appendChild(info);
+    } else {
+      const mark = document.createElement("div");
+      mark.className = "editor-empty-mark";
+      mark.innerHTML = icon(file.icon || "fileText");
+      card.appendChild(mark);
+
+      const info = document.createElement("div");
+      info.className = "editor-binary-info";
+
+      const title = document.createElement("h2");
+      title.className = "editor-binary-title";
+      title.textContent = file.shortName;
+      info.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "editor-binary-meta";
+
+      const badge = document.createElement("span");
+      badge.className = "editor-binary-badge";
+      badge.textContent = ext ? ext.toUpperCase() : "BIN";
+      meta.appendChild(badge);
+
+      if (sizeFormatted) {
+        const sizeSpan = document.createElement("span");
+        sizeSpan.textContent = sizeFormatted;
+        meta.appendChild(sizeSpan);
+      }
+
+      info.appendChild(meta);
+
+      const desc = document.createElement("p");
+      desc.className = "editor-binary-desc";
+      desc.textContent = "Este archivo contiene datos binarios que no pueden editarse en el editor de código para proteger su integridad.";
+      info.appendChild(desc);
+
+      card.appendChild(info);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "editor-binary-actions";
+
+    const dlBtn = document.createElement("button");
+    dlBtn.type = "button";
+    dlBtn.className = "btn btn-secondary btn-sm";
+    dlBtn.innerHTML = `${icon("download")} <span>Descargar archivo</span>`;
+    dlBtn.addEventListener("click", () => {
+      void downloadCurrentActiveFile();
+    });
+    actions.appendChild(dlBtn);
+
+    card.appendChild(actions);
+    binaryPreviewEl.appendChild(card);
+  }
+
   function renderWorkspaceView() {
     explorer.renderProjects(projects, activeProject.id);
     explorer.renderTree(entries, activeFileId);
@@ -1551,16 +1678,25 @@ async function initApp() {
 
     if (activeFile) {
       if (emptyStateEl) emptyStateEl.hidden = true;
-      if (editorMountEl) editorMountEl.hidden = false;
-      editor.openFile(activeFile);
-      symbolBar.setLanguage(activeFile.lang);
-      setEditorToolbarDisabled(false);
+      if (isBinaryFile(activeFile)) {
+        if (editorMountEl) editorMountEl.hidden = true;
+        renderBinaryPreview(activeFile);
+        symbolBar.setLanguage(activeFile.lang);
+        setEditorToolbarDisabled(false, true);
+      } else {
+        hideBinaryPreview();
+        if (editorMountEl) editorMountEl.hidden = false;
+        editor.openFile(activeFile);
+        symbolBar.setLanguage(activeFile.lang);
+        setEditorToolbarDisabled(false, false);
+      }
     } else {
+      hideBinaryPreview();
       editor.clearActiveFile();
       if (editorMountEl) editorMountEl.hidden = true;
       if (emptyStateEl) emptyStateEl.hidden = false;
       renderEmptyQuickList();
-      setEditorToolbarDisabled(true);
+      setEditorToolbarDisabled(true, false);
     }
 
     updateAssistantContextLabel();
@@ -1676,10 +1812,13 @@ async function initApp() {
     }
   }
 
-  function setEditorToolbarDisabled(disabled) {
-    for (const el of [btnUndo, btnRedo, btnSearch, btnExportFile]) {
-      if (el) el.disabled = disabled;
-    }
+  function setEditorToolbarDisabled(disabled, isBinary = false) {
+    if (btnUndo) btnUndo.disabled = disabled || isBinary;
+    if (btnRedo) btnRedo.disabled = disabled || isBinary;
+    if (btnSearch) btnSearch.disabled = disabled || isBinary;
+    if (btnExportFile) btnExportFile.disabled = disabled;
+    if (btnWrap) btnWrap.disabled = disabled || isBinary;
+    if (btnMinimap) btnMinimap.disabled = disabled || isBinary;
   }
 
   function updateNetworkIndicator() {
@@ -1695,6 +1834,10 @@ async function initApp() {
       if (statusFilePathEl) statusFilePathEl.textContent = "Sin archivo abierto";
       if (statusFileLangEl) statusFileLangEl.textContent = "—";
       if (statusCursorPosEl) statusCursorPosEl.textContent = "—";
+    } else if (isBinaryFile(activeFile)) {
+      if (statusFilePathEl) statusFilePathEl.textContent = activeFile.path;
+      if (statusFileLangEl) statusFileLangEl.textContent = activeFile.badge || "BIN";
+      if (statusCursorPosEl) statusCursorPosEl.textContent = "Binario (Solo lectura)";
     } else {
       if (statusFilePathEl) statusFilePathEl.textContent = activeFile.path;
       if (statusFileLangEl) statusFileLangEl.textContent = activeFile.badge;
@@ -1717,6 +1860,12 @@ async function initApp() {
     if (!activeFile) {
       if (contextStatusEl) contextStatusEl.textContent = "Sin archivo activo";
       if (contextFileEl) contextFileEl.textContent = "Ninguno";
+      return;
+    }
+
+    if (isBinaryFile(activeFile)) {
+      if (contextStatusEl) contextStatusEl.textContent = "Recurso binario (no editable)";
+      if (contextFileEl) contextFileEl.textContent = activeFile.shortName;
       return;
     }
 

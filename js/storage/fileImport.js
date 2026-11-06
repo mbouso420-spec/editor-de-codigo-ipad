@@ -2,7 +2,7 @@
  * Decide si un archivo elegido para importar es texto editable o un recurso binario soportado.
  * Los binarios no soportados (ZIP, ejecutables, audio masivo…) se rechazan para evitar corrupciones.
  */
-const BINARY_EXTENSIONS = new Set([
+export const BINARY_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "tif", "tiff", "heic", "psd",
   "pdf", "zip", "tar", "gz", "tgz", "7z", "rar", "bz2", "xz",
   "woff", "woff2", "ttf", "otf", "eot",
@@ -11,9 +11,64 @@ const BINARY_EXTENSIONS = new Set([
   "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "sqlite", "db"
 ]);
 
+export const IMAGE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "svg"
+]);
+
 export const SUPPORTED_BINARY_ASSET_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "pdf", "ico", "svg"
 ]);
+
+/**
+ * Determina si un archivo o ruta corresponde a un recurso binario.
+ * @param {{ path?: string, name?: string, id?: string, isBinary?: boolean, base64?: string, encoding?: string } | string} file
+ * @returns {boolean}
+ */
+export function isBinaryFile(file) {
+  if (!file) return false;
+  if (typeof file === "object") {
+    if (file.isBinary) return true;
+    if (file.base64 && typeof file.base64 === "string") return true;
+    if (file.encoding === "base64") return true;
+  }
+  const path = typeof file === "string" ? file : (file.path || file.name || file.id || "");
+  const base = String(path || "").split("/").pop() || "";
+  const ext = base.includes(".") ? base.split(".").pop().toLowerCase() : "";
+  return BINARY_EXTENSIONS.has(ext);
+}
+
+/**
+ * Determina si un archivo o ruta corresponde a una imagen visualizable.
+ * @param {{ path?: string, name?: string, id?: string } | string} file
+ * @returns {boolean}
+ */
+export function isImageFile(file) {
+  const path = typeof file === "string" ? file : (file?.path || file?.name || file?.id || "");
+  const base = String(path || "").split("/").pop() || "";
+  const ext = base.includes(".") ? base.split(".").pop().toLowerCase() : "";
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
+/**
+ * Devuelve el tipo MIME adecuado para un archivo de imagen.
+ * @param {string} fileNameOrPath
+ * @returns {string}
+ */
+export function getImageMimeType(fileNameOrPath) {
+  const ext = String(fileNameOrPath || "").split(".").pop().toLowerCase();
+  switch (ext) {
+    case "png": return "image/png";
+    case "jpg":
+    case "jpeg": return "image/jpeg";
+    case "gif": return "image/gif";
+    case "webp": return "image/webp";
+    case "svg": return "image/svg+xml";
+    case "ico": return "image/x-icon";
+    case "bmp": return "image/bmp";
+    case "avif": return "image/avif";
+    default: return "image/png";
+  }
+}
 
 export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const SNIFF_BYTES = 8000;

@@ -87,6 +87,9 @@ La aplicación organiza el espacio de trabajo en **3 islas ergonómicas**:
    - Si intentás cerrar una pestaña que tiene cambios locales aún no sincronizados con GitHub, el IDE abre un diálogo de confirmación accesible antes de purgar el estado de memoria del archivo.
 5. **Adaptación fluida a la rotación de pantalla:**
    - Si rotás el iPad de horizontal a vertical o reacomodás el tamaño de ventana en Stage Manager, los paneles laterales se re-ajustan proporcionalmente al instante para que nunca desborden la pantalla ni queden cortados.
+6. **Guardia de seguridad para imágenes y archivos binarios:**
+   - Si abrís una imagen (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.ico`), el panel central monta una previsualización visual con sus dimensiones en píxeles, peso formateado y botón de descarga directa.
+   - Si abrís cualquier otro archivo binario (`.pdf`, `.zip`, `.wasm`), el IDE presenta una ficha técnica con su peso y opción de descarga, protegiendo a CodeMirror y a la memoria del navegador de corrupciones por texto plano.
 
 ---
 

@@ -264,6 +264,110 @@
   gap: var(--space-xs);
 }
 
+/* Pantalla de previsualización para archivos binarios (imágenes y recursos no editables) */
+.editor-binary-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  background: var(--color-editor-bg);
+  color: var(--color-ink-2);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.editor-binary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  max-width: 680px;
+  width: 100%;
+  padding: var(--space-xl);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+  border: var(--rule-hair) solid var(--color-rule);
+  text-align: center;
+  box-shadow: var(--shadow-card);
+}
+
+.editor-binary-image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 52vh;
+  padding: var(--space-md);
+  border-radius: var(--radius-control);
+  background: repeating-conic-gradient(var(--color-paper-3) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+  border: var(--rule-hair) solid var(--color-rule);
+  overflow: hidden;
+}
+
+.editor-binary-image {
+  max-width: 100%;
+  max-height: 48vh;
+  object-fit: contain;
+  border-radius: var(--radius-control);
+  display: block;
+}
+
+.editor-binary-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.editor-binary-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.editor-binary-meta {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  justify-content: center;
+  align-items: center;
+}
+
+.editor-binary-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
+  border: var(--rule-hair) solid var(--color-rule);
+}
+
+.editor-binary-desc {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  max-width: 44ch;
+  line-height: 1.5;
+}
+
+.editor-binary-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
 @media (pointer: coarse) {
   .editor-tab-close {
     width: 32px;

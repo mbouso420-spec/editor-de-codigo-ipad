@@ -96,6 +96,15 @@ export function inferFileMeta(path) {
       return { lang: "js", badge: ext.toUpperCase(), icon: "fileCode" };
     case "json":
       return { lang: "json", badge: "JSON", icon: "fileCode" };
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "avif":
+    case "ico":
+    case "bmp":
+      return { lang: "image", badge: ext.slice(0, 4).toUpperCase(), icon: "image" };
     default:
       return { lang: "text", badge: ext ? ext.slice(0, 4).toUpperCase() : "TXT", icon: "fileText" };
   }

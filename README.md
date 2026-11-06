@@ -8,7 +8,7 @@
 
 - **Aplicación web (GitHub Pages):** https://mbouso420-spec.github.io/ide-ipad/
 - **Manual de Usuario paso a paso:** [Ver Manual de Usuario completo (`MANUAL_DE_USUARIO.md`)](./MANUAL_DE_USUARIO.md)
-- **Suite de pruebas automáticas:** 420 tests unitarios pasando al 100% (95 suites, 0 fallos).
+- **Suite de pruebas automáticas:** 423 tests unitarios pasando al 100% (96 suites, 0 fallos).
 
 ---
 
@@ -29,6 +29,7 @@
   - **Barra táctil de símbolos con Auto-Wrap:** al seleccionar texto y tocar delimitadores (`( )`, `{ }`, `[ ]`, `" "`, `' '`, ```` ``` ````), el contenido seleccionado se envuelve automáticamente conservando la selección interna.
   - **Paleta de apertura rápida (`Cmd + P` / `Ctrl + P`):** filtrado instantáneo de archivos y salto directo a línea mediante la sintaxis `:número` (ej. `app.js:140` o `:45` sobre el archivo activo).
   - **Regla visual de errores en el scrollbar (Error Overview Ruler):** barra lateral derecha (`#editor-error-ruler`) que posiciona proporcionalmente píldoras interactivas de diagnóstico (errores de GCC o sintaxis), permitiendo saltar a la línea afectada con un solo toque.
+  - **Guardia de seguridad para archivos binarios:** imágenes (.png, .jpg, .webp, .svg, etc.) y recursos binarios (.pdf, .zip, .wasm) se visualizan en un visor seguro dedicado con previsualización visual o ficha técnica y opción de descarga directa, protegiendo a CodeMirror y a la memoria del navegador de corrupciones por texto plano.
   - Resaltado de sintaxis para **Python, C, C++, HTML, CSS, JavaScript y SQL**, autocompletado inteligente, búsqueda/reemplazo y control de tamaño tipográfico.
 - **Adaptación a Stage Manager y teclado virtual:**
   - Control dinámico de `visualViewport` para evitar desplazamientos accidentales al desplegar el teclado táctil de iPadOS.
@@ -156,7 +157,7 @@
 │       ├── diffModal.js        # Visor de diferencias LCS línea por línea
 │       ├── livePreviewModal.js # Previsualización multi-página, selector de páginas y switcher de medidas
 │       └── icons.js            # Iconografía SVG optimizada
-└── tests/                      # Suite automatizada con 420 pruebas unitarias y E2E
+└── tests/                      # Suite automatizada con 423 pruebas unitarias y E2E
 ```
 
 ---
@@ -170,8 +171,8 @@ npm --prefix tests test
 ```
 
 Resultado actual:
-- **420 pruebas unitarias y de integración ejecutadas.**
-- **95 suites completadas.**
+- **423 pruebas unitarias y de integración ejecutadas.**
+- **96 suites completadas.**
 - **0 fallos, 0 pruebas canceladas.**
 - Tiempo de ejecución: **~1.5 segundos.**
 

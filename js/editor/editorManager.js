@@ -350,6 +350,9 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
   }
 
   function openFile(file) {
+    if (!file || file.isBinary || file.encoding === "base64") {
+      return;
+    }
     if (view && activeFileId) {
       statesByFile.set(activeFileId, view.state);
     }
@@ -902,6 +905,9 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
 
   return {
     openFile(file) {
+      if (!file || file.isBinary || file.encoding === "base64") {
+        return;
+      }
       activeFileId = file.id;
       activeLang = file.lang;
       if (!mountEl.contains(textarea)) {

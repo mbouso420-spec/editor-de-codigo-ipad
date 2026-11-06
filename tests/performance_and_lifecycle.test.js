@@ -1,7 +1,13 @@
 import "./setup.js";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { uint8ArrayToBase64, base64ToUint8Array } from "../js/storage/fileImport.js";
+import {
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+  isBinaryFile,
+  isImageFile,
+  getImageMimeType
+} from "../js/storage/fileImport.js";
 import { buildZipArchive } from "../js/storage/zipExporter.js";
 import { searchInFiles } from "../js/search/projectSearch.js";
 import { createEditorManager } from "../js/editor/editorManager.js";
@@ -604,6 +610,81 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       assert.ok(html.includes("resultados_sql_completos.csv"));
       assert.ok(html.includes("resultados_sql_completos.json"));
       assert.ok(html.includes("CSV (Esta página)"));
+    });
+  });
+
+  describe("10. Guardia de Archivos Binarios en el Editor e Integridad de CodeMirror", () => {
+    test("isBinaryFile reconoce propiedades isBinary, base64 y extensiones binarias", () => {
+      assert.equal(isBinaryFile({ path: "img.png", isBinary: true }), true);
+      assert.equal(isBinaryFile({ path: "custom.dat", base64: "AQID" }), true);
+      assert.equal(isBinaryFile({ path: "archivo.bin", encoding: "base64" }), true);
+      assert.equal(isBinaryFile("foto.jpg"), true);
+      assert.equal(isBinaryFile("archivo.pdf"), true);
+      assert.equal(isBinaryFile("bundle.zip"), true);
+      assert.equal(isBinaryFile("engine.wasm"), true);
+      assert.equal(isBinaryFile("script.js"), false);
+      assert.equal(isBinaryFile("estilos.css"), false);
+      assert.equal(isBinaryFile("index.html"), false);
+      assert.equal(isBinaryFile(null), false);
+    });
+
+    test("isImageFile e getImageMimeType identifican imágenes y resuelven el MIME correspondiente", () => {
+      assert.equal(isImageFile("foto.png"), true);
+      assert.equal(isImageFile("avatar.jpg"), true);
+      assert.equal(isImageFile("logo.webp"), true);
+      assert.equal(isImageFile("diagrama.svg"), true);
+      assert.equal(isImageFile("main.cpp"), false);
+
+      assert.equal(getImageMimeType("test.png"), "image/png");
+      assert.equal(getImageMimeType("test.jpg"), "image/jpeg");
+      assert.equal(getImageMimeType("test.jpeg"), "image/jpeg");
+      assert.equal(getImageMimeType("test.gif"), "image/gif");
+      assert.equal(getImageMimeType("test.webp"), "image/webp");
+      assert.equal(getImageMimeType("test.svg"), "image/svg+xml");
+      assert.equal(getImageMimeType("test.ico"), "image/x-icon");
+    });
+
+    test("editorManager no procesa ni carga en el documento archivos marcados como binarios", async () => {
+      const mount = document.createElement("div");
+      let changeFired = false;
+      const editor = await createEditorManager({
+        mountEl: mount,
+        enableMinimap: false,
+        onDocChange: () => { changeFired = true; },
+        onSelectionChange: () => {}
+      });
+
+      // Intentar abrir archivo binario
+      editor.openFile({
+        id: "banner.png",
+        path: "banner.png",
+        lang: "image",
+        isBinary: true,
+        content: "AQIDBA=="
+      });
+
+      // El editor debe haber ignorado la apertura para no corromper la memoria
+      assert.equal(editor.getActiveFileId(), null);
+      assert.equal(changeFired, false);
+
+      // Abrir archivo de texto normal debe funcionar sin problemas
+      editor.openFile({
+        id: "main.js",
+        path: "main.js",
+        lang: "js",
+        isBinary: false,
+        content: "console.log(1);"
+      });
+      assert.equal(editor.getActiveFileId(), "main.js");
+
+      // Intentar abrir binario con encoding base64 cuando hay un archivo activo no debe pisarlo
+      editor.openFile({
+        id: "data.bin",
+        path: "data.bin",
+        encoding: "base64",
+        content: "AQID"
+      });
+      assert.equal(editor.getActiveFileId(), "main.js");
     });
   });
 });
