@@ -39,6 +39,7 @@ body[data-keyboard-open="true"] .ide-workspace {
   container-type: inline-size;
   container-name: panel-left;
   width: var(--left-panel-w);
+  min-width: 190px;
   flex-shrink: 0;
 }
 
@@ -211,27 +212,31 @@ body[data-keyboard-open="true"] .ide-workspace {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
 }
 
+body[data-left-open="false"] .panel-title,
 body[data-left-open="false"] #panel-explorer .panel-title {
   display: none !important;
 }
 
+body[data-right-open="false"] .panel-title,
 body[data-right-open="false"] #panel-assistant .panel-title {
   display: none !important;
 }
 
-@container panel-left (max-width: 230px) {
-  #panel-explorer .panel-title {
+@container panel-left (max-width: 250px) {
+  .panel-title {
     display: none !important;
   }
 }
 
-@container panel-right (max-width: 230px) {
-  #panel-assistant .panel-title {
+@container panel-right (max-width: 250px) {
+  .panel-title {
     display: none !important;
   }
 }

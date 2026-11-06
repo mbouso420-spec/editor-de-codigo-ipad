@@ -694,6 +694,53 @@
    Pestaña "Modelos" en Configuración: Medidor de Tokens y Proveedores
    ========================================================================== */
 
+.models-overview-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+  border: var(--rule-hair) solid var(--color-rule);
+}
+
+.models-overview-info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.models-overview-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-accent-text);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.models-overview-texts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+  min-width: 0;
+}
+
+.models-overview-status {
+  flex-shrink: 0;
+}
+
+@media (max-width: 540px) {
+  .models-overview-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .models-section-card {
   display: flex;
   flex-direction: column;

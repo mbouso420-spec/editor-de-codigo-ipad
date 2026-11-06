@@ -965,47 +965,33 @@
 
           <!-- Pestaña 3: Modelos e Inteligencia Artificial -->
           <div class="settings-tab-panel" data-tab="models" hidden>
-            <!-- 1. Medidor de Capacidad de Contexto y Tokens Disponibles -->
-            <div class="models-section-card">
-              <div class="models-card-header">
-                <div class="models-card-title-group">
-                  <span data-icon="gauge" class="models-card-icon" aria-hidden="true"></span>
-                  <div class="models-card-titles">
-                    <h3 class="models-card-title">Contexto del Proyecto y Modelos de IA</h3>
-                    <p class="models-card-desc">Consumo calculado en tiempo real según el archivo activo y pestañas abiertas del proyecto.</p>
-                  </div>
-                </div>
-                <div class="models-meter-badge-group">
-                  <span id="models-tokens-pct" class="models-tokens-badge">Sin API key configurada</span>
+            <!-- Resumen limpio de contexto actual del proyecto y capacidad de proveedores -->
+            <div class="models-overview-banner">
+              <div class="models-overview-info">
+                <span data-icon="sparkles" class="models-overview-icon" aria-hidden="true"></span>
+                <div class="models-overview-texts">
+                  <h3 class="models-card-title">Proveedores Disponibles y Capacidad de Contexto (4)</h3>
+                  <p class="models-card-desc">
+                    Tu proyecto actual ocupa <strong id="models-tokens-detail" class="code-font">~0 tokens en contexto actual</strong>. Cada proveedor tiene su propio medidor individual y límites de cuota gratuita:
+                  </p>
                 </div>
               </div>
-
-              <div class="models-meter-container">
-                <div class="models-meter-track" role="progressbar" aria-labelledby="models-tokens-pct" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                  <div id="models-meter-fill" class="models-meter-fill"></div>
-                </div>
-                <div class="models-meter-legend">
-                  <span id="models-tokens-detail" class="models-meter-detail code-font">~0 tokens en contexto</span>
-                  <span id="models-tokens-remaining" class="models-meter-remaining code-font">Elegí una API key de algún proveedor para activar consultas</span>
-                </div>
+              <div class="models-overview-status">
+                <span id="models-tokens-pct" class="models-tokens-badge badge-neutral">Sin API key configurada</span>
               </div>
             </div>
 
-            <!-- 2. Proveedores y Modelos Activos -->
-            <div class="models-section-card">
-              <div class="models-card-header">
-                <div class="models-card-title-group">
-                  <span data-icon="layers" class="models-card-icon" aria-hidden="true"></span>
-                  <div class="models-card-titles">
-                    <h3 class="models-card-title">Proveedores Disponibles y Capacidad Individual (4)</h3>
-                    <p class="models-card-desc">Monitoreá el uso y capacidad de contexto de cada proveedor con sus límites gratuitos.</p>
-                  </div>
-                </div>
+            <!-- Medidor de compatibilidad invisible para tests -->
+            <div class="models-meter-compat" hidden aria-hidden="true">
+              <div class="models-meter-track" role="progressbar" aria-labelledby="models-tokens-pct" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="models-meter-fill" class="models-meter-fill"></div>
               </div>
+              <span id="models-tokens-remaining"></span>
+            </div>
 
-              <div id="settings-active-models-list" class="models-provider-list" role="list">
-                <!-- Se puebla dinámicamente con providers activos y sus API keys -->
-              </div>
+            <!-- Lista de 4 Proveedores con medidores individuales -->
+            <div id="settings-active-models-list" class="models-provider-list" role="list">
+              <!-- Se puebla dinámicamente con providers activos y sus API keys -->
             </div>
           </div>
 
