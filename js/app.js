@@ -57,6 +57,7 @@ import {
   writeEmergencyBackup,
   getTabInstanceId
 } from "./storage/emergencyBackup.js";
+import { base64ToUint8Array } from "./storage/fileImport.js";
 
 async function initApp() {
   hydrateIcons(document);
@@ -358,9 +359,15 @@ async function initApp() {
           });
           projects = await listProjects();
           await switchProject(createdProj.id, true);
-          explorer.setAutosaveStatus(
-            `Árbol de ${repo} listo (${index.entries.length} archivos bajo demanda)`
-          );
+          if (index.isTruncated) {
+            explorer.setAutosaveStatus(
+              `Atención: Árbol de ${repo} incompleto (truncado por GitHub en ${index.entries.length} archivos)`
+            );
+          } else {
+            explorer.setAutosaveStatus(
+              `Árbol de ${repo} listo (${index.entries.length} archivos bajo demanda)`
+            );
+          }
         } catch (error) {
           explorer.renderProjects(projects, activeProject.id);
           explorer.setAutosaveStatus(
@@ -459,7 +466,13 @@ async function initApp() {
         return;
       }
       const filename = target.path.split("/").pop() || "archivo.txt";
-      const blob = new Blob([target.content], { type: "text/plain;charset=utf-8" });
+      let blob;
+      if (target.isBinary && (target.base64 || target.content)) {
+        const rawBytes = base64ToUint8Array(target.base64 || target.content);
+        blob = new Blob([rawBytes], { type: "application/octet-stream" });
+      } else {
+        blob = new Blob([target.content ?? ""], { type: "text/plain;charset=utf-8" });
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -481,7 +494,13 @@ async function initApp() {
         return;
       }
       const filename = current.path.split("/").pop() || "archivo.txt";
-      const blob = new Blob([current.content], { type: "text/plain;charset=utf-8" });
+      let blob;
+      if (current.isBinary && (current.base64 || current.content)) {
+        const rawBytes = base64ToUint8Array(current.base64 || current.content);
+        blob = new Blob([rawBytes], { type: "application/octet-stream" });
+      } else {
+        blob = new Blob([current.content ?? ""], { type: "text/plain;charset=utf-8" });
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -511,10 +530,18 @@ async function initApp() {
       }
 
       try {
-        const zipFiles = filesOnly.map((f) => ({
-          path: f.path,
-          content: f.content || ""
-        }));
+        const zipFiles = filesOnly.map((f) => {
+          if (f.isBinary && (f.base64 || f.content)) {
+            return {
+              path: f.path,
+              content: base64ToUint8Array(f.base64 || f.content)
+            };
+          }
+          return {
+            path: f.path,
+            content: f.content || ""
+          };
+        });
         const zipBytes = buildZipArchive(zipFiles);
         const projectName = (activeProject?.name || "proyecto").replace(/[/\\?%*:|"<>]/g, "-");
         downloadZip(zipBytes, `${projectName}.zip`);
@@ -1250,7 +1277,9 @@ async function initApp() {
           blobSha: e.blobSha || null,
           contentLoaded: e.contentLoaded !== false,
           trackedInGithub: Boolean(e.trackedInGithub),
-          forceModified: Boolean(e.forceModified)
+          forceModified: Boolean(e.forceModified),
+          isBinary: Boolean(e.isBinary),
+          base64: e.base64 || (e.isBinary && typeof e.content === "string" ? e.content : null)
         };
       });
   }

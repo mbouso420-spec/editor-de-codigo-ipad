@@ -32,6 +32,31 @@ export function uint8ArrayToBase64(bytes) {
 }
 
 /**
+ * Convierte una cadena codificada en Base64 a su representación cruda en Uint8Array.
+ * @param {string} base64
+ * @returns {Uint8Array}
+ */
+export function base64ToUint8Array(base64) {
+  if (!base64 || typeof base64 !== "string") return new Uint8Array(0);
+  const clean = base64.replace(/\s+/g, "");
+  const atobFn = typeof atob === "function" ? atob : (globalThis.atob || (typeof window !== "undefined" ? window.atob : null));
+  if (!atobFn) {
+    const nodeBuf = typeof globalThis !== "undefined" ? globalThis.Buffer : null;
+    if (nodeBuf && typeof nodeBuf.from === "function") {
+      return new Uint8Array(nodeBuf.from(clean, "base64"));
+    }
+    return new Uint8Array(0);
+  }
+  const binary = atobFn(clean);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
  * @param {Uint8Array} bytes
  * @param {string} fileName
  * @param {{ allowBinaryAssets?: boolean }} [options]

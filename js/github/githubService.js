@@ -423,6 +423,7 @@ export async function downloadRepoFiles({ token, owner, repo, branch, onProgress
     onProgress?.(0, 0);
     return {
       commitSha: index.commitSha,
+      isTruncated: Boolean(index.isTruncated),
       files: []
     };
   }
@@ -437,6 +438,7 @@ export async function downloadRepoFiles({ token, owner, repo, branch, onProgress
 
   return {
     commitSha: index.commitSha,
+    isTruncated: Boolean(index.isTruncated),
     files
   };
 }

@@ -42,7 +42,23 @@ describe("Cliente REST GitHub (fallback sin Octokit)", () => {
     });
     const idx = await gh.fetchRepoTreeIndex({ token: "t", owner: "o", repo: "r", branch: "main" });
     assert.equal(idx.commitSha, "C1");
+    assert.equal(idx.isTruncated, false);
     assert.deepEqual(idx.entries.map((e) => e.path), ["a.js", "src/ñ.py"]);
+  });
+
+  test("fetchRepoTreeIndex detecta y propaga indicador isTruncated de la API de GitHub", async () => {
+    installFakeGithub({
+      "GET /repos/o/r/branches/main": () => [200, { commit: { sha: "C1", commit: { tree: { sha: "T1" } } } }],
+      "GET /repos/o/r/git/trees/T1": () => [200, {
+        truncated: true,
+        tree: [
+          { type: "blob", path: "file.js", sha: "s1", size: 10 }
+        ]
+      }]
+    });
+    const idx = await gh.fetchRepoTreeIndex({ token: "t", owner: "o", repo: "r", branch: "main" });
+    assert.equal(idx.isTruncated, true);
+    assert.equal(idx.entries.length, 1);
   });
 
   test("rama con '/' se codifica por segmentos (feature/x)", async () => {

@@ -1,7 +1,8 @@
 import "./setup.js";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { uint8ArrayToBase64 } from "../js/storage/fileImport.js";
+import { uint8ArrayToBase64, base64ToUint8Array } from "../js/storage/fileImport.js";
+import { buildZipArchive } from "../js/storage/zipExporter.js";
 import { searchInFiles } from "../js/search/projectSearch.js";
 import { createEditorManager } from "../js/editor/editorManager.js";
 import {
@@ -32,7 +33,8 @@ import {
   isSelectQuery,
   hasLimitClause,
   applySqlPagination,
-  buildCountQuery
+  buildCountQuery,
+  buildSqlRunnerPreview
 } from "../js/preview/sqlRunner.js";
 import {
   parseCssImportConditions,
@@ -552,6 +554,56 @@ describe("Auditoría de Rendimiento, Ciclo de Vida y Resiliencia", () => {
       assert.ok(bundled.includes('href="root3.css"'));
       // 3. ensureCssFile omitido con comentario HTML
       assert.ok(bundled.includes('<!-- [Studio IDE]: stylesheet "extra.css" omitido: presupuesto total de CSS superado -->'));
+    });
+  });
+
+  describe("9. Correcciones Quirúrgicas de Seguridad, Binarios y SQL (Auditoría Codex)", () => {
+    test("base64ToUint8Array decodifica correctamente binarios y realiza round-trip con uint8ArrayToBase64", () => {
+      const original = new Uint8Array([0, 1, 2, 255, 254, 128, 64, 32, 16, 8, 4, 2, 0]);
+      const b64 = uint8ArrayToBase64(original);
+      const decoded = base64ToUint8Array(b64);
+      assert.deepEqual(Array.from(decoded), Array.from(original));
+
+      // Manejo seguro de vacíos y nulos
+      assert.equal(base64ToUint8Array("").length, 0);
+      assert.equal(base64ToUint8Array(null).length, 0);
+      assert.equal(base64ToUint8Array(undefined).length, 0);
+    });
+
+    test("buildZipArchive empaqueta binarios Uint8Array preservando contenido exacto", () => {
+      const binaryBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // Header PNG
+      const zipBytes = buildZipArchive([
+        { path: "logo.png", content: binaryBytes },
+        { path: "readme.txt", content: "hola" }
+      ]);
+      assert.ok(zipBytes instanceof Uint8Array);
+      assert.ok(zipBytes.length > 50);
+
+      // Comprobar que los bytes del PNG están presentes literalmente en el ZIP (método STORE)
+      let foundHeader = false;
+      for (let i = 0; i <= zipBytes.length - binaryBytes.length; i++) {
+        let match = true;
+        for (let j = 0; j < binaryBytes.length; j++) {
+          if (zipBytes[i + j] !== binaryBytes[j]) {
+            match = false;
+            break;
+          }
+        }
+        if (match) {
+          foundHeader = true;
+          break;
+        }
+      }
+      assert.ok(foundHeader, "El contenido binario crudo debe estar intacto dentro del ZIP sin corrupción de encoding");
+    });
+
+    test("buildSqlRunnerPreview provee exportación completa y discriminada por página", () => {
+      const html = buildSqlRunnerPreview("SELECT 1;", "test.sql");
+      assert.ok(html.includes('id="btn-export-csv"'));
+      assert.ok(html.includes('id="btn-export-json"'));
+      assert.ok(html.includes("resultados_sql_completos.csv"));
+      assert.ok(html.includes("resultados_sql_completos.json"));
+      assert.ok(html.includes("CSV (Esta página)"));
     });
   });
 });

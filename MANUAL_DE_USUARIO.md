@@ -139,7 +139,7 @@ En la barra superior del modal de vista previa podés alternar el tamaño de pan
 - Si tu script contiene consultas `SELECT`, las presenta en **tablas HTML formateadas y responsivas** con scroll horizontal cómodo al tacto.
 - **Paginación cliente fluida (50 filas por página):** para bases de datos con cientos o miles de registros, la tabla se divide en páginas de 50 filas con botones de navegación accesibles (**Anterior** / **Siguiente**) e indicador de registros totales, evitando congelamientos del navegador en tablets.
 - **Consola interactiva de consultas:** podés escribir sentencias SQL adicionales en la caja inferior y ejecutarlas con el botón **Ejecutar Consulta** o el atajo `Ctrl + Enter`.
-- **Exportación completa de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`. La exportación procesa **el 100% de los registros completos**, independientemente de la página en la que estés posicionado.
+- **Exportación completa y por página de datos:** descargá el resultado de tus consultas en un toque como archivo `.csv` (compatible con Excel / Numbers) o `.json`. La exportación principal procesa **el 100% de los registros completos** independientemente de la página en la que estés posicionado, y disponés además del botón **CSV (Esta página)** en la barra de paginación para descargar únicamente el bloque actual de 50 filas.
 
 ### Compilador y Ejecutor Nativo de C y C++ (`.c`, `.cpp`, `.h`)
 

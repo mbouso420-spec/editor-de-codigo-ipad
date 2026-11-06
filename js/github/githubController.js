@@ -342,11 +342,19 @@ export function initGithubController({
         entries: index.entries
       });
 
-      setStatus(
-        cloneStatusEl,
-        `Árbol cargado al instante (${index.entries.length} archivos en el Explorador, sin descargar todo).`,
-        "ok"
-      );
+      if (index.isTruncated) {
+        setStatus(
+          cloneStatusEl,
+          `Atención: Árbol truncado por GitHub (>100.000 entradas). Se indexaron ${index.entries.length} archivos, pero el listado puede estar incompleto.`,
+          "error"
+        );
+      } else {
+        setStatus(
+          cloneStatusEl,
+          `Árbol cargado al instante (${index.entries.length} archivos en el Explorador, sin descargar todo).`,
+          "ok"
+        );
+      }
       await onProjectClonedOrSynced(project.id);
       await refreshSyncPanel();
       dialog?.close();
@@ -376,7 +384,7 @@ export function initGithubController({
     setStatus(cloneStatusEl, `Conectando con ${owner}/${repo} (${branch})…`, "neutral");
 
     try {
-      const { commitSha, files } = await downloadRepoFiles({
+      const { commitSha, files, isTruncated } = await downloadRepoFiles({
         token,
         owner,
         repo,
@@ -394,7 +402,15 @@ export function initGithubController({
         files
       });
 
-      setStatus(cloneStatusEl, `Repositorio listo (${files.length} archivos guardados para editar en el iPad).`, "ok");
+      if (isTruncated) {
+        setStatus(
+          cloneStatusEl,
+          `Atención: Repositorio clonado parcialmente (árbol truncado por GitHub en ${files.length} archivos).`,
+          "error"
+        );
+      } else {
+        setStatus(cloneStatusEl, `Repositorio listo (${files.length} archivos guardados para editar en el iPad).`, "ok");
+      }
       await onProjectClonedOrSynced(project.id);
       await refreshSyncPanel();
     } catch (error) {
@@ -435,11 +451,14 @@ export function initGithubController({
 
     try {
       let updated;
+      let wasTruncated = false;
       if (project.offlineCached) {
-        const { commitSha, files } = await downloadRepoFiles({ token, owner, repo, branch });
+        const { commitSha, files, isTruncated } = await downloadRepoFiles({ token, owner, repo, branch });
+        wasTruncated = Boolean(isTruncated);
         updated = await hydrateGithubProject({ owner, repo, branch, commitSha, files });
       } else {
         const index = await fetchRepoTreeIndex({ token, owner, repo, branch });
+        wasTruncated = Boolean(index.isTruncated);
         updated = await hydrateLazyGithubProject({
           owner,
           repo,
@@ -450,7 +469,11 @@ export function initGithubController({
       }
       await onProjectClonedOrSynced(updated.id);
       await refreshSyncPanel();
-      setStatus(pushStatusEl, "Árbol y archivos sincronizados con la última versión remota.", "ok");
+      if (wasTruncated) {
+        setStatus(pushStatusEl, "Atención: Árbol remoto truncado por GitHub (>100.000 entradas). El listado puede estar incompleto.", "error");
+      } else {
+        setStatus(pushStatusEl, "Árbol y archivos sincronizados con la última versión remota.", "ok");
+      }
     } catch (error) {
       setStatus(pushStatusEl, error instanceof Error ? error.message : "Error al actualizar.", "error");
     } finally {
@@ -1048,12 +1071,24 @@ export function initGithubController({
     }
 
     if (syncBranchSelect) {
+      const renderFallbackBranchOption = () => {
+        syncBranchSelect.textContent = "";
+        const opt = document.createElement("option");
+        opt.value = project.github.branch || "main";
+        opt.textContent = project.github.branch || "main";
+        opt.selected = true;
+        syncBranchSelect.appendChild(opt);
+      };
+
       const token = getGithubToken();
       if (token && project.github.owner && project.github.repo) {
         fetchRepositoryBranches(token, project.github.owner, project.github.repo)
           .then((branches) => {
-            if (!Array.isArray(branches) || branches.length === 0) return;
-            syncBranchSelect.innerHTML = "";
+            if (!Array.isArray(branches) || branches.length === 0) {
+              renderFallbackBranchOption();
+              return;
+            }
+            syncBranchSelect.textContent = "";
             for (const b of branches) {
               const opt = document.createElement("option");
               opt.value = b.name;
@@ -1065,10 +1100,10 @@ export function initGithubController({
             }
           })
           .catch(() => {
-            syncBranchSelect.innerHTML = `<option value="${project.github.branch}" selected>${project.github.branch}</option>`;
+            renderFallbackBranchOption();
           });
       } else {
-        syncBranchSelect.innerHTML = `<option value="${project.github.branch}" selected>${project.github.branch}</option>`;
+        renderFallbackBranchOption();
       }
     }
 

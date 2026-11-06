@@ -421,8 +421,8 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         <span id="engine-status" class="sql-hint status-loading">Iniciando motor SQLite...</span>
       </div>
       <div class="sql-actions">
-        <button type="button" id="btn-export-csv" class="btn" title="Descargar resultados en CSV">Exportar CSV</button>
-        <button type="button" id="btn-export-json" class="btn" title="Descargar resultados en JSON">Exportar JSON</button>
+        <button type="button" id="btn-export-csv" class="btn" title="Descargar todos los resultados de la consulta en CSV">Exportar CSV</button>
+        <button type="button" id="btn-export-json" class="btn" title="Descargar todos los resultados de la consulta en JSON">Exportar JSON</button>
         <button type="button" id="btn-reset-db" class="btn" title="Reiniciar base de datos">Reiniciar DB</button>
       </div>
     </div>
@@ -444,6 +444,8 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
       var initialScript = ${safeContent};
       var db = null;
       var lastResults = [];
+      var lastFullQuery = null;
+      var isPaginatedQuery = false;
       var resultsArea = document.getElementById("results-area");
       var statusEl = document.getElementById("engine-status");
       var queryInput = document.getElementById("interactive-sql");
@@ -592,6 +594,25 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
             actionsWrap.appendChild(btnPrev);
             actionsWrap.appendChild(btnNext);
 
+            var btnPageCsv = document.createElement("button");
+            btnPageCsv.type = "button";
+            btnPageCsv.className = "btn";
+            btnPageCsv.title = "Descargar únicamente las filas mostradas en esta página (" + res.values.length + " filas)";
+            btnPageCsv.textContent = "CSV (Esta página)";
+            btnPageCsv.addEventListener("click", function () {
+              var lines = [res.columns.join(",")];
+              res.values.forEach(function (row) {
+                lines.push(row.map(function (v) {
+                  if (v === null || v === undefined) return "";
+                  var s = String(v);
+                  return s.indexOf(",") !== -1 || s.indexOf('"') !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
+                }).join(","));
+              });
+              downloadBlob("resultados_sql_pagina_" + meta.currentPage + ".csv", lines.join("\r\n"), "text/csv;charset=utf-8");
+              sendLog("log", "Exportada página " + meta.currentPage + " en CSV (" + res.values.length + " filas)");
+            });
+            actionsWrap.appendChild(btnPageCsv);
+
             pagBar.appendChild(pageInfo);
             pagBar.appendChild(actionsWrap);
             card.appendChild(pagBar);
@@ -681,6 +702,8 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         try {
           var res = db.exec(code);
           lastResults = res;
+          lastFullQuery = code;
+          isPaginatedQuery = false;
           renderResults(res, "Script inicial (" + ${JSON.stringify(safeTitle)} + ")");
           sendLog("log", "SQL ejecutado: " + (res.length > 0 ? res.length + " consulta(s) con datos" : "Sentencias DDL/DML exitosas"));
         } catch (e) {
@@ -701,6 +724,8 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         var hasLimit = /\bLIMIT\s+\d+/i.test(clean);
 
         if (isSelect && !hasLimit) {
+          lastFullQuery = clean;
+          isPaginatedQuery = true;
           // Paginación real de memoria en SQLite con LIMIT y OFFSET
           var PAGE_SIZE = 50;
           var totalRows = null;
@@ -751,6 +776,8 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
           var res = db.exec(query);
           if (res && res.length > 0) {
             lastResults = res;
+            lastFullQuery = query;
+            isPaginatedQuery = false;
           }
           renderResults(res, query);
           sendLog("log", "Consulta SQL: " + query + " (" + (res && res[0] ? res[0].values.length : 0) + " filas)");
@@ -791,15 +818,31 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
         }
       });
 
+      function getExportDataset() {
+        if (isPaginatedQuery && lastFullQuery && db) {
+          try {
+            var fullRes = db.exec(lastFullQuery);
+            if (fullRes && fullRes.length > 0) {
+              return { results: fullRes, isFull: true };
+            }
+          } catch (_) {}
+        }
+        return { results: lastResults, isFull: !isPaginatedQuery };
+      }
+
       btnCsv.addEventListener("click", function () {
-        if (!lastResults || lastResults.length === 0) {
+        var dataset = getExportDataset();
+        var exportRes = dataset.results;
+        if (!exportRes || exportRes.length === 0) {
           alert("No hay resultados de consultas SELECT para exportar.");
           return;
         }
         var lines = [];
-        lastResults.forEach(function (res) {
+        var totalRows = 0;
+        exportRes.forEach(function (res) {
           lines.push(res.columns.join(","));
           res.values.forEach(function (row) {
+            totalRows++;
             lines.push(row.map(function (v) {
               if (v === null || v === undefined) return "";
               var s = String(v);
@@ -807,16 +850,20 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
             }).join(","));
           });
         });
-        downloadBlob("resultados_sql.csv", lines.join("\\r\\n"), "text/csv;charset=utf-8");
+        var filename = dataset.isFull ? "resultados_sql_completos.csv" : "resultados_sql.csv";
+        downloadBlob(filename, lines.join("\\r\\n"), "text/csv;charset=utf-8");
+        sendLog("log", "Exportado CSV " + (dataset.isFull ? "completo (" : "(") + totalRows + " filas): " + filename);
       });
 
       btnJson.addEventListener("click", function () {
-        if (!lastResults || lastResults.length === 0) {
+        var dataset = getExportDataset();
+        var exportRes = dataset.results;
+        if (!exportRes || exportRes.length === 0) {
           alert("No hay resultados de consultas SELECT para exportar.");
           return;
         }
         var out = [];
-        lastResults.forEach(function (res) {
+        exportRes.forEach(function (res) {
           res.values.forEach(function (row) {
             var obj = {};
             res.columns.forEach(function (col, i) {
@@ -825,7 +872,9 @@ export function buildSqlRunnerPreview(sqlFile, _sameFolderFiles = []) {
             out.push(obj);
           });
         });
-        downloadBlob("resultados_sql.json", JSON.stringify(out, null, 2), "application/json;charset=utf-8");
+        var filename = dataset.isFull ? "resultados_sql_completos.json" : "resultados_sql.json";
+        downloadBlob(filename, JSON.stringify(out, null, 2), "application/json;charset=utf-8");
+        sendLog("log", "Exportado JSON " + (dataset.isFull ? "completo (" : "(") + out.length + " filas): " + filename);
       });
 
       initDatabase();
