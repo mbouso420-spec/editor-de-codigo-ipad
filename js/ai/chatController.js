@@ -32,6 +32,8 @@ export function initChatController({
   onInsertAtCursor,
   onReplaceSelection,
   onApplyWholeFile,
+  onApplyToFile,
+  onApplyMultiFile,
   onConversationChange,
   onKeysImported
 }) {
@@ -892,6 +894,50 @@ export function initChatController({
       return;
     }
 
+    const multiFiles = segments.filter((s) => s.type === "code" && s.filePath);
+    if (multiFiles.length >= 2 && !isStreaming) {
+      const planEl = document.createElement("div");
+      planEl.className = "chat-multi-file-plan";
+
+      const planHeader = document.createElement("div");
+      planHeader.className = "chat-multi-file-plan-header";
+
+      const planBadge = document.createElement("span");
+      planBadge.className = "chat-multi-file-plan-badge";
+      planBadge.innerHTML = `${icon("sparkles")}<span>Plan multi-archivo detectado (${multiFiles.length} archivos)</span>`;
+
+      const btnApplyAll = document.createElement("button");
+      btnApplyAll.type = "button";
+      btnApplyAll.className = "btn btn-primary btn-sm chat-multi-apply-all-btn";
+      btnApplyAll.innerHTML = `${icon("zap")}<span>Aplicar todos los cambios</span>`;
+      btnApplyAll.addEventListener("click", async () => {
+        btnApplyAll.disabled = true;
+        btnApplyAll.innerHTML = `${icon("refreshCw")}<span>Aplicando lote…</span>`;
+        if (typeof onApplyMultiFile === "function") {
+          try {
+            await onApplyMultiFile(multiFiles.map((m) => ({ path: m.filePath, code: m.code, lang: m.lang })));
+            btnApplyAll.innerHTML = `${icon("check")}<span>¡${multiFiles.length} archivos aplicados!</span>`;
+          } catch {
+            btnApplyAll.innerHTML = `${icon("x")}<span>Error al aplicar</span>`;
+          }
+        }
+      });
+
+      planHeader.append(planBadge, btnApplyAll);
+
+      const chipsTrack = document.createElement("div");
+      chipsTrack.className = "chat-multi-file-chips";
+      for (const mf of multiFiles) {
+        const chip = document.createElement("span");
+        chip.className = "chat-multi-file-chip";
+        chip.innerHTML = `${icon("fileCode")}<span>${escapeHtml(mf.filePath)}</span>`;
+        chipsTrack.appendChild(chip);
+      }
+
+      planEl.append(planHeader, chipsTrack);
+      container.appendChild(planEl);
+    }
+
     for (const seg of segments) {
       if (seg.type === "prose") {
         const wrapper = document.createElement("div");
@@ -900,7 +946,7 @@ export function initChatController({
           container.appendChild(wrapper.firstChild);
         }
       } else {
-        container.appendChild(buildCodeBlockElement(seg.lang, seg.code));
+        container.appendChild(buildCodeBlockElement(seg.lang, seg.code, seg.filePath));
       }
     }
 
@@ -912,16 +958,29 @@ export function initChatController({
     }
   }
 
-  function buildCodeBlockElement(lang, code) {
+  function buildCodeBlockElement(lang, code, filePath = null) {
     const block = document.createElement("div");
     block.className = "chat-code-block";
 
     const header = document.createElement("div");
     header.className = "chat-code-header-wrap";
 
+    const infoWrap = document.createElement("div");
+    infoWrap.style.display = "flex";
+    infoWrap.style.alignItems = "center";
+    infoWrap.style.gap = "var(--space-2xs)";
+
     const langSpan = document.createElement("span");
     langSpan.className = "code-font";
     langSpan.textContent = lang || "código";
+    infoWrap.appendChild(langSpan);
+
+    if (filePath) {
+      const pathBadge = document.createElement("span");
+      pathBadge.className = "chat-code-filepath";
+      pathBadge.innerHTML = `${icon("fileCode")}<span>${escapeHtml(filePath)}</span>`;
+      infoWrap.appendChild(pathBadge);
+    }
 
     const actions = document.createElement("div");
     actions.className = "chat-code-actions-wrap";
@@ -961,9 +1020,27 @@ export function initChatController({
     btnReplace.dataset.action = "replace-selection";
     btnReplace.disabled = false;
 
-    const btnApplyFile = createCodeActionButton("fileCheck", "Aplicar cambios", "Reemplazar contenido completo del archivo (reversible con Deshacer)", () => {
-      onApplyWholeFile(code, lang);
-    });
+    let btnApplyAction;
+    if (filePath && typeof onApplyToFile === "function") {
+      const baseName = filePath.split("/").pop();
+      btnApplyAction = createCodeActionButton("fileCheck", `Aplicar a ${baseName}`, `Aplicar o crear archivo ${filePath}`, async () => {
+        btnApplyAction.disabled = true;
+        try {
+          await onApplyToFile(filePath, code, lang);
+          btnApplyAction.innerHTML = `${icon("check")}<span>Guardado</span>`;
+        } catch {
+          btnApplyAction.innerHTML = `${icon("x")}<span>Error</span>`;
+        }
+        window.setTimeout(() => {
+          btnApplyAction.disabled = false;
+          btnApplyAction.innerHTML = `${icon("fileCheck")}<span>Aplicar a ${baseName}</span>`;
+        }, 1500);
+      });
+    } else {
+      btnApplyAction = createCodeActionButton("fileCheck", "Aplicar cambios", "Reemplazar contenido completo del archivo (reversible con Deshacer)", () => {
+        onApplyWholeFile(code, lang);
+      });
+    }
 
     const btnCopy = createCodeActionButton("copy", "Copiar", "Copiar bloque al portapapeles", async () => {
       const copied = await copyToClipboardSafe(code);
@@ -975,8 +1052,8 @@ export function initChatController({
       }, 1400);
     });
 
-    actions.append(btnInsert, btnReplace, btnApplyFile, btnCopy);
-    header.append(langSpan, actions);
+    actions.append(btnInsert, btnReplace, btnApplyAction, btnCopy);
+    header.append(infoWrap, actions);
 
     const pre = document.createElement("pre");
     pre.className = "chat-code-pre code-font";
@@ -1018,7 +1095,7 @@ export function initChatController({
     const budget = getAiContextBudget();
     const parts = [
       "Sos el asistente de programación integrado en Studio IDE (estilo Antigravity).",
-      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```python, ```cpp, ```rust, ```go, ```html, ```css, ```js, ```sql, ```markdown) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad."
+      "Respondé en español claro, directo y técnico. Cuando propongas código, encerralo siempre en bloques Markdown con su lenguaje (por ejemplo ```python, ```cpp, ```rust, ```go, ```html, ```css, ```js, ```sql, ```markdown) para que el usuario pueda inyectarlo directamente en el editor con un toque desde su iPad. Al proponer cambios multi-archivo o crear nuevos archivos, identificá cada bloque indicando la ruta (por ejemplo ```css:styles.css o ```html:index.html o con un comentario inicial // file: src/app.js) para que Studio IDE pueda aplicarlos en lote automáticamente."
     ];
 
     if (snapshot.activeFile) {
@@ -1166,6 +1243,41 @@ export function truncateCodeContent(content, maxChars = 16000) {
   return `${headSlice}\n\n// ... [${omittedLines} líneas omitidas por límite de contexto de la API gratuita] ...\n\n${tailSlice}`;
 }
 
+export function detectFilePathFromCodeSegment(rawHeader, code, precedingProse = "") {
+  if (rawHeader) {
+    if (rawHeader.includes(":")) {
+      const parts = rawHeader.split(":");
+      if (parts[1] && parts[1].trim()) {
+        const candidate = parts[1].trim().split(/\s+/)[0];
+        if (candidate.includes(".")) return candidate;
+      }
+    }
+    const fileParamMatch = rawHeader.match(/(?:file|filepath|path)=["']?([^"'\s]+)["']?/i);
+    if (fileParamMatch) return fileParamMatch[1];
+    const headerParts = rawHeader.split(/\s+/);
+    if (headerParts.length > 1 && headerParts[1].includes(".")) {
+      return headerParts[1];
+    }
+  }
+
+  const firstLine = (code || "").trim().split(/\r?\n/)[0] || "";
+  const commentMatch = firstLine.match(/^(?:\/\/|#|\/\*|<!--)\s*(?:file(?:path)?|archivo):\s*([^\s*>-]+)/i);
+  if (commentMatch) {
+    return commentMatch[1];
+  }
+
+  if (precedingProse) {
+    const lines = precedingProse.trim().split(/\r?\n/);
+    const lastProseLine = lines[lines.length - 1] || "";
+    const proseMatch = lastProseLine.match(/(?:archivo|file|filepath):\s*[`*_]?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)[`*_]?/i);
+    if (proseMatch) {
+      return proseMatch[1];
+    }
+  }
+
+  return null;
+}
+
 export function parseMarkdownSegments(raw) {
   const segments = [];
   const fenceRegex = /```([^\r\n]*)\r?\n?([\s\S]*?)(?:```|$)/g;
@@ -1173,19 +1285,34 @@ export function parseMarkdownSegments(raw) {
   let match;
 
   while ((match = fenceRegex.exec(raw)) !== null) {
+    let lastProseContent = "";
     if (match.index > lastIndex) {
       const prose = raw.slice(lastIndex, match.index).trim();
       if (prose) {
+        lastProseContent = prose;
         segments.push({ type: "prose", content: prose });
       }
+    } else if (segments.length > 0 && segments[segments.length - 1].type === "prose") {
+      lastProseContent = segments[segments.length - 1].content;
     }
+
     const rawHeader = (match[1] || "").trim();
-    const lang = (rawHeader.split(/\s+/)[0] || "").toLowerCase();
-    segments.push({
+    let lang = (rawHeader.split(/\s+/)[0] || "").toLowerCase();
+    if (lang.includes(":")) {
+      lang = lang.split(":")[0];
+    }
+    const code = (match[2] || "").replace(/\n$/, "");
+    const filePath = detectFilePathFromCodeSegment(rawHeader, code, lastProseContent);
+
+    const segment = {
       type: "code",
       lang,
-      code: (match[2] || "").replace(/\n$/, "")
-    });
+      code
+    };
+    if (filePath) {
+      segment.filePath = filePath;
+    }
+    segments.push(segment);
     lastIndex = fenceRegex.lastIndex;
     if (!raw.slice(match.index).includes("```", 3)) {
       break;

@@ -43,6 +43,9 @@ import {
   CPP_EXTENSIONS,
   RUST_EXTENSIONS,
   GO_EXTENSIONS,
+  JAVA_EXTENSIONS,
+  CSHARP_EXTENSIONS,
+  TS_EXTENSIONS,
   MAX_PREVIEW_ASSET_BYTES,
   IGNORED_PREVIEW_DIRS,
   getFileExtension,
@@ -725,8 +728,16 @@ export function initLivePreviewModal({
       return;
     }
 
-    // 7. Pestaña C / C++ / Rust / Go (.c, .cpp, .rs, .go, etc.): Runner nativo sin iframe
-    if (C_EXTENSIONS.has(ext) || CPP_EXTENSIONS.has(ext) || RUST_EXTENSIONS.has(ext) || GO_EXTENSIONS.has(ext)) {
+    // 7. Pestaña C / C++ / Rust / Go / Java / C# / TypeScript: Runner nativo sin iframe
+    if (
+      C_EXTENSIONS.has(ext) ||
+      CPP_EXTENSIONS.has(ext) ||
+      RUST_EXTENSIONS.has(ext) ||
+      GO_EXTENSIONS.has(ext) ||
+      JAVA_EXTENSIONS.has(ext) ||
+      CSHARP_EXTENSIONS.has(ext) ||
+      TS_EXTENSIONS.has(ext)
+    ) {
       showCRunnerView(activeFile, sameFolderFiles);
       return;
     }
@@ -737,7 +748,7 @@ export function initLivePreviewModal({
       headerTitle: "Vista previa",
       badgeText: activeFile.path,
       messageTitle: `La vista previa no está disponible para este archivo ${extLabel}`,
-      messageDesc: "La vista previa en vivo ejecuta archivos .html, .js, .css (en conjunto con el proyecto web), scripts .py de Python, bases de datos .sql de SQLite, código C/C++ y documentos .md."
+      messageDesc: "La vista previa en vivo ejecuta archivos .html, .js, .ts, .css (en conjunto con el proyecto web), scripts .py de Python, bases de datos .sql de SQLite, código C/C++, Java, C# y documentos .md."
     });
   }
 

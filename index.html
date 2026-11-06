@@ -230,6 +230,16 @@
             </button>
             <button
               type="button"
+              id="btn-editor-split"
+              class="btn btn-ghost btn-sm btn-icon"
+              aria-pressed="false"
+              aria-label="Dividir editor en dos paneles (Split View)"
+              title="Dividir editor en dos paneles (Cmd/Ctrl + \)"
+            >
+              <span data-icon="columns"></span>
+            </button>
+            <button
+              type="button"
               id="btn-editor-wrap"
               class="btn btn-ghost btn-sm btn-icon"
               aria-pressed="true"
@@ -248,8 +258,24 @@
           </div>
         </div>
 
-        <div class="editor-stage">
+        <div class="editor-stage" id="editor-stage">
           <div id="editor-mount" class="editor-mount"></div>
+          <div id="editor-split-divider" class="editor-split-divider" hidden aria-hidden="true" title="Arrastrar para redimensionar paneles"></div>
+          <div id="editor-mount-split" class="editor-mount editor-mount-split" hidden>
+            <div class="editor-split-header" id="editor-split-header">
+              <span class="editor-split-title" id="editor-split-title">
+                <span data-icon="fileCode"></span>
+                <span id="editor-split-title-text">Sin archivo</span>
+              </span>
+              <div class="editor-split-actions">
+                <select id="editor-split-file-select" class="editor-split-select" aria-label="Cambiar archivo del panel dividido"></select>
+                <button type="button" id="btn-close-split" class="btn btn-ghost btn-sm btn-icon" title="Cerrar panel dividido" aria-label="Cerrar panel dividido">
+                  <span data-icon="x"></span>
+                </button>
+              </div>
+            </div>
+            <div id="editor-split-body" class="editor-split-body"></div>
+          </div>
           <div id="editor-error-ruler" class="editor-error-ruler" hidden aria-label="Indicadores de error en el código"></div>
 
           <div id="editor-empty-state" class="editor-empty-state" hidden>

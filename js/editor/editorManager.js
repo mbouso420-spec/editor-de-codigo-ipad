@@ -49,7 +49,7 @@ export function wrapTextWithDelimiters(text, selectedText, cursorBack) {
  *   onSelectionChange: (selection: { text: string, lineCount: number }) => void
  * }} config
  */
-export async function createEditorManager({ mountEl, onDocChange, onSelectionChange }) {
+export async function createEditorManager({ mountEl, onDocChange, onSelectionChange, enableMinimap = true }) {
   let wordWrap = readStoredBool(PREF_KEYS.wordWrap, true);
   let fontSize = clampFontSize(Number(readStoredValue(PREF_KEYS.fontSize)) || DEFAULT_FONT_SIZE);
   let activeFileId = null;
@@ -69,7 +69,8 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
       initialWrap: wordWrap,
       initialFontSize: fontSize,
       onDocChange,
-      onSelectionChange
+      onSelectionChange,
+      enableMinimap
     });
   }
 
@@ -113,37 +114,39 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
   const wrapCompartment = new Compartment();
   const statesByFile = new Map();
 
-  const minimap = createMinimapController({
-    mountEl: mountEl.parentElement || mountEl,
-    getDocLines: () => {
-      if (view?.state?.doc) {
-        const doc = view.state.doc;
-        const lines = [];
-        for (let i = 1; i <= doc.lines; i++) {
-          lines.push(doc.line(i).text);
+  const minimap = enableMinimap
+    ? createMinimapController({
+        mountEl: mountEl.parentElement || mountEl,
+        getDocLines: () => {
+          if (view?.state?.doc) {
+            const doc = view.state.doc;
+            const lines = [];
+            for (let i = 1; i <= doc.lines; i++) {
+              lines.push(doc.line(i).text);
+            }
+            return lines;
+          }
+          return [];
+        },
+        getViewport: () => {
+          const scroller = view?.scrollDOM;
+          if (scroller) {
+            return {
+              top: scroller.scrollTop,
+              height: scroller.clientHeight,
+              totalHeight: scroller.scrollHeight
+            };
+          }
+          return { top: 0, height: 100, totalHeight: 100 };
+        },
+        onScrollToRatio: (ratio) => {
+          const scroller = view?.scrollDOM;
+          if (scroller) {
+            scroller.scrollTop = ratio * (scroller.scrollHeight - scroller.clientHeight);
+          }
         }
-        return lines;
-      }
-      return [];
-    },
-    getViewport: () => {
-      const scroller = view?.scrollDOM;
-      if (scroller) {
-        return {
-          top: scroller.scrollTop,
-          height: scroller.clientHeight,
-          totalHeight: scroller.scrollHeight
-        };
-      }
-      return { top: 0, height: 100, totalHeight: 100 };
-    },
-    onScrollToRatio: (ratio) => {
-      const scroller = view?.scrollDOM;
-      if (scroller) {
-        scroller.scrollTop = ratio * (scroller.scrollHeight - scroller.clientHeight);
-      }
-    }
-  });
+      })
+    : null;
 
   // Marcadores de error de sintaxis / compilación (GCC / Clang / Linters)
   const addErrorEffect = StateEffect?.define ? StateEffect.define() : null;
@@ -607,6 +610,22 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     return fontSize;
   }
 
+  function syncDoc(fileId, newContent) {
+    if (activeFileId === fileId && view) {
+      const cur = view.state.doc.toString();
+      if (cur !== newContent) {
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: newContent }
+        });
+      }
+    } else {
+      const cached = statesByFile.get(fileId);
+      if (cached && cached.doc.toString() !== newContent) {
+        statesByFile.delete(fileId);
+      }
+    }
+  }
+
   return {
     openFile,
     clearActiveFile,
@@ -628,7 +647,10 @@ export async function createEditorManager({ mountEl, onDocChange, onSelectionCha
     stepFontSize,
     getFontSize: () => fontSize,
     toggleMinimap: (force) => minimap?.toggle(force),
-    isMinimapVisible: () => (minimap ? minimap.isVisible() : false)
+    isMinimapVisible: () => (minimap ? minimap.isVisible() : false),
+    getActiveFileId: () => activeFileId,
+    syncDoc,
+    focus: () => view?.focus()
   };
 }
 
@@ -746,7 +768,7 @@ function renderErrorRuler(markers, totalLines, onJump) {
 /**
  * Respaldo local ligero por si el usuario abre el IDE sin conexión antes del cacheo PWA.
  */
-function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChange, onSelectionChange }) {
+function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChange, onSelectionChange, enableMinimap = true }) {
   let wordWrap = initialWrap;
   let fontSize = initialFontSize;
   let activeFileId = null;
@@ -762,25 +784,27 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
   mountEl.innerHTML = "";
   mountEl.appendChild(textarea);
 
-  const fallbackMinimap = createMinimapController({
-    mountEl: mountEl.parentElement || mountEl,
-    getDocLines: () => (textarea ? textarea.value.split("\n") : []),
-    getViewport: () => {
-      if (textarea) {
-        return {
-          top: textarea.scrollTop,
-          height: textarea.clientHeight,
-          totalHeight: textarea.scrollHeight
-        };
-      }
-      return { top: 0, height: 100, totalHeight: 100 };
-    },
-    onScrollToRatio: (ratio) => {
-      if (textarea) {
-        textarea.scrollTop = ratio * (textarea.scrollHeight - textarea.clientHeight);
-      }
-    }
-  });
+  const fallbackMinimap = enableMinimap
+    ? createMinimapController({
+        mountEl: mountEl.parentElement || mountEl,
+        getDocLines: () => (textarea ? textarea.value.split("\n") : []),
+        getViewport: () => {
+          if (textarea) {
+            return {
+              top: textarea.scrollTop,
+              height: textarea.clientHeight,
+              totalHeight: textarea.scrollHeight
+            };
+          }
+          return { top: 0, height: 100, totalHeight: 100 };
+        },
+        onScrollToRatio: (ratio) => {
+          if (textarea) {
+            textarea.scrollTop = ratio * (textarea.scrollHeight - textarea.clientHeight);
+          }
+        }
+      })
+    : null;
 
   textarea.addEventListener("scroll", () => {
     fallbackMinimap?.updateSlider();
@@ -981,7 +1005,16 @@ function createFallbackEditor({ mountEl, initialWrap, initialFontSize, onDocChan
     },
     getFontSize: () => fontSize,
     toggleMinimap: (force) => fallbackMinimap?.toggle(force),
-    isMinimapVisible: () => (fallbackMinimap ? fallbackMinimap.isVisible() : false)
+    isMinimapVisible: () => (fallbackMinimap ? fallbackMinimap.isVisible() : false),
+    getActiveFileId: () => activeFileId,
+    syncDoc: (fileId, newContent) => {
+      if (activeFileId === fileId && textarea) {
+        if (textarea.value !== newContent) {
+          textarea.value = newContent;
+        }
+      }
+    },
+    focus: () => textarea?.focus()
   };
 }
 

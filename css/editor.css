@@ -445,3 +445,132 @@
     display: none;
   }
 }
+
+/* Split View (Paneles Divididos) */
+.editor-stage.is-split {
+  flex-direction: row;
+}
+
+.editor-stage.is-split > #editor-mount {
+  flex: 1 1 50%;
+  min-width: 0;
+  width: auto;
+}
+
+.editor-split-divider {
+  width: 6px;
+  background: var(--color-rule);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 6;
+  user-select: none;
+  touch-action: none;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+
+.editor-split-divider:hover,
+.editor-split-divider.is-dragging {
+  background: var(--color-accent);
+}
+
+.editor-mount-split {
+  flex: 1 1 50%;
+  min-width: 0;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  border-left: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-editor-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-split-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3xs) var(--space-xs);
+  background: var(--color-paper-2);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  gap: var(--space-xs);
+  min-height: 34px;
+  flex-shrink: 0;
+}
+
+.editor-split-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-split-title .icon-svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+
+.editor-split-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex-shrink: 0;
+}
+
+.editor-split-select {
+  height: 26px;
+  padding: 0 var(--space-2xs);
+  font-size: var(--step--1);
+  font-family: inherit;
+  background: var(--color-paper);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+  max-width: 160px;
+  cursor: pointer;
+}
+
+.editor-split-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.editor-split-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-editor-bg);
+}
+
+.editor-split-body .cm-editor {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-editor-bg);
+  color: var(--color-ink);
+  font-family: var(--font-outlier);
+  font-size: var(--editor-font-size);
+}
+
+.editor-split-body .cm-scroller {
+  font-family: var(--font-outlier);
+  line-height: 1.65;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.editor-split-body .cm-gutters {
+  background: var(--color-editor-gutter);
+  color: var(--color-gutter-ink);
+  border-right: var(--rule-hair) solid var(--color-editor-gutter-rule);
+}

@@ -7,6 +7,15 @@ import { keyboardRouter } from "../js/ui/keyboardRouter.js";
 import { inferFileMeta } from "../js/storage/workspaceDb.js";
 import { LANGUAGE_SYMBOLS } from "../js/ui/symbolBar.js";
 import {
+  JAVA_EXTENSIONS,
+  CSHARP_EXTENSIONS,
+  TS_EXTENSIONS
+} from "../js/preview/htmlBundler.js";
+import {
+  parseMarkdownSegments,
+  detectFilePathFromCodeSegment
+} from "../js/ai/chatController.js";
+import {
   buildWandboxPayload,
   hasMainFunction,
   parseGccErrors
@@ -516,5 +525,66 @@ error[E0425]: cannot find value 'x' in this scope
       activeFile: { path: "main.ts", content: tsCode }
     });
     assert.equal(tsPayload.compiler, "typescript-head");
+  });
+
+  test("Extensiones de compilador remoto (Java, C#, TS) en htmlBundler", () => {
+    assert.ok(JAVA_EXTENSIONS.has("java"));
+    assert.ok(CSHARP_EXTENSIONS.has("cs"));
+    assert.ok(TS_EXTENSIONS.has("ts"));
+    assert.ok(TS_EXTENSIONS.has("tsx"));
+  });
+
+  test("Detección de rutas de archivo en Modo Asistente Multi-archivo", () => {
+    // 1. Cabecera con dos puntos
+    assert.equal(detectFilePathFromCodeSegment("css:styles.css", "body { color: red; }"), "styles.css");
+    assert.equal(detectFilePathFromCodeSegment("html:src/index.html", "<div>hola</div>"), "src/index.html");
+
+    // 2. Cabecera con parámetro file=
+    assert.equal(detectFilePathFromCodeSegment("javascript file=src/app.js", "console.log(1);"), "src/app.js");
+
+    // 3. Comentario en la primera línea del código
+    assert.equal(detectFilePathFromCodeSegment("js", "// file: src/helpers/math.js\nexport function sum() {}"), "src/helpers/math.js");
+    assert.equal(detectFilePathFromCodeSegment("python", "# file: scripts/backup.py\nimport os"), "scripts/backup.py");
+
+    // 4. Párrafo previo indicando archivo
+    assert.equal(detectFilePathFromCodeSegment("css", "a { text-decoration: none; }", "A continuación modificá el siguiente archivo:\n### Archivo: src/theme.css"), "src/theme.css");
+
+    // 5. Sin ruta detectable
+    assert.equal(detectFilePathFromCodeSegment("python", "print('hello')"), null);
+  });
+
+  test("parseMarkdownSegments procesa bloques con rutas y permite identificar planes multi-archivo", () => {
+    const rawMarkdown = `
+A continuación te propongo una solución modular:
+
+### Archivo: index.html
+\`\`\`html:index.html
+<!DOCTYPE html>
+<html>
+<body>Hola</body>
+</html>
+\`\`\`
+
+Y los estilos asociados:
+
+\`\`\`css:styles.css
+body {
+  background: black;
+}
+\`\`\`
+
+Y finalmente la lógica:
+\`\`\`js
+// file: app.js
+console.log("iniciado");
+\`\`\`
+`;
+
+    const segments = parseMarkdownSegments(rawMarkdown);
+    const codeBlocks = segments.filter((s) => s.type === "code");
+    assert.equal(codeBlocks.length, 3);
+    assert.equal(codeBlocks[0].filePath, "index.html");
+    assert.equal(codeBlocks[1].filePath, "styles.css");
+    assert.equal(codeBlocks[2].filePath, "app.js");
   });
 });

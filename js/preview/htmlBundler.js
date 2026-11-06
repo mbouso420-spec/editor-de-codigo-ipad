@@ -11,6 +11,9 @@ export const C_EXTENSIONS = new Set(["c", "h"]);
 export const CPP_EXTENSIONS = new Set(["cpp", "cxx", "cc", "hpp"]);
 export const RUST_EXTENSIONS = new Set(["rs"]);
 export const GO_EXTENSIONS = new Set(["go"]);
+export const JAVA_EXTENSIONS = new Set(["java"]);
+export const CSHARP_EXTENSIONS = new Set(["cs"]);
+export const TS_EXTENSIONS = new Set(["ts", "tsx"]);
 
 export const MAX_PREVIEW_ASSET_BYTES = 512 * 1024; // 512 KB por recurso individual
 

@@ -117,10 +117,24 @@ async function initApp() {
   const btnSearch = document.getElementById("btn-editor-search");
   const btnWrap = document.getElementById("btn-editor-wrap");
   const btnMinimap = document.getElementById("btn-editor-minimap");
+  const btnEditorSplit = document.getElementById("btn-editor-split");
   const btnFontDown = document.getElementById("btn-font-down");
   const btnFontUp = document.getElementById("btn-font-up");
   const btnExportFile = document.getElementById("btn-export-file");
   const zoomReadoutEl = document.getElementById("editor-zoom-readout");
+
+  const editorStageEl = document.getElementById("editor-stage");
+  const splitDividerEl = document.getElementById("editor-split-divider");
+  const splitMountEl = document.getElementById("editor-mount-split");
+  const splitBodyEl = document.getElementById("editor-split-body");
+  const splitTitleTextEl = document.getElementById("editor-split-title-text");
+  const splitFileSelectEl = document.getElementById("editor-split-file-select");
+  const btnCloseSplit = document.getElementById("btn-close-split");
+
+  let isSplitOpen = false;
+  let splitActiveFileId = null;
+  /** @type {any} */
+  let editorSplit = null;
 
   const statusFilePathEl = document.getElementById("status-file-path");
   const statusFileLangEl = document.getElementById("status-file-lang");
@@ -167,6 +181,7 @@ async function initApp() {
       }
 
       scheduleAutosave(activeProject.id, filePath, newContent);
+      editorSplit?.syncDoc(filePath, newContent);
     },
     onSelectionChange(selection) {
       activeSelection = selection;
@@ -770,6 +785,61 @@ async function initApp() {
         }
       });
     },
+    async onApplyToFile(targetPath, code) {
+      const norm = normalizePath(targetPath);
+      let targetFile = filesOnly.find((f) => normalizePath(f.path) === norm);
+      if (!targetFile) {
+        await upsertEntry(activeProject.id, norm, {
+          content: code,
+          isFolder: false,
+          allowOverwrite: true
+        });
+        await reloadProjectEntries();
+        targetFile = filesOnly.find((f) => normalizePath(f.path) === norm);
+        if (targetFile) {
+          await openOrFocusFile(targetFile.id);
+        }
+      } else {
+        await openOrFocusFile(targetFile.id);
+        editor.replaceEntireDocument(code);
+        targetFile.content = code;
+        scheduleAutosave(activeProject.id, targetFile.id, code);
+        renderTabs();
+      }
+      return true;
+    },
+    async onApplyMultiFile(filesToApply) {
+      if (!Array.isArray(filesToApply) || filesToApply.length === 0) return false;
+      for (const item of filesToApply) {
+        const norm = normalizePath(item.path);
+        const existing = filesOnly.find((f) => normalizePath(f.path) === norm);
+        if (existing) {
+          existing.content = item.code;
+          await updateFileContent(activeProject.id, norm, item.code);
+          scheduleAutosave(activeProject.id, existing.id, item.code);
+          if (activeFileId === existing.id) {
+            editor.replaceEntireDocument(item.code);
+          }
+          if (editorSplit && editorSplit.getActiveFileId() === existing.id) {
+            editorSplit.replaceEntireDocument(item.code);
+          }
+        } else {
+          await upsertEntry(activeProject.id, norm, {
+            content: item.code,
+            isFolder: false,
+            allowOverwrite: true
+          });
+        }
+      }
+      await reloadProjectEntries();
+      const firstNorm = normalizePath(filesToApply[0].path);
+      const firstTarget = filesOnly.find((f) => normalizePath(f.path) === firstNorm);
+      if (firstTarget) {
+        await openOrFocusFile(firstTarget.id);
+      }
+      renderTabs();
+      return true;
+    },
     onConversationChange(history, projectId) {
       // La respuesta puede terminar después de cambiar de proyecto: se guarda donde se hizo la pregunta.
       const targetId = projectId || activeProject.id;
@@ -867,7 +937,141 @@ async function initApp() {
 
   const btnToggleSymbols = document.getElementById("btn-toggle-symbols");
   syncToolbarState();
-  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp, btnMinimap, btnToggleSymbols]);
+  preventFocusSteal([btnUndo, btnRedo, btnFontDown, btnFontUp, btnMinimap, btnEditorSplit, btnCloseSplit, btnToggleSymbols]);
+
+  async function initSplitEditorIfNeeded() {
+    if (editorSplit) return editorSplit;
+    editorSplit = await createEditorManager({
+      mountEl: splitBodyEl,
+      enableMinimap: false,
+      onDocChange(filePath, newContent) {
+        const target = filesOnly.find((f) => f.id === filePath);
+        if (!target) return;
+        const wasDirty = isFileDirtyForProject(target);
+        target.content = newContent;
+        const nowDirty = isFileDirtyForProject(target);
+        if (wasDirty !== nowDirty) {
+          renderTabs();
+        }
+        scheduleAutosave(activeProject.id, filePath, newContent);
+        editor.syncDoc(filePath, newContent);
+      },
+      onSelectionChange() {
+        // En editor secundario no sobreescribe la selección del principal
+      }
+    });
+    return editorSplit;
+  }
+
+  function populateSplitFileSelect() {
+    if (!splitFileSelectEl) return;
+    splitFileSelectEl.innerHTML = "";
+    for (const f of filesOnly) {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = f.shortName;
+      if (f.id === splitActiveFileId) {
+        opt.selected = true;
+      }
+      splitFileSelectEl.appendChild(opt);
+    }
+  }
+
+  function openSplitFile(file) {
+    if (!file || !editorSplit) return;
+    splitActiveFileId = file.id;
+    editorSplit.openFile(file);
+    if (splitTitleTextEl) splitTitleTextEl.textContent = file.shortName;
+    populateSplitFileSelect();
+  }
+
+  async function toggleEditorSplit(forceState) {
+    const nextState = typeof forceState === "boolean" ? forceState : !isSplitOpen;
+    if (nextState === isSplitOpen) return;
+    isSplitOpen = nextState;
+
+    if (btnEditorSplit) {
+      btnEditorSplit.setAttribute("aria-pressed", String(isSplitOpen));
+      btnEditorSplit.classList.toggle("is-active", isSplitOpen);
+    }
+
+    if (isSplitOpen) {
+      editorStageEl?.classList.add("is-split");
+      if (splitDividerEl) splitDividerEl.hidden = false;
+      if (splitMountEl) splitMountEl.hidden = false;
+      await initSplitEditorIfNeeded();
+
+      let targetFile = null;
+      if (openTabIds.length > 1) {
+        const otherId = openTabIds.find((id) => id !== activeFileId) || openTabIds[0];
+        targetFile = filesOnly.find((f) => f.id === otherId);
+      } else if (activeFileId) {
+        targetFile = filesOnly.find((f) => f.id === activeFileId);
+      }
+
+      if (targetFile) {
+        openSplitFile(targetFile);
+      }
+      populateSplitFileSelect();
+    } else {
+      editorStageEl?.classList.remove("is-split");
+      if (splitDividerEl) splitDividerEl.hidden = true;
+      if (splitMountEl) splitMountEl.hidden = true;
+      if (editorMountEl) {
+        editorMountEl.style.flex = "";
+        editorMountEl.style.width = "";
+      }
+      if (splitMountEl) {
+        splitMountEl.style.flex = "";
+        splitMountEl.style.width = "";
+      }
+      editor.focus();
+    }
+  }
+
+  btnEditorSplit?.addEventListener("click", () => void toggleEditorSplit());
+  btnCloseSplit?.addEventListener("click", () => void toggleEditorSplit(false));
+  splitFileSelectEl?.addEventListener("change", () => {
+    const chosen = filesOnly.find((f) => f.id === splitFileSelectEl.value);
+    if (chosen) openSplitFile(chosen);
+  });
+
+  if (splitDividerEl && editorStageEl) {
+    let startX = 0;
+    let startLeftWidth = 0;
+    let totalWidth = 0;
+    let isDragging = false;
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const delta = e.clientX - startX;
+      const newLeft = startLeftWidth + delta;
+      const leftPct = Math.max(20, Math.min(80, (newLeft / totalWidth) * 100));
+      if (editorMountEl) editorMountEl.style.flex = `0 0 ${leftPct}%`;
+      if (splitMountEl) splitMountEl.style.flex = `0 0 ${100 - leftPct}%`;
+    };
+
+    const onPointerUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      splitDividerEl.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    splitDividerEl.addEventListener("pointerdown", (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startLeftWidth = editorMountEl ? editorMountEl.getBoundingClientRect().width : 0;
+      totalWidth = editorStageEl.getBoundingClientRect().width;
+      splitDividerEl.classList.add("is-dragging");
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    });
+  }
+
+  keyboardRouter.registerGlobalShortcut("ctrl+\\", () => void toggleEditorSplit());
+  keyboardRouter.registerGlobalShortcut("meta+\\", () => void toggleEditorSplit());
 
   btnUndo?.addEventListener("click", () => editor.triggerUndo());
   btnRedo?.addEventListener("click", () => editor.triggerRedo());
@@ -1345,6 +1549,9 @@ async function initApp() {
     }
 
     revealActiveTab();
+    if (isSplitOpen) {
+      populateSplitFileSelect();
+    }
   }
 
   /** En pantallas angostas desplaza la tira de pestañas hasta la activa (sin mover el resto de la página). */

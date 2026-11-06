@@ -1,6 +1,7 @@
-const SHELL_CACHE = "studio-ide-shell-v22";
+const SHELL_CACHE = "studio-ide-shell-v23";
 const RUNTIME_CACHE = "studio-ide-runtime-v1";
 const ACORN_CDN_URL = "https://esm.sh/acorn@8.14.0";
+const PYODIDE_ENTRY_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
 
 const APP_SHELL_URLS = [
   "./",
@@ -77,14 +78,24 @@ self.addEventListener("install", (event) => {
           )
         ),
       caches.open(RUNTIME_CACHE).then((cache) =>
-        fetch(new Request(ACORN_CDN_URL, { mode: "cors" }))
-          .then((res) => {
-            if (res && res.ok) {
-              return cache.put(ACORN_CDN_URL, res);
-            }
-            return undefined;
-          })
-          .catch(() => undefined)
+        Promise.all([
+          fetch(new Request(ACORN_CDN_URL, { mode: "cors" }))
+            .then((res) => {
+              if (res && res.ok) {
+                return cache.put(ACORN_CDN_URL, res);
+              }
+              return undefined;
+            })
+            .catch(() => undefined),
+          fetch(new Request(PYODIDE_ENTRY_URL, { mode: "cors" }))
+            .then((res) => {
+              if (res && res.ok) {
+                return cache.put(PYODIDE_ENTRY_URL, res);
+              }
+              return undefined;
+            })
+            .catch(() => undefined)
+        ])
       )
     ]).then(() => self.skipWaiting())
   );
