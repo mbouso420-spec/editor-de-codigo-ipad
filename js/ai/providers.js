@@ -9,7 +9,7 @@ const GH_REPOS_CACHE_KEY = "ide.github.reposCache";
 
 const liveSyncedByProvider = new Map();
 
-const PROVIDER_SHORT_NAMES = {
+export const PROVIDER_SHORT_NAMES = {
   gemini: "Google Gemini",
   groq: "Groq",
   openrouter: "OpenRouter",

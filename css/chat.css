@@ -352,11 +352,9 @@
 }
 
 .chat-tools-section-title {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 500;
   color: var(--color-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 /* Chips de Comandos Rápidos */

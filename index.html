@@ -40,7 +40,7 @@
     }
   </script>
 </head>
-<body data-left-open="true" data-right-open="true" data-symbols-visible="true">
+<body data-left-open="true" data-right-open="true" data-symbols-visible="false">
   <div class="ide-shell">
     <header class="ide-topbar surface-glass-bar">
       <div class="ide-topbar-left">
@@ -492,7 +492,7 @@
 
           <!-- Pie del compositor: Tokens restantes y botón de regenerar -->
           <div class="chat-composer-footer">
-            <span id="chat-token-counter" class="chat-token-counter code-font" title="Tokens estimados de archivo y mensaje">~0 tokens</span>
+            <span id="chat-token-counter" class="chat-token-counter code-font" title="Tokens estimados de archivo y mensaje" hidden>~0 tokens</span>
             <button type="button" id="btn-chat-regenerate" class="btn btn-ghost btn-xs" title="Regenerar última respuesta del asistente" hidden>
               <span data-icon="refreshCw"></span>
               <span>Regenerar</span>

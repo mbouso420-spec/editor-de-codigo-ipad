@@ -1,6 +1,7 @@
 import { icon } from "../ui/icons.js";
 import {
   AI_PROVIDERS,
+  PROVIDER_SHORT_NAMES,
   clearApiKey,
   exportKeysBundle,
   fetchLiveFreeModels,
@@ -732,7 +733,8 @@ export function initChatController({
     const key = getApiKey(provider.id);
 
     if (currentModelLabel) {
-      currentModelLabel.textContent = `${provider.name}: ${activeModelId}`;
+      const displayName = PROVIDER_SHORT_NAMES[provider.id] || provider.name;
+      currentModelLabel.textContent = `${displayName}: ${activeModelId}`;
     }
 
     if (keyStatusBtn) {

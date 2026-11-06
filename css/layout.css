@@ -51,7 +51,7 @@ body[data-keyboard-open="true"] .ide-workspace {
 }
 
 /* Estado colapsado en pantallas anchas (PC e iPad horizontal amplio) */
-@media (min-width: 74.0625rem) {
+@media (min-width: 74rem) {
   body[data-left-open="false"] .ide-panel-left,
   body[data-left-open="false"] .ide-resizer-left {
     display: none;
@@ -107,7 +107,7 @@ body[data-keyboard-open="true"] .ide-workspace {
   display: none;
 }
 
-@media (max-width: 74rem) {
+@media (max-width: 73.99rem) {
   .ide-resizer {
     display: none;
   }

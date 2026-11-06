@@ -248,12 +248,9 @@ export function initSymbolBar({ onInsert }) {
 
 function readDefaultVisibility() {
   if (typeof window.matchMedia === "function") {
-    const coarse = window.matchMedia("(pointer: coarse)").matches;
-    if (coarse) {
-      return true;
-    }
+    return window.matchMedia("(pointer: coarse)").matches;
   }
-  return true;
+  return false;
 }
 
 function readStoredBool(key, fallback) {

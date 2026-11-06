@@ -260,7 +260,7 @@
   max-height: calc(var(--vvh) - var(--space-lg));
   margin: auto;
   padding: 0;
-  border: 0;
+  border: var(--rule-hair) solid var(--color-rule-strong);
   border-radius: var(--radius-panel);
   background: var(--color-paper-2);
   color: var(--color-ink);
